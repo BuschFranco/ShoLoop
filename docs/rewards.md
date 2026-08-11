@@ -76,7 +76,6 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Twin Shot | `ExtraProjectile` | — | — | one-time (30💰) | — | on/off |
 | Pierce | `Pierce` | +1 (18💰) | +1 (26💰) | +2 (38💰) | +3 (55💰) | 5 extra enemies |
 | Crit | `CritChance` | +8% (12💰) | +12% (20💰) | +18% (32💰) | +25% (48💰) | 60% |
-| Bullet Speed | `BulletSpeed` | +80 (8💰) | +150 (14💰) | +240 (24💰) | +350 (38💰) | +700 bonus |
 | Knockback | `BulletKnockback` | +60 (10💰) | +110 (18💰) | +170 (28💰) | +240 (42💰) | +400 |
 | Coin Bonus | `CoinBonus` | +15% (14💰) | +25% (24💰) | +40% (36💰) | +60% (52💰) | +150% |
 | Missile | `Missile` | 4.5s / 30 dmg / r70 (24💰) | 3.8s / 50 / r85 (38💰) | 3.2s / 75 / r100 (54💰) | 2.6s / 110 / r120 (72💰) | Nv4 |
@@ -148,13 +147,12 @@ It's disabled only when you're at `MaxLivesCap` **and** already on full lives �
 
 ### The new combat rewards, by model
 
-The five rewards added alongside the source split each reuse an existing stacking model rather than inventing one:
+These rewards each reuse an existing stacking model rather than inventing one:
 
 | Reward | Model | Notes |
 |---|---|---|
 | **Pierce** | additive + cap (SideShot) | `Bullet.Pierce` counts *extra* enemies passed through. `Area2D.BodyEntered` fires once per body, so a piercing bullet can't re-hit the same enemy — no hit-tracking needed. Walls still stop it. |
 | **Crit** | additive + cap | Rolled **per bullet, not per volley**, so a Twin/Side Shot spread can crit on some lines and not others — much more visible feedback than all-or-nothing. Crit bullets are tinted gold. |
-| **Bullet Speed** | tier-bucketed (FireRange) | `BulletSpeed` moved onto `Player` from `Bullet.tscn`'s own default, so the reward has a baseline to grow from and one place to apply it. |
 | **Knockback** | tier-bucketed | Reuses the same `Enemy.ApplyKnockback` the orbit blades use; shoves along the bullet's travel direction. |
 | **Coin Bonus** | additive + cap | Multiplies **coins only** in `RegisterKill`. XP/Score are untouched on purpose, so stacking it can't accelerate leveling or inflate the high score — just the shop budget. |
 

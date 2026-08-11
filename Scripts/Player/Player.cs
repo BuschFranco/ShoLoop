@@ -8,8 +8,8 @@ public partial class Player : CharacterBody2D
     [Export] public int BulletDamage = 10;
     [Export] public float FireRange = 190f;
 
-    // Owned here rather than left to Bullet.tscn's own default, since the Bala Veloz reward needs a
-    // baseline to grow from and a single place to apply it when spawning each shot.
+    // Owned here rather than left to Bullet.tscn's own default so every shot the player fires gets
+    // it from one place. Fixed stat — there's no reward that raises it.
     [Export] public float BulletSpeed = 500f;
     [Export] public PackedScene BulletScene;
     [Export] public PackedScene MissileScene;
@@ -37,7 +37,6 @@ public partial class Player : CharacterBody2D
 
     private const int MaxPierceCap = 5;
     private const float MaxCritChance = 60f;        // percent
-    private const float MaxBulletSpeedBonus = 700f;
     private const float MaxBulletKnockbackBonus = 400f;
     private const float MaxCoinBonusPercent = 150f;
     private const float MaxXpBonusPercent = 100f;
@@ -141,7 +140,6 @@ public partial class Player : CharacterBody2D
     private float _baseFireRate;
     private float _baseBulletDamage;
     private float _baseFireRange;
-    private float _baseBulletSpeed;
     private Timer _shieldRegenTimer;
     private Line2D _fireRangeRing;
     private Timer _laserTimer;
@@ -156,7 +154,6 @@ public partial class Player : CharacterBody2D
         _baseFireRate = FireRate;
         _baseBulletDamage = BulletDamage;
         _baseFireRange = FireRange;
-        _baseBulletSpeed = BulletSpeed;
 
         _fireCooldown = GetNode<Timer>("FireCooldown");
         _fireCooldown.WaitTime = 1f / FireRate;
@@ -852,10 +849,7 @@ public partial class Player : CharacterBody2D
                 XpBonusPercent = Mathf.Min(XpBonusPercent + upgrade.Value, MaxXpBonusPercent);
                 break;
 
-            // Magnitude stats use the same tier-bucketing as FireRange/FireRate/BulletDamage.
-            case UpgradeType.BulletSpeed:
-                BulletSpeed = _baseBulletSpeed + Mathf.Min(ApplyTieredStack(upgrade), MaxBulletSpeedBonus);
-                break;
+            // Magnitude stat, so it uses the same tier-bucketing as FireRange/FireRate/BulletDamage.
             case UpgradeType.BulletKnockback:
                 BulletKnockback = Mathf.Min(ApplyTieredStack(upgrade), MaxBulletKnockbackBonus);
                 break;
@@ -941,8 +935,6 @@ public partial class Player : CharacterBody2D
                 return CoinBonusPercent < MaxCoinBonusPercent;
             case UpgradeType.XpBonus:
                 return XpBonusPercent < MaxXpBonusPercent;
-            case UpgradeType.BulletSpeed:
-                return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletSpeedBonus) > (BulletSpeed - _baseBulletSpeed);
             case UpgradeType.BulletKnockback:
                 return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletKnockbackBonus) > BulletKnockback;
             case UpgradeType.Revive:
@@ -1103,8 +1095,6 @@ public partial class Player : CharacterBody2D
                 return $"Tenés: +{CoinBonusPercent:0}% monedas (tope {MaxCoinBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
             case UpgradeType.XpBonus:
                 return $"Tenés: +{XpBonusPercent:0}% experiencia (tope {MaxXpBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
-            case UpgradeType.BulletSpeed:
-                return $"Tenés: {BulletSpeed:0} vel. de bala (tope {_baseBulletSpeed + MaxBulletSpeedBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
             case UpgradeType.BulletKnockback:
                 return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
             case UpgradeType.Revive:
