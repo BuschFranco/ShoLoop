@@ -1,0 +1,27 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Enemy/ShooterEnemy.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyBullet.tscn" id="2"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hidden"]
+radius = 11.0
+
+[node name="EnemyHidden" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 8
+script = ExtResource("1")
+MoveSpeed = 140.0
+MaxHp = 25
+XpReward = 6
+CoinsReward = 6
+ContactDamage = 16
+Category = 3
+EnemyBulletScene = ExtResource("2")
+FireRate = 0.3
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.95, 0.95, 1, 1)
+polygon = PackedVector2Array(0, -11, 3, -3, 11, 0, 3, 3, 0, 11, -3, 3, -11, 0, -3, -3)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_hidden")

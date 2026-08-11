@@ -1,0 +1,41 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Player/Player.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/Bullet.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/Player/OrbitBlade.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://Scenes/Player/Companion.tscn" id="5"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_player"]
+radius = 16.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hurtbox"]
+radius = 18.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 1
+collision_mask = 8
+script = ExtResource("1")
+BulletScene = ExtResource("3")
+OrbitBladeScene = ExtResource("4")
+CompanionScene = ExtResource("5")
+
+[node name="ShieldAura" type="Polygon2D" parent="."]
+visible = false
+color = Color(0.35, 0.65, 1, 0.35)
+polygon = PackedVector2Array(28, 0, 24.2, 14, 14, 24.2, 0, 28, -14, 24.2, -24.2, 14, -28, 0, -24.2, -14, -14, -24.2, 0, -28, 14, -24.2, 24.2, -14)
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.85, 1, 1, 1)
+polygon = PackedVector2Array(18, 0, -12, 11, -12, -11)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_player")
+
+[node name="Hurtbox" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hurtbox"]
+shape = SubResource("CircleShape2D_hurtbox")
+
+[node name="FireCooldown" type="Timer" parent="."]

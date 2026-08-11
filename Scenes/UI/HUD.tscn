@@ -1,0 +1,129 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Scripts/UI/HUD.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/VirtualJoystick.tscn" id="2"]
+
+[node name="HUD" type="Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="TopBar" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+mouse_filter = 2
+
+[node name="RoundLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+text = "Ronda 1"
+
+[node name="RoundTimerLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+text = "1:00"
+
+[node name="LevelLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+text = "Nv 1"
+
+[node name="LivesLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+modulate = Color(1, 0.3, 0.4, 1)
+text = "Vidas: 3/3"
+
+[node name="ShieldLabel" type="Label" parent="TopBar"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+modulate = Color(0.4, 0.75, 1, 1)
+text = "Escudo: 0/0"
+
+[node name="XpBar" type="ProgressBar" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+max_value = 10.0
+value = 0.0
+show_percentage = false
+modulate = Color(0.3, 1, 0.9, 1)
+
+[node name="PointsLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+text = "Monedas: 0"
+
+[node name="ScoreLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+mouse_filter = 2
+text = "Puntaje: 0"
+
+[node name="CountdownLabel" type="Label" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -70.0
+offset_right = 250.0
+offset_bottom = 70.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 72
+theme_override_colors/font_color = Color(1, 0.85, 0.15, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "5"
+
+[node name="UltimateBar" type="ProgressBar" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -90.0
+offset_top = -78.0
+offset_right = 90.0
+offset_bottom = -58.0
+mouse_filter = 2
+show_percentage = false
+modulate = Color(1, 0.2, 0.8, 1)
+
+[node name="UltimateButton" type="Button" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -90.0
+offset_top = -54.0
+offset_right = 90.0
+offset_bottom = -18.0
+text = "Ultimate"
+
+[node name="PauseButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -70.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 60.0
+text = "II"
+
+[node name="VirtualJoystick" parent="." instance=ExtResource("2")]

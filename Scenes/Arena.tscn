@@ -1,0 +1,154 @@
+[gd_scene load_steps=20 format=3]
+
+[ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="1"]
+[ext_resource type="Script" path="res://Scripts/Enemy/EnemySpawner.cs" id="2"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyGrunt.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/HUD.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/UpgradePicker.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/GameOverScreen.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/Shop.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyTank.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemySpeedy.tscn" id="9"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/PauseMenu.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemySplitter.tscn" id="11"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyRare.tscn" id="12"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyHidden.tscn" id="13"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyBoss.tscn" id="14"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/BossBanner.tscn" id="15"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyShooter.tscn" id="16"]
+[ext_resource type="Script" path="res://Scripts/Obstacle.cs" id="17"]
+[ext_resource type="Script" path="res://Scripts/Util/CameraRig.cs" id="18"]
+[ext_resource type="Script" path="res://Scripts/ArenaBounds.cs" id="19"]
+
+[node name="Arena" type="Node2D"]
+
+[node name="Player" parent="." instance=ExtResource("1")]
+
+[node name="Bullets" type="Node2D" parent="."]
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="ArenaBounds" type="Line2D" parent="."]
+script = ExtResource("19")
+
+[node name="Obstacles" type="Node2D" parent="."]
+
+[node name="Obstacle1" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-900, -520)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(280, 160)
+
+[node name="Obstacle2" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(750, -600)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(200, 260)
+
+[node name="Obstacle3" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-1150, 250)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(180, 320)
+
+[node name="Obstacle4" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(1050, 350)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(300, 180)
+
+[node name="Obstacle5" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(0, -780)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(420, 120)
+
+[node name="Obstacle6" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(0, 780)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(420, 120)
+
+[node name="Obstacle7" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-480, 480)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(160, 160)
+
+[node name="Obstacle8" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(520, -280)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(160, 160)
+
+[node name="Obstacle9" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-620, -180)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(140, 300)
+
+[node name="Obstacle10" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(620, 620)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(240, 140)
+
+[node name="EnemySpawner" type="Node2D" parent="."]
+script = ExtResource("2")
+EnemyScene = ExtResource("3")
+TankScene = ExtResource("8")
+SpeedyScene = ExtResource("9")
+SplitterScene = ExtResource("11")
+ShooterScene = ExtResource("16")
+RareScene = ExtResource("12")
+HiddenScene = ExtResource("13")
+BossScene = ExtResource("14")
+
+[node name="SpawnTimer" type="Timer" parent="EnemySpawner"]
+
+[node name="HUDLayer" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="HUD" parent="HUDLayer" instance=ExtResource("4")]
+
+[node name="BossBannerLayer" type="CanvasLayer" parent="."]
+layer = 6
+
+[node name="BossBanner" parent="BossBannerLayer" instance=ExtResource("15")]
+
+[node name="PauseLayer" type="CanvasLayer" parent="."]
+layer = 8
+
+[node name="PauseMenu" parent="PauseLayer" instance=ExtResource("10")]
+
+[node name="UpgradeLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="UpgradePicker" parent="UpgradeLayer" instance=ExtResource("5")]
+
+[node name="ShopLayer" type="CanvasLayer" parent="."]
+layer = 15
+
+[node name="Shop" parent="ShopLayer" instance=ExtResource("7")]
+
+[node name="GameOverLayer" type="CanvasLayer" parent="."]
+layer = 20
+
+[node name="GameOverScreen" parent="GameOverLayer" instance=ExtResource("6")]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+enabled = true
+zoom = Vector2(0.85, 0.85)
+position_smoothing_enabled = true
+position_smoothing_speed = 4.0
+script = ExtResource("18")

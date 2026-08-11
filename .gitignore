@@ -1,0 +1,12 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# .NET / C# build artifacts
+bin/
+obj/
+.vs/
+*.user
+
+# Stale local backups (e.g. ShooterLoop.csproj.old)
+*.old
