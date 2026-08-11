@@ -18,7 +18,7 @@ public static class Palette
     public static readonly Color Player = new("7dfdfe");
     public static readonly Color PlayerBullet = new("ff4fd8");
     public static readonly Color ShieldAura = new("4fa8ff", 0.35f);
-    public static readonly Color FireRangeRing = new("ff4fd8", 0.16f);
+    public static readonly Color FireRangeRing = new("ff4fd8", 0.3f);
 
     // --- Player weapons ---
     public static readonly Color LaserBeam = new("ff2fb9", 0.85f);
@@ -33,9 +33,16 @@ public static class Palette
     public static readonly Color EnemyBurnTint = new("ff8a5c");
 
     // --- World ---
-    public static readonly Color ObstacleFill = new("1a0f2b");
-    public static readonly Color ObstacleOutline = new("ff4fd8", 0.9f);
-    public static readonly Color ArenaBounds = new("ff4fd8", 0.45f);
+    // The backdrop is #0b0614. The obstacle fill has to sit clearly above that or blocks read as
+    // holes in the floor rather than solid cover, so it's kept several steps lighter.
+    public static readonly Color Backdrop = new("0b0614");
+    public static readonly Color ObstacleFill = new("2a1745");
+    public static readonly Color ObstacleOutline = new("ff4fd8");
+    public static readonly Color ArenaBounds = new("ff4fd8", 0.7f);
+
+    // Faint enough to never compete with enemies, present enough to give the eye something to
+    // measure motion against — a plain dark field several screens wide reads as static.
+    public static readonly Color GridLine = new("6b3fa0", 0.16f);
 
     // Warm gold, kept deliberately outside the pink family so a crit still reads as "that one was
     // different" instead of blending into the standard magenta bullets.

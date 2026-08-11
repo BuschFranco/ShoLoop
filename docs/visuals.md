@@ -47,6 +47,33 @@ They were brightened into the neon range but keep four clearly distinct hues (mi
 gold), because tier is information the player reads while deciding what to buy — four shades of pink
 would cost more in legibility than it gains in cohesion.
 
+## The dark backdrop
+
+Neon needs something dark to sit on. With `background_mode = Canvas` the `Environment` draws no
+background of its own, so the arena originally fell through to Godot's **default clear colour —
+a mid-grey**, which washed the whole palette out. Fixed in two places, deliberately redundant:
+
+- `project.godot` → `rendering/environment/defaults/default_clear_color` = `#0b0614`, so every scene
+  (including the menus) shares the backdrop.
+- `Arena.tscn` → a `Backdrop` `ColorRect` on a `CanvasLayer` at **layer −10**. Being on a CanvasLayer
+  it's screen-anchored rather than world-anchored, so it covers the viewport no matter where the
+  camera has panned. This guarantees the dark field even if the clear colour is ever overridden.
+
+Contrast values tuned against that backdrop:
+
+| Element | Value | Why |
+|---|---|---|
+| Obstacle fill | `#2a1745` | Several steps lighter than `#0b0614` — at the old `#1a0f2b` blocks read as holes in the floor rather than solid cover. |
+| Arena boundary | `#ff4fd8` @ 0.7α | Raised from 0.45 — it's the edge of the playfield and needs to be unmistakable. |
+| Fire-range ring | `#ff4fd8` @ 0.3α | Raised from 0.16, which was nearly invisible. |
+| Grid | `#6b3fa0` @ 0.16α | Faint enough never to compete with enemies. |
+
+### The grid
+
+`ArenaBounds` also draws a 200px grid across the playfield. The arena is several screens wide and
+the camera follows the player, so on an otherwise empty dark field there's nothing for the eye to
+measure motion against — you can be moving fast and not feel it. It's ~26 `Line2D`s created once.
+
 ## Glow (the part that makes it "neon")
 
 `Arena.tscn` holds a `WorldEnvironment` whose `Environment` enables glow. Without it the palette is
