@@ -37,12 +37,16 @@ public static class RewardTierRoller
         return RewardTier.Common;
     }
 
+    // Brightened into the neon range to match the rest of the palette, but the four hues stay
+    // *deliberately distinct* rather than being pulled into the pink family. Tier is information the
+    // player reads at a glance while deciding what to buy — four shades of pink would cost more in
+    // legibility than it gains in cohesion.
     public static Color GetTierColor(RewardTier tier) => tier switch
     {
-        RewardTier.Common => new Color(0.35f, 0.85f, 0.35f),
-        RewardTier.Rare => new Color(0.3f, 0.55f, 1f),
-        RewardTier.Epic => new Color(0.65f, 0.3f, 0.95f),
-        RewardTier.Legendary => new Color(1f, 0.85f, 0.15f),
+        RewardTier.Common => new Color(0.45f, 1f, 0.6f),      // mint
+        RewardTier.Rare => new Color(0.42f, 0.72f, 1f),       // sky
+        RewardTier.Epic => new Color(0.78f, 0.42f, 1f),       // violet
+        RewardTier.Legendary => new Color(1f, 0.82f, 0.35f),  // gold
         _ => Colors.White,
     };
 

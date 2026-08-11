@@ -23,11 +23,11 @@ CompanionScene = ExtResource("5")
 
 [node name="ShieldAura" type="Polygon2D" parent="."]
 visible = false
-color = Color(0.35, 0.65, 1, 0.35)
+color = Color(0.31, 0.66, 1, 0.35)
 polygon = PackedVector2Array(28, 0, 24.2, 14, 14, 24.2, 0, 28, -14, 24.2, -24.2, 14, -28, 0, -24.2, -14, -14, -24.2, 0, -28, 14, -24.2, 24.2, -14)
 
 [node name="Visual" type="Polygon2D" parent="."]
-color = Color(0.85, 1, 1, 1)
+color = Color(0.49, 0.99, 1, 1)
 polygon = PackedVector2Array(18, 0, -12, 11, -12, -11)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]

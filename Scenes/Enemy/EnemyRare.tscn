@@ -17,7 +17,7 @@ ContactDamage = 12
 Category = 1
 
 [node name="Visual" type="Polygon2D" parent="."]
-color = Color(0.3, 0.45, 1, 1)
+color = Color(0.69, 0.29, 0.93, 1)
 polygon = PackedVector2Array(0, -13, 13, 0, 0, 13, -13, 0)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]

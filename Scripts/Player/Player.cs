@@ -40,6 +40,7 @@ public partial class Player : CharacterBody2D
     private const float MaxBulletSpeedBonus = 700f;
     private const float MaxBulletKnockbackBonus = 400f;
     private const float MaxCoinBonusPercent = 150f;
+    private const float MaxXpBonusPercent = 100f;
     private const int MaxReviveCharges = 2;
 
     public int CurrentLives;
@@ -55,6 +56,7 @@ public partial class Player : CharacterBody2D
     public float CritChance = 0f;            // percent, 0-60
     public float BulletKnockback = 0f;
     public float CoinBonusPercent = 0f;      // percent, 0-150
+    public float XpBonusPercent = 0f;        // percent, 0-100
     public int ReviveCharges = 0;
     public float ShieldRegenPerMinute = 0f;
     public bool HasExtraProjectile => _hasExtraProjectile;
@@ -62,6 +64,10 @@ public partial class Player : CharacterBody2D
 
     // Coin payout multiplier applied in GameManager.RegisterKill (Botín reward).
     public float CoinMultiplier => 1f + CoinBonusPercent / 100f;
+
+    // XP payout multiplier (Sabiduría reward). Applied to XP only — see RegisterKill for why Score
+    // deliberately stays on the unmultiplied value.
+    public float XpMultiplier => 1f + XpBonusPercent / 100f;
 
     public UltimateKind? EquippedUltimate = null;
     public float UltimateProgress = 0f;
@@ -173,6 +179,26 @@ public partial class Player : CharacterBody2D
         pulse.TweenProperty(_shieldAura, "scale", Vector2.One, 0.6f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 
         SpawnFireRangeIndicator();
+        StartIdleAnimations();
+    }
+
+    // Looping ambient motion so the ship and its range ring never sit perfectly static. Both run on
+    // the Visual/ring nodes rather than the player itself, so they can't interfere with movement,
+    // the invuln blink (which toggles _visual.Visible, not its scale), or the arena clamp.
+    private void StartIdleAnimations()
+    {
+        var breathe = CreateTween();
+        breathe.SetLoops();
+        breathe.TweenProperty(_visual, "scale", Vector2.One * 1.06f, 0.9f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+        breathe.TweenProperty(_visual, "scale", Vector2.One, 0.9f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+
+        // The ring slowly counter-rotates — a static circle reads as UI, a drifting one as a field.
+        var spin = CreateTween();
+        spin.SetLoops();
+        spin.TweenProperty(_fireRangeRing, "rotation", Mathf.Tau, 24f);
+        spin.TweenCallback(Callable.From(() => _fireRangeRing.Rotation = 0f));
     }
 
     // A faint ring showing FireRange — the player only auto-fires at enemies inside it, so it
@@ -183,7 +209,7 @@ public partial class Player : CharacterBody2D
     {
         _fireRangeRing = new Line2D();
         _fireRangeRing.Width = 2f;
-        _fireRangeRing.DefaultColor = new Color(0.3f, 1f, 1f, 0.18f);
+        _fireRangeRing.DefaultColor = Palette.FireRangeRing;
         _fireRangeRing.ZIndex = -1;
         AddChild(_fireRangeRing);
         RebuildFireRangeIndicator();
@@ -368,7 +394,7 @@ public partial class Player : CharacterBody2D
             points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * LevelUpBurstRadius;
         }
         visual.Polygon = points;
-        visual.Color = new Color(1f, 0.9f, 0.3f, 0.5f);
+        visual.Color = Palette.LevelUpNova;
         visual.Scale = Vector2.Zero;
         AddChild(visual);
 
@@ -506,7 +532,7 @@ public partial class Player : CharacterBody2D
         beam.AddPoint(Vector2.Zero);
         beam.AddPoint(ToLocal(targetGlobalPos));
         beam.Width = 3f;
-        beam.DefaultColor = new Color(1f, 0.2f, 0.8f, 0.8f);
+        beam.DefaultColor = Palette.LaserBeam;
         AddChild(beam);
 
         var tween = beam.CreateTween();
@@ -625,7 +651,7 @@ public partial class Player : CharacterBody2D
             points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * UltimateNovaRadius;
         }
         visual.Polygon = points;
-        visual.Color = new Color(1f, 0.2f, 0.8f, 0.4f);
+        visual.Color = Palette.UltimateNova;
         visual.Scale = Vector2.Zero;
         AddChild(visual);
 
@@ -747,7 +773,7 @@ public partial class Player : CharacterBody2D
         // not others — more visible feedback than an all-or-nothing volley.
         bool isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
         bullet.Damage = isCrit ? Mathf.RoundToInt(BulletDamage * CritMultiplier) : BulletDamage;
-        if (isCrit) bullet.Modulate = new Color(1f, 0.85f, 0.2f);
+        if (isCrit) bullet.Modulate = Palette.CritBullet;
 
         _bulletsContainer.AddChild(bullet);
     }
@@ -821,6 +847,9 @@ public partial class Player : CharacterBody2D
                 break;
             case UpgradeType.CoinBonus:
                 CoinBonusPercent = Mathf.Min(CoinBonusPercent + upgrade.Value, MaxCoinBonusPercent);
+                break;
+            case UpgradeType.XpBonus:
+                XpBonusPercent = Mathf.Min(XpBonusPercent + upgrade.Value, MaxXpBonusPercent);
                 break;
 
             // Magnitude stats use the same tier-bucketing as FireRange/FireRate/BulletDamage.
@@ -910,6 +939,8 @@ public partial class Player : CharacterBody2D
                 return CritChance < MaxCritChance;
             case UpgradeType.CoinBonus:
                 return CoinBonusPercent < MaxCoinBonusPercent;
+            case UpgradeType.XpBonus:
+                return XpBonusPercent < MaxXpBonusPercent;
             case UpgradeType.BulletSpeed:
                 return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletSpeedBonus) > (BulletSpeed - _baseBulletSpeed);
             case UpgradeType.BulletKnockback:
@@ -951,6 +982,7 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Pierce:
             case UpgradeType.CritChance:
             case UpgradeType.CoinBonus:
+            case UpgradeType.XpBonus:
             case UpgradeType.Revive:
             case UpgradeType.ShieldRegen:
                 return !IsUpgradeOverCurrent(upgrade);
@@ -981,6 +1013,7 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Pierce:
             case UpgradeType.CritChance:
             case UpgradeType.CoinBonus:
+            case UpgradeType.XpBonus:
             case UpgradeType.Revive:
                 return "Al tope";
             default:
@@ -1068,6 +1101,8 @@ public partial class Player : CharacterBody2D
                 return $"Tenés: {CritChance:0}% crítico (tope {MaxCritChance:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
             case UpgradeType.CoinBonus:
                 return $"Tenés: +{CoinBonusPercent:0}% monedas (tope {MaxCoinBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.XpBonus:
+                return $"Tenés: +{XpBonusPercent:0}% experiencia (tope {MaxXpBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
             case UpgradeType.BulletSpeed:
                 return $"Tenés: {BulletSpeed:0} vel. de bala (tope {_baseBulletSpeed + MaxBulletSpeedBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
             case UpgradeType.BulletKnockback:

@@ -187,8 +187,8 @@ public partial class Shop : Control
     private static StyleBoxFlat CreateGlowStyle()
     {
         var style = new StyleBoxFlat();
-        style.BgColor = new Color(1f, 0.95f, 0.6f, 0.12f);
-        style.BorderColor = new Color(1f, 0.9f, 0.3f, 1f);
+        style.BgColor = new Color(Palette.GlowHighlight, 0.14f);
+        style.BorderColor = Palette.GlowHighlight;
         style.SetBorderWidthAll(3);
         style.SetCornerRadiusAll(6);
         style.SetContentMarginAll(6);

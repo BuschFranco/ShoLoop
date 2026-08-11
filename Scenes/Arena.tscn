@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="1"]
 [ext_resource type="Script" path="res://Scripts/Enemy/EnemySpawner.cs" id="2"]
@@ -21,7 +21,22 @@
 [ext_resource type="Script" path="res://Scripts/ArenaBounds.cs" id="19"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/RoundSummary.tscn" id="20"]
 
+[sub_resource type="Environment" id="Environment_neon"]
+background_mode = 3
+glow_enabled = true
+glow_intensity = 1.1
+glow_strength = 1.15
+glow_bloom = 0.35
+glow_blend_mode = 1
+glow_hdr_threshold = 0.85
+glow_hdr_scale = 2.0
+adjustment_enabled = true
+adjustment_saturation = 1.15
+
 [node name="Arena" type="Node2D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_neon")
 
 [node name="Player" parent="." instance=ExtResource("1")]
 

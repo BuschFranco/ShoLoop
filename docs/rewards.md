@@ -81,6 +81,7 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Coin Bonus | `CoinBonus` | +15% (14💰) | +25% (24💰) | +40% (36💰) | +60% (52💰) | +150% |
 | Missile | `Missile` | 4.5s / 30 dmg / r70 (24💰) | 3.8s / 50 / r85 (38💰) | 3.2s / 75 / r100 (54💰) | 2.6s / 110 / r120 (72💰) | Nv4 |
 | Burn | `Burn` | 6/s for 3s (20💰) | 10/s for 3s (32💰) | 16/s for 3.5s (46💰) | 24/s for 4s (62💰) | Nv4 |
+| XP Bonus | `XpBonus` | +20% (18💰) | — | +50% (44💰) | — | +100% |
 | Heart *(shop)* | `Heart` | — | — | — | +1 max life & full heal (60💰) | 10 lives |
 | Ultimate *(shop)* | `Ultimate` | — | — | one of 3 kinds (80💰) | — | see [Ultimates](#ultimates) |
 | Shield Regen *(shop)* | `ShieldRegen` | — | — | 1/12s (55💰) | 1/7.5s (75💰) | best tier taken |

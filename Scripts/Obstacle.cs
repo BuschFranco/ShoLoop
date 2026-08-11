@@ -25,7 +25,7 @@ public partial class Obstacle : StaticBody2D
 
         var fill = new Polygon2D();
         fill.Polygon = corners;
-        fill.Color = new Color(0.14f, 0.15f, 0.22f, 1f);
+        fill.Color = Palette.ObstacleFill;
         AddChild(fill);
 
         // Neon outline, same visual language as the enemies and the fire-range ring.
@@ -33,7 +33,7 @@ public partial class Obstacle : StaticBody2D
         foreach (var corner in corners) outline.AddPoint(corner);
         outline.AddPoint(corners[0]);
         outline.Width = 3f;
-        outline.DefaultColor = new Color(0.35f, 0.5f, 0.9f, 0.9f);
+        outline.DefaultColor = Palette.ObstacleOutline;
         AddChild(outline);
 
         var collision = new CollisionShape2D();

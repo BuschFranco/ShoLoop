@@ -21,7 +21,7 @@ public partial class ArenaBounds : Line2D
         AddPoint(new Vector2(-e.X, -e.Y));
 
         Width = 6f;
-        DefaultColor = new Color(0.3f, 0.5f, 0.9f, 0.5f);
+        DefaultColor = Palette.ArenaBounds;
         ZIndex = -2;
     }
 }

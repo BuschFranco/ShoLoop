@@ -69,7 +69,7 @@ public partial class Enemy : CharacterBody2D
     private float _burnTickAccumulator;
     private bool _isBurning;
     private const float BurnTickInterval = 0.25f;
-    private static readonly Color BurnTint = new(1f, 0.55f, 0.3f);
+    private static readonly Color BurnTint = Palette.EnemyBurnTint;
 
     // Refreshes rather than stacks: a second hit takes the stronger DPS and restarts the clock at
     // whichever duration is longer. Stacking instances would make sustained fire scale burn
@@ -145,6 +145,26 @@ public partial class Enemy : CharacterBody2D
 
         if (Category == EnemyCategory.Special || Category == EnemyCategory.Boss)
             CreateHealthBar();
+
+        PlaySpawnAnimation();
+    }
+
+    // Enemies pop into existence rather than appearing on a frame boundary. Scales the Visual (not
+    // the enemy) for the same reason PlayHitFeedback does: the enemy's own Scale carries the
+    // Splitter's per-generation shrink.
+    private void PlaySpawnAnimation()
+    {
+        if (_visual == null) return;
+
+        _visual.Scale = Vector2.Zero;
+        _visual.Rotation = -Mathf.Pi / 4f;
+
+        var tween = CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(_visual, "scale", Vector2.One, 0.28f)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(_visual, "rotation", 0f, 0.28f)
+            .SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
     }
 
     private void CreateHealthBar()
@@ -153,13 +173,13 @@ public partial class Enemy : CharacterBody2D
 
         var background = new Polygon2D();
         background.Polygon = RectPoints(HealthBarWidth, HealthBarHeight);
-        background.Color = new Color(0f, 0f, 0f, 0.6f);
+        background.Color = Palette.HealthBarBg;
         background.Position = barPos;
         AddChild(background);
 
         _healthBarFill = new Polygon2D();
         _healthBarFill.Polygon = RectPoints(HealthBarWidth, HealthBarHeight);
-        _healthBarFill.Color = new Color(1f, 0.2f, 0.2f, 0.95f);
+        _healthBarFill.Color = Palette.HealthBarFill;
         _healthBarFill.Position = barPos;
         AddChild(_healthBarFill);
     }
@@ -186,7 +206,7 @@ public partial class Enemy : CharacterBody2D
 
         var label = new Label();
         label.Text = $"-{amount}";
-        label.AddThemeColorOverride("font_color", new Color(1f, 0.35f, 0.35f));
+        label.AddThemeColorOverride("font_color", Palette.DamageNumber);
         label.AddThemeFontSizeOverride("font_size", 14);
         label.ZIndex = 10;
         parent.AddChild(label);
@@ -370,7 +390,7 @@ public partial class Enemy : CharacterBody2D
 
         var label = new Label();
         label.Text = $"+{amount}";
-        label.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.15f));
+        label.AddThemeColorOverride("font_color", Palette.ScorePopup);
         label.AddThemeFontSizeOverride("font_size", 20);
         label.ZIndex = 10;
         parent.AddChild(label);

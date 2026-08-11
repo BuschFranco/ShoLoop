@@ -91,14 +91,17 @@ public partial class GameManager : Node
     {
         EnemiesKilled++;
         if (category != EnemyCategory.Common) SpecialEnemiesKilled++;
-        AddXp(xpReward);
 
-        // Botín reward scales coin payout only — XP/Score stay untouched, so stacking it can't
-        // accelerate leveling or inflate the high score, just the shop budget.
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
-        float coinMult = player?.CoinMultiplier ?? 1f;
-        AddCoins(Mathf.RoundToInt(coinsReward * coinMult));
 
+        // Sabiduría scales XP; Botín scales coins. Each touches only its own currency.
+        AddXp(Mathf.RoundToInt(xpReward * (player?.XpMultiplier ?? 1f)));
+        AddCoins(Mathf.RoundToInt(coinsReward * (player?.CoinMultiplier ?? 1f)));
+
+        // Deliberately the *unmultiplied* xpReward, which breaks the otherwise 1:1 Score/XP sync.
+        // Score is persisted as a high score, so letting a reward choice inflate it would make runs
+        // incomparable — and since AddScore also charges the Ultimate meter, multiplying here would
+        // quietly make Sabiduría an Ultimate-charge reward too.
         AddScore(xpReward);
 
         if (category == EnemyCategory.Boss)

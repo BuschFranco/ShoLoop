@@ -40,6 +40,7 @@ reading before changing balance numbers:
 - [rewards.md](docs/rewards.md) — the reward catalog and the stacking rules
 - [economy.md](docs/economy.md) — Coins vs. Score, shop pricing
 - [difficulty-scaling.md](docs/difficulty-scaling.md) — `RoundCurve` and adaptive difficulty
+- [visuals.md](docs/visuals.md) — palette, glow, and animation
 
 Nearly all balance tuning is done by editing named constants in one place per system — the
 `RoundCurve` fields at the top of `EnemySpawner.cs`, the cap constants in `Player.cs`, and the

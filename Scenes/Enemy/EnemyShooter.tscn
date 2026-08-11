@@ -21,7 +21,7 @@ EnemyBulletScene = ExtResource("2")
 FireRate = 0.4
 
 [node name="Visual" type="Polygon2D" parent="."]
-color = Color(0.7, 0.3, 1, 1)
+color = Color(0.88, 0.25, 0.98, 1)
 polygon = PackedVector2Array(0, -16, 14, -6, 10, 14, -10, 14, -14, -6)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]

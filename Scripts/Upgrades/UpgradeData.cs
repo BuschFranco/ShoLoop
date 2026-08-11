@@ -21,7 +21,8 @@ public enum UpgradeType
     Revive,
     ShieldRegen,
     Missile,
-    Burn
+    Burn,
+    XpBonus
 }
 
 public enum RewardTier
@@ -98,6 +99,7 @@ public class UpgradeData
             new("Botín I", "+15% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Common, 15f, cost: 14),
             new("Misil I", "Lanza un misil cada 4.5s que explota en área (30 daño, radio 70)", UpgradeType.Missile, RewardTier.Common, 1f, cost: 24),
             new("Incendiario I", "Tus balas queman: 6 daño/seg por 3s", UpgradeType.Burn, RewardTier.Common, 1f, cost: 20),
+            new("Sabiduría I", "+20% de experiencia por enemigo", UpgradeType.XpBonus, RewardTier.Common, 20f, cost: 18),
         },
         [RewardTier.Rare] = new List<UpgradeData>
         {
@@ -134,6 +136,7 @@ public class UpgradeData
             new("Botín III", "+40% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Epic, 40f, cost: 36),
             new("Misil III", "Lanza un misil cada 3.2s que explota en área (75 daño, radio 100)", UpgradeType.Missile, RewardTier.Epic, 3f, cost: 54),
             new("Incendiario III", "Tus balas queman: 16 daño/seg por 3.5s", UpgradeType.Burn, RewardTier.Epic, 3f, cost: 46),
+            new("Sabiduría II", "+50% de experiencia por enemigo", UpgradeType.XpBonus, RewardTier.Epic, 50f, cost: 44),
 
             // --- Shop-exclusive from here ---
             new("Ultimate: Pulso Nova", "Daña fuerte a todos los enemigos cercanos de una vez", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Nova),
