@@ -19,7 +19,9 @@ public enum UpgradeType
     BulletKnockback,
     CoinBonus,
     Revive,
-    ShieldRegen
+    ShieldRegen,
+    Missile,
+    Burn
 }
 
 public enum RewardTier
@@ -94,6 +96,8 @@ public class UpgradeData
             new("Bala Veloz I", "+80 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Common, 80f, cost: 8),
             new("Retroceso I", "Tus balas empujan a los enemigos (+60)", UpgradeType.BulletKnockback, RewardTier.Common, 60f, cost: 10),
             new("Botín I", "+15% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Common, 15f, cost: 14),
+            new("Misil I", "Lanza un misil cada 4.5s que explota en área (30 daño, radio 70)", UpgradeType.Missile, RewardTier.Common, 1f, cost: 24),
+            new("Incendiario I", "Tus balas queman: 6 daño/seg por 3s", UpgradeType.Burn, RewardTier.Common, 1f, cost: 20),
         },
         [RewardTier.Rare] = new List<UpgradeData>
         {
@@ -110,6 +114,8 @@ public class UpgradeData
             new("Bala Veloz II", "+150 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Rare, 150f, cost: 14),
             new("Retroceso II", "Tus balas empujan a los enemigos (+110)", UpgradeType.BulletKnockback, RewardTier.Rare, 110f, cost: 18),
             new("Botín II", "+25% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Rare, 25f, cost: 24),
+            new("Misil II", "Lanza un misil cada 3.8s que explota en área (50 daño, radio 85)", UpgradeType.Missile, RewardTier.Rare, 2f, cost: 38),
+            new("Incendiario II", "Tus balas queman: 10 daño/seg por 3s", UpgradeType.Burn, RewardTier.Rare, 2f, cost: 32),
         },
         [RewardTier.Epic] = new List<UpgradeData>
         {
@@ -126,6 +132,8 @@ public class UpgradeData
             new("Bala Veloz III", "+240 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Epic, 240f, cost: 24),
             new("Retroceso III", "Tus balas empujan a los enemigos (+170)", UpgradeType.BulletKnockback, RewardTier.Epic, 170f, cost: 28),
             new("Botín III", "+40% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Epic, 40f, cost: 36),
+            new("Misil III", "Lanza un misil cada 3.2s que explota en área (75 daño, radio 100)", UpgradeType.Missile, RewardTier.Epic, 3f, cost: 54),
+            new("Incendiario III", "Tus balas queman: 16 daño/seg por 3.5s", UpgradeType.Burn, RewardTier.Epic, 3f, cost: 46),
 
             // --- Shop-exclusive from here ---
             new("Ultimate: Pulso Nova", "Daña fuerte a todos los enemigos cercanos de una vez", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Nova),
@@ -148,6 +156,8 @@ public class UpgradeData
             new("Bala Veloz IV", "+350 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Legendary, 350f, cost: 38),
             new("Retroceso IV", "Tus balas empujan a los enemigos (+240)", UpgradeType.BulletKnockback, RewardTier.Legendary, 240f, cost: 42),
             new("Botín IV", "+60% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Legendary, 60f, cost: 52),
+            new("Misil IV", "Lanza un misil cada 2.6s que explota en área (110 daño, radio 120)", UpgradeType.Missile, RewardTier.Legendary, 4f, cost: 72),
+            new("Incendiario IV", "Tus balas queman: 24 daño/seg por 4s", UpgradeType.Burn, RewardTier.Legendary, 4f, cost: 62),
 
             // --- Shop-exclusive from here ---
             // A single Legendary Heart rather than one per tier: max lives is the most swingy stat

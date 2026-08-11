@@ -79,6 +79,8 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Bullet Speed | `BulletSpeed` | +80 (8💰) | +150 (14💰) | +240 (24💰) | +350 (38💰) | +700 bonus |
 | Knockback | `BulletKnockback` | +60 (10💰) | +110 (18💰) | +170 (28💰) | +240 (42💰) | +400 |
 | Coin Bonus | `CoinBonus` | +15% (14💰) | +25% (24💰) | +40% (36💰) | +60% (52💰) | +150% |
+| Missile | `Missile` | 4.5s / 30 dmg / r70 (24💰) | 3.8s / 50 / r85 (38💰) | 3.2s / 75 / r100 (54💰) | 2.6s / 110 / r120 (72💰) | Nv4 |
+| Burn | `Burn` | 6/s for 3s (20💰) | 10/s for 3s (32💰) | 16/s for 3.5s (46💰) | 24/s for 4s (62💰) | Nv4 |
 | Heart *(shop)* | `Heart` | — | — | — | +1 max life & full heal (60💰) | 10 lives |
 | Ultimate *(shop)* | `Ultimate` | — | — | one of 3 kinds (80💰) | — | see [Ultimates](#ultimates) |
 | Shield Regen *(shop)* | `ShieldRegen` | — | — | 1/12s (55💰) | 1/7.5s (75💰) | best tier taken |
@@ -137,7 +139,9 @@ It's disabled only when you're at `MaxLivesCap` **and** already on full lives �
 
 `OrbitCount = Max(OrbitCount, upgrade.Value)` and `CompanionStatPercent = Max(CompanionStatPercent, upgrade.Value / 100)`. Each tier's number is already an absolute target (e.g. "4 blades", "50% of your stats"), not a delta — so re-picking a lower-or-equal tier than what you already have is a genuine no-op. The [shop](economy.md) proactively hides ("Owned") any offer that would be a no-op, so you never spend your one purchase-per-round on it by accident.
 
-`Laser` works the same way: `LaserLevel = Max(LaserLevel, upgrade.Value)` (`upgrade.Value` is the tier level, 1–4), and `Player.EnsureLaserTimer()` re-reads `LaserLevel` from a fixed `LaserTiers` lookup array to set the firing `Timer`'s interval, per-tick damage, and max targets per zap. Every tier is a strictly-better version of the same ability (faster + harder-hitting), so there's nothing to sum — same "take the best" shape as Orbit Blade/Drone. Tier 1 additionally caps a single zap at 5 enemies (the closest 5 in range); tiers 2–4 hit everyone in range uncapped.
+`Laser`, `Missile`, and `Burn` all work the same way — `Level = Max(Level, upgrade.Value)` against a per-tier lookup table (`LaserTiers` / `MissileTiers` / `BurnTiers`), since every tier is strictly better than the last so there's nothing to sum. Details of the first two in [player.md](player.md#missile-misil); burn's enemy-side state is in [enemies.md](enemies.md#burn-incendiario).
+
+`Laser` specifically: `LaserLevel = Max(LaserLevel, upgrade.Value)` (`upgrade.Value` is the tier level, 1–4), and `Player.EnsureLaserTimer()` re-reads `LaserLevel` from a fixed `LaserTiers` lookup array to set the firing `Timer`'s interval, per-tick damage, and max targets per zap. Every tier is a strictly-better version of the same ability (faster + harder-hitting), so there's nothing to sum — same "take the best" shape as Orbit Blade/Drone. Tier 1 additionally caps a single zap at 5 enemies (the closest 5 in range); tiers 2–4 hit everyone in range uncapped.
 
 **Epic and Legendary (`LaserLevel >= 3`) couple to the player's live stats instead of using `LaserTiers`' fixed numbers**: `GetLaserDamage()` scales the tier's base damage by `BulletDamage / _baseBulletDamage`, and `GetLaserInterval()` scales the tier's base interval by `_baseFireRate / FireRate` (capped at a 0.3s floor so it can't go arbitrarily fast). `OnLaserTimeout()` re-reads `GetLaserInterval()` at the end of every tick and writes it back into `_laserTimer.WaitTime`, so the interval keeps tracking the player's current `FireRate` live rather than freezing at whatever it was when the Laser was picked or last upgraded — buying more Rapid Fire/Sharper Rounds later makes an Epic+ Laser faster/stronger too, automatically.
 

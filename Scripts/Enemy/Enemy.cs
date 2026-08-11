@@ -63,6 +63,55 @@ public partial class Enemy : CharacterBody2D
         _knockbackVelocity = impulse;
     }
 
+    // Burn (Incendiario reward): damage over time applied by the player's bullets.
+    private float _burnDps;
+    private float _burnRemaining;
+    private float _burnTickAccumulator;
+    private bool _isBurning;
+    private const float BurnTickInterval = 0.25f;
+    private static readonly Color BurnTint = new(1f, 0.55f, 0.3f);
+
+    // Refreshes rather than stacks: a second hit takes the stronger DPS and restarts the clock at
+    // whichever duration is longer. Stacking instances would make sustained fire scale burn
+    // quadratically with fire rate, which dwarfs every other damage source almost immediately.
+    public void ApplyBurn(float dps, float duration)
+    {
+        _burnDps = Mathf.Max(_burnDps, dps);
+        _burnRemaining = Mathf.Max(_burnRemaining, duration);
+    }
+
+    private void TickBurn(float delta)
+    {
+        if (_burnRemaining <= 0f)
+        {
+            if (_isBurning)
+            {
+                _isBurning = false;
+                Modulate = Colors.White;
+            }
+            return;
+        }
+
+        if (!_isBurning)
+        {
+            _isBurning = true;
+            // Tints via Modulate, not the Visual's Color — the hit flash owns that property, and
+            // the two would fight over it. Modulate multiplies on top, so they compose instead.
+            Modulate = BurnTint;
+        }
+
+        _burnRemaining -= delta;
+        _burnTickAccumulator += delta;
+        if (_burnTickAccumulator < BurnTickInterval) return;
+
+        int damage = Mathf.RoundToInt(_burnDps * _burnTickAccumulator);
+        _burnTickAccumulator = 0f;
+
+        // showFeedback: false — at 4 ticks/second the flash would strobe and the damage numbers
+        // would bury everything else on screen.
+        if (damage > 0) TakeDamage(damage, showFeedback: false);
+    }
+
     public int CurrentHp;
 
     // Set by whoever instantiates this enemy (EnemySpawner or a parent Split()), so a
@@ -159,6 +208,11 @@ public partial class Enemy : CharacterBody2D
             if (_player == null) return;
         }
 
+        // Ticked before movement so a burn kill skips the rest of this frame's steering work —
+        // TakeDamage can QueueFree us from in here.
+        TickBurn((float)delta);
+        if (CurrentHp <= 0) return;
+
         float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
         Vector2 chaseDir = (_player.GlobalPosition - GlobalPosition).Normalized().Rotated(_chaseAngleOffset);
 
@@ -246,9 +300,12 @@ public partial class Enemy : CharacterBody2D
         return push.LimitLength(1f) * SeparationStrength;
     }
 
-    public void TakeDamage(int amount)
+    // showFeedback defaults to true so every ordinary damage source (bullets, laser, blades, the
+    // nova, ultimates) keeps behaving exactly as before. Burn passes false: at 4 ticks/second the
+    // flash strobes and the floating numbers bury everything else on screen.
+    public void TakeDamage(int amount, bool showFeedback = true)
     {
-        if (_healthBarFill != null)
+        if (showFeedback && _healthBarFill != null)
         {
             int actualDamage = Mathf.Min(amount, Mathf.Max(CurrentHp, 0));
             if (actualDamage > 0)
@@ -277,7 +334,7 @@ public partial class Enemy : CharacterBody2D
 
             QueueFree();
         }
-        else
+        else if (showFeedback)
         {
             PlayHitFeedback();
         }

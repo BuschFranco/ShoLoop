@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="1"]
 [ext_resource type="Script" path="res://Scripts/Enemy/EnemySpawner.cs" id="2"]
@@ -19,6 +19,7 @@
 [ext_resource type="Script" path="res://Scripts/Obstacle.cs" id="17"]
 [ext_resource type="Script" path="res://Scripts/Util/CameraRig.cs" id="18"]
 [ext_resource type="Script" path="res://Scripts/ArenaBounds.cs" id="19"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/RoundSummary.tscn" id="20"]
 
 [node name="Arena" type="Node2D"]
 
@@ -140,6 +141,11 @@ layer = 10
 layer = 15
 
 [node name="Shop" parent="ShopLayer" instance=ExtResource("7")]
+
+[node name="RoundSummaryLayer" type="CanvasLayer" parent="."]
+layer = 17
+
+[node name="RoundSummary" parent="RoundSummaryLayer" instance=ExtResource("20")]
 
 [node name="GameOverLayer" type="CanvasLayer" parent="."]
 layer = 20

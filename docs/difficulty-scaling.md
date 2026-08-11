@@ -53,15 +53,22 @@ It then re-rolls the angle up to 8 times to find a spot inside `ArenaHalfExtents
 
 ### Early-round grace (onboarding cushion)
 
-`EarlyRoundIntervalMult = { 1.6f, 1.25f }` multiplies the spawn interval for rounds 1 and 2 only, tapering back to `1×` from round 3 on:
+Three parallel tables cushion rounds 1–2 only, all tapering back to `1×` from round 3 on. They're read through one shared `EarlyRoundMult(table, round)` helper:
 
 | | Round 1 | Round 2 | Round 3+ |
 |---|---|---|---|
-| Interval multiplier | ×1.6 | ×1.25 | ×1.0 |
-| Effective interval | 0.96s | 0.71s | curve value, unchanged |
-| Enemies/sec | ~1.0 | ~1.4 | unchanged |
+| `EarlyRoundIntervalMult` | ×1.60 | ×1.25 | ×1.0 |
+| → effective spawn interval | 0.96s | 0.71s | curve value |
+| → enemies/sec | ~1.0 | ~1.4 | unchanged |
+| `EarlyRoundConcurrentMult` | ×0.40 | ×0.60 | ×1.0 |
+| → max alive at once | 10 | 17 | 25 → 61 → … |
+| `EarlyRoundSpeedMult` | ×0.80 | ×0.80 | ×1.0 |
 
-This exists as a separate array rather than a curve tweak because a linear `RoundCurve` **cannot** express "extra gentle at the start, then rejoin the normal ramp" — that shape is piecewise by definition, and re-sloping `SpawnIntervalCurve` to soften the opening would drag every later round along with it. Keeping it as an explicit, clearly-bounded override leaves the main curve meaning exactly what it says for rounds 3+.
+Spawn *rate* and concurrent *cap* are separate levers and both matter: slowing the tick alone still lets a beginner accumulate 25 simultaneous enemies over a 60-second round. The cap is what bounds how overwhelming the screen gets; the interval controls how fast it fills.
+
+These live as explicit arrays rather than curve tweaks because a linear `RoundCurve` **cannot** express "extra gentle at the start, then rejoin the normal ramp" — that shape is piecewise by definition, and re-sloping the underlying curves to soften the opening would drag every later round along with it. Keeping them as clearly-bounded overrides leaves the main curves meaning exactly what they say from round 3 on.
+
+Note `EarlyRoundSpeedMult` multiplies `_speedMult`, which is also what `ConfigureForBossRound` evaluates — harmless, since the first boss round is round 5 and the tables are only 2 entries long.
 
 Split children (see [enemies.md](enemies.md#splitting-enemysplitter)) inherit their stats from their already-scaled parent, so round scaling propagates through a splitter's lineage automatically without `Enemy.cs` needing direct access to the spawner's curves.
 

@@ -12,6 +12,7 @@ public partial class Player : CharacterBody2D
     // baseline to grow from and a single place to apply it when spawning each shot.
     [Export] public float BulletSpeed = 500f;
     [Export] public PackedScene BulletScene;
+    [Export] public PackedScene MissileScene;
     [Export] public PackedScene OrbitBladeScene;
     [Export] public PackedScene CompanionScene;
     [Export] public Vector2 ArenaHalfExtents = new(1600f, 1000f);
@@ -48,6 +49,8 @@ public partial class Player : CharacterBody2D
     public float CompanionStatPercent = 0f;
     public int ExtraFiringLines = 0;
     public int LaserLevel = 0;
+    public int MissileLevel = 0;
+    public int BurnLevel = 0;
     public int BulletPierce = 0;
     public float CritChance = 0f;            // percent, 0-60
     public float BulletKnockback = 0f;
@@ -77,6 +80,25 @@ public partial class Player : CharacterBody2D
         (3.2f, 20f, int.MaxValue),
         (2.5f, 31f, int.MaxValue),
         (1.8f, 50f, int.MaxValue),
+    };
+
+    // Level → (fire interval, blast damage, blast radius). Deliberately slow: the missile trades
+    // uptime for burst area damage, so tier 1 fires only every 4.5s.
+    private static readonly (float Interval, int Damage, float Radius)[] MissileTiers =
+    {
+        (4.5f, 30, 70f),
+        (3.8f, 50, 85f),
+        (3.2f, 75, 100f),
+        (2.6f, 110, 120f),
+    };
+
+    // Level → (damage per second, duration). Applied by the player's own bullets on hit.
+    private static readonly (float Dps, float Duration)[] BurnTiers =
+    {
+        (6f, 3.0f),
+        (10f, 3.0f),
+        (16f, 3.5f),
+        (24f, 4.0f),
     };
 
     private VirtualJoystick _joystick;
@@ -117,6 +139,7 @@ public partial class Player : CharacterBody2D
     private Timer _shieldRegenTimer;
     private Line2D _fireRangeRing;
     private Timer _laserTimer;
+    private Timer _missileTimer;
     private Timer _frenzyTimer;
 
     public override void _Ready()
@@ -423,6 +446,60 @@ public partial class Player : CharacterBody2D
             _laserTimer.WaitTime = GetLaserInterval();
     }
 
+    private void EnsureMissileTimer()
+    {
+        if (_missileTimer == null)
+        {
+            _missileTimer = new Timer();
+            AddChild(_missileTimer);
+            _missileTimer.Timeout += OnMissileTimeout;
+        }
+        _missileTimer.WaitTime = MissileTiers[MissileLevel - 1].Interval;
+        _missileTimer.Start();
+    }
+
+    private void OnMissileTimeout()
+    {
+        if (MissileScene == null || _bulletsContainer == null) return;
+
+        var target = FindNearestEnemyInRange();
+        if (target == null) return;   // nothing to shoot at; the timer just ticks again
+
+        var (_, damage, radius) = MissileTiers[MissileLevel - 1];
+
+        var missile = MissileScene.Instantiate<Missile>();
+        missile.GlobalPosition = GlobalPosition;
+
+        // Snapshot of where the target is *now*. Missile.cs never re-reads it, which is what makes
+        // the shot dodgeable rather than homing.
+        missile.TargetPosition = target.GlobalPosition;
+        missile.Damage = damage;
+        missile.ExplosionRadius = radius;
+
+        _bulletsContainer.AddChild(missile);
+    }
+
+    // Shared by the gun and the missile so every auto-weapon respects FireRange identically.
+    private Node2D FindNearestEnemyInRange()
+    {
+        Node2D nearest = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var n in GetTree().GetNodesInGroup("enemies"))
+        {
+            if (n is not Node2D e2d || !IsInstanceValid(e2d)) continue;
+
+            float d = GlobalPosition.DistanceSquaredTo(e2d.GlobalPosition);
+            if (d < nearestDist)
+            {
+                nearestDist = d;
+                nearest = e2d;
+            }
+        }
+
+        return nearestDist <= FireRange * FireRange ? nearest : null;
+    }
+
     private void SpawnLaserBeam(Vector2 targetGlobalPos)
     {
         var beam = new Line2D();
@@ -468,11 +545,24 @@ public partial class Player : CharacterBody2D
         float gunDps = BulletDamage * FireRate * shotsPerVolley * critMult * pierceMult;
 
         float laserDps = LaserLevel > 0 ? GetLaserDamage() / GetLaserInterval() : 0f;
+
+        // Both AoE, so their nominal single-target DPS understates them — a modest multiplier keeps
+        // a missile/burn build from reading as weaker than it plays and slipping past the balancer.
+        float missileDps = 0f;
+        if (MissileLevel > 0)
+        {
+            var (interval, damage, _) = MissileTiers[MissileLevel - 1];
+            missileDps = damage / interval * 1.5f;
+        }
+
+        // Sustained fire keeps burn permanently refreshed, so its DPS is effectively always on.
+        float burnDps = BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Dps : 0f;
+
         float orbitDps = OrbitCount * OrbitBladeDamage * OrbitHitsPerSecondEstimate;
 
         // The companion re-derives its own output from the player's live stats, so it's a flat
         // percentage bonus on top of everything rather than its own independent term.
-        float total = (gunDps + laserDps + orbitDps) * (1f + CompanionStatPercent);
+        float total = (gunDps + laserDps + missileDps + burnDps + orbitDps) * (1f + CompanionStatPercent);
         return total / baselineDps;
     }
 
@@ -646,6 +736,13 @@ public partial class Player : CharacterBody2D
         bullet.Pierce = BulletPierce;
         bullet.Knockback = BulletKnockback;
 
+        if (BurnLevel > 0)
+        {
+            var (burnDps, burnDuration) = BurnTiers[BurnLevel - 1];
+            bullet.BurnDps = burnDps;
+            bullet.BurnDuration = burnDuration;
+        }
+
         // Rolled per bullet, not per volley, so a Twin/Side Shot spread can crit on some lines and
         // not others — more visible feedback than an all-or-nothing volley.
         bool isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
@@ -700,6 +797,13 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Laser:
                 LaserLevel = Mathf.Max(LaserLevel, (int)upgrade.Value);
                 EnsureLaserTimer();
+                break;
+            case UpgradeType.Missile:
+                MissileLevel = Mathf.Max(MissileLevel, (int)upgrade.Value);
+                EnsureMissileTimer();
+                break;
+            case UpgradeType.Burn:
+                BurnLevel = Mathf.Max(BurnLevel, (int)upgrade.Value);
                 break;
             case UpgradeType.Ultimate:
                 EquippedUltimate = upgrade.Ultimate;
@@ -794,6 +898,10 @@ public partial class Player : CharacterBody2D
                 return upgrade.Value / 100f > CompanionStatPercent;
             case UpgradeType.Laser:
                 return (int)upgrade.Value > LaserLevel;
+            case UpgradeType.Missile:
+                return (int)upgrade.Value > MissileLevel;
+            case UpgradeType.Burn:
+                return (int)upgrade.Value > BurnLevel;
             case UpgradeType.Ultimate:
                 return EquippedUltimate != upgrade.Ultimate;
             case UpgradeType.Pierce:
@@ -837,6 +945,8 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Heart:
             case UpgradeType.HitShield:
             case UpgradeType.Laser:
+            case UpgradeType.Missile:
+            case UpgradeType.Burn:
             case UpgradeType.Ultimate:
             case UpgradeType.Pierce:
             case UpgradeType.CritChance:
@@ -939,6 +1049,14 @@ public partial class Player : CharacterBody2D
                 return $"Tenés: {CompanionStatPercent * 100:0}% stats (tope 50%) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}";
             case UpgradeType.Laser:
                 return $"Tenés: Láser Nv{LaserLevel} (tope Nv4) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}";
+            case UpgradeType.Missile:
+                return MissileLevel > 0
+                    ? $"Tenés: Misil Nv{MissileLevel} cada {MissileTiers[MissileLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés misiles todavía";
+            case UpgradeType.Burn:
+                return BurnLevel > 0
+                    ? $"Tenés: Incendiario Nv{BurnLevel} ({BurnTiers[BurnLevel - 1].Dps:0}/seg) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés quemadura todavía";
             case UpgradeType.Ultimate:
             {
                 string current = EquippedUltimate == null ? "ninguna" : EquippedUltimate.Value.ToString();

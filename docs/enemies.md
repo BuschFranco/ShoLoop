@@ -64,6 +64,16 @@ Grunts are always available. `EnemySpawner.ChooseEnemyScene()` rolls sequentiall
 
 Every hit on a health-bar enemy also spawns a floating red `-10`-style number (`SpawnDamageNumber`, same drift-up-and-fade pattern as the score popup) showing the actual HP lost — clamped to whatever HP the enemy actually had left, so an overkill hit shows the real remaining HP rather than the raw (possibly enormous) damage number.
 
+## Burn (Incendiario)
+
+Damage-over-time applied by the player's bullets (see [player.md](player.md#burn-incendiario) for the reward side). `ApplyBurn(dps, duration)` sets the state; `TickBurn(delta)` runs it from `_PhysicsProcess`.
+
+- **Refreshes rather than stacks** — a second hit takes `Max` of both the DPS and the remaining duration. Stacking separate instances would make sustained fire scale burn quadratically with fire rate, dwarfing every other damage source almost immediately.
+- Ticks every `BurnTickInterval` (0.25s), dealing `dps × accumulated` so the total is correct regardless of framerate.
+- Damage goes through `TakeDamage(damage, showFeedback: false)`. That flag exists for exactly this: at 4 ticks/second the white hit flash strobes and the floating damage numbers bury everything else on screen. Everything else calls the 1-arg form and keeps its feedback.
+- Tinted via **`Modulate`, not the `Visual`'s `Color`** — the [hit reaction](#hit-reaction) below owns `Color` and the two would fight over it. `Modulate` multiplies on top, so a burning enemy still flashes white when shot.
+- `TickBurn` is called **before** movement in `_PhysicsProcess`, with an early `return` if it killed the enemy, since `TakeDamage` can `QueueFree` from inside it.
+
 ## Hit reaction
 
 `PlayHitFeedback()` gives every enemy — not just the health-bar ones — a short white flash and a scale punch (1.3× easing back over 0.14s) whenever a hit lands. Three details:

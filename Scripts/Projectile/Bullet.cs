@@ -15,6 +15,11 @@ public partial class Bullet : Area2D
     // Shove applied to each enemy hit, along the bullet's own travel direction (Retroceso reward).
     public float Knockback = 0f;
 
+    // Burn applied to each enemy hit (Incendiario reward). 0 dps = no burn. A piercing bullet
+    // ignites everything it passes through, which falls out of the Pierce flow below for free.
+    public float BurnDps = 0f;
+    public float BurnDuration = 0f;
+
     private float _timeAlive = 0f;
 
     public override void _Ready()
@@ -37,6 +42,9 @@ public partial class Bullet : Area2D
         {
             if (Knockback > 0f)
                 enemy.ApplyKnockback(Direction * Knockback);
+
+            if (BurnDps > 0f)
+                enemy.ApplyBurn(BurnDps, BurnDuration);
 
             enemy.TakeDamage(Damage);
 

@@ -28,19 +28,22 @@ public partial class EnemySpawner : Node2D
     private static readonly RoundCurve SpecialChanceCurve = new(0.05f, 0.05f, 0.05f, 0.6f);    // chance a spawn is a special enemy
     private static readonly RoundCurve RareChanceCurve = new(0.15f, 0.02f, 0.15f, 0.35f);      // chance a spawn (that isn't hidden/special) is rare
     private const float HiddenChance = 0.05f;                                                   // flat 5% per user request, not round-scaled
-    // A linear RoundCurve can't express "extra gentle for the first couple of rounds, then rejoin
-    // the normal ramp" — that shape is piecewise by definition, and re-sloping SpawnIntervalCurve
-    // to soften the opening would drag every later round along with it. So the opening rounds get
-    // an explicit multiplier on the spawn interval instead, tapering back to 1x by round 3 where
-    // the normal curve takes over untouched. Purely an onboarding cushion for new players.
-    private static readonly float[] EarlyRoundIntervalMult = { 1.6f, 1.25f };
+    // Onboarding cushion for rounds 1-2, indexed by round number. A linear RoundCurve can't express
+    // "extra gentle for the first couple of rounds, then rejoin the normal ramp" — that shape is
+    // piecewise by definition, and re-sloping the curves to soften the opening would drag every
+    // later round along with it. Explicit per-round multipliers instead, tapering to 1x by round 3
+    // where the normal curves take over untouched.
+    //
+    //                                            round 1  round 2
+    private static readonly float[] EarlyRoundIntervalMult = { 1.60f, 1.25f };   // slower spawn ticks
+    private static readonly float[] EarlyRoundConcurrentMult = { 0.40f, 0.60f }; // fewer alive at once (25 -> 10, 29 -> 17)
+    private static readonly float[] EarlyRoundSpeedMult = { 0.80f, 0.80f };      // enemies at 80% speed
 
-    // Mirror of the above at the other end of the run: from this round on the concurrent cap gets a
-    // flat bump, so the mid/late game keeps a denser screen than MaxConcurrentCurve's linear growth
-    // alone provides. Applied *after* the curve's own clamp, so it lifts the eventual 200 ceiling to
-    // 240 too rather than quietly doing nothing once the curve saturates.
-    private const int LateRoundStart = 11;
-    private const float LateRoundConcurrentMult = 1.2f;
+    private static float EarlyRoundMult(float[] table, int round)
+    {
+        int index = round - 1;
+        return index >= 0 && index < table.Length ? table[index] : 1f;
+    }
 
     private static readonly RoundCurve HpMultCurve = new(1f, 0.25f, 1f, 10f);
     private static readonly RoundCurve DmgMultCurve = new(1f, 0.22f, 1f, 10f);
@@ -88,21 +91,18 @@ public partial class EnemySpawner : Node2D
 
     public void ConfigureForRound(int round)
     {
-        _spawnTimer.WaitTime = SpawnIntervalCurve.Evaluate(round) * GetEarlyRoundIntervalMult(round);
+        _spawnTimer.WaitTime = SpawnIntervalCurve.Evaluate(round) * EarlyRoundMult(EarlyRoundIntervalMult, round);
         _burstCount = Mathf.RoundToInt(BurstCountCurve.Evaluate(round));
         _specialChance = SpecialChanceCurve.Evaluate(round);
         _rareChance = RareChanceCurve.Evaluate(round);
-        _maxConcurrentEnemies = Mathf.RoundToInt(MaxConcurrentCurve.Evaluate(round) * LateCrowdMultCurve.Evaluate(round));
+        _maxConcurrentEnemies = Mathf.RoundToInt(
+            MaxConcurrentCurve.Evaluate(round)
+            * LateCrowdMultCurve.Evaluate(round)
+            * EarlyRoundMult(EarlyRoundConcurrentMult, round));
 
         EvaluateStatCurves(round);
 
         _spawnTimer.Start();
-    }
-
-    private static float GetEarlyRoundIntervalMult(int round)
-    {
-        int index = round - 1;
-        return index >= 0 && index < EarlyRoundIntervalMult.Length ? EarlyRoundIntervalMult[index] : 1f;
     }
 
     // The round-indexed HP/damage curves assume the player's power grows on a predictable
@@ -119,7 +119,7 @@ public partial class EnemySpawner : Node2D
 
         _hpMult = HpMultCurve.Evaluate(round) * _catchUpMult;
         _dmgMult = DmgMultCurve.Evaluate(round) * _catchUpMult;
-        _speedMult = SpeedMultCurve.Evaluate(round);
+        _speedMult = SpeedMultCurve.Evaluate(round) * EarlyRoundMult(EarlyRoundSpeedMult, round);
         _rewardMult = RewardMultCurve.Evaluate(round);
     }
 

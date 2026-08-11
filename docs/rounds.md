@@ -18,14 +18,27 @@ A "round" is a fixed-duration wave. See [GameManager.cs](../Scripts/Autoload/Gam
 
 A boss round doesn't use the timer at all — see [Boss Rounds](#boss-rounds) below for how it ends instead.
 
+## The round recap
+
+`BeginRoundEnd()` is the single entry point for "the round is over" — called from both `OnRoundTimeout()` and a boss kill. It puts [`RoundSummary`](../Scripts/UI/RoundSummary.cs) on screen *first*, then hands off to `ResolveNextInterstitial()`.
+
+The recap therefore stays visible for the whole interstitial chain — level-up picks, the first-boss Ultimate choice, and the shop — so the round's numbers are still in front of you while you decide what to spend them on. `StartNextRound()` takes it down, which is exactly the moment the "get ready" countdown begins.
+
+It shows enemies killed, elite/boss kills, coins earned, score earned, and levels gained (that last line only when it actually happened, so it doesn't read as a permanent "0"). Every one of those counters on `GameManager` is **cumulative for the run**, so the recap diffs against a snapshot taken by `SnapshotRoundStart()` at the start of each round (and in `ResetRun`).
+
+Two placement details worth knowing:
+- It sits on its own `CanvasLayer` at **layer 17 — above the shop's 15**, because the shop draws a full-screen dim that would otherwise grey the recap out.
+- Being above the shop means it would also sit on top of the shop's buttons, so `RoundSummary` sets `MouseFilter = Ignore` on itself and every child in the scene. It's purely decorative and must never swallow a click meant for a Buy button.
+
 ## Starting the next round
 
 Pressing "Next Round" in the shop calls `GameManager.StartNextRound()`, which:
 1. Increments `RoundNumber` and fires `RoundChanged` (HUD updates the "Round N" label).
-2. Fully heals the player's lives (`Player.HealFullLives()`) **and** tops their shield charges back to 100% (`Player.RefillShield()`). Every round starts at full health and full shield regardless of how banged-up you were at the end of the previous one.
-3. Unpauses (`GameManager.Resume()`) — but does **not** yet spawn anything.
-4. Starts a 5-second "get ready" countdown (`_roundStartTimer`, `RoundStartDelay = 5f`, exposed as `GameManager.RoundStartTimeRemaining`/`IsRoundStarting`). `HUD._Process` checks `IsRoundStarting` first, ahead of the boss-round check, and shows the remaining seconds in a dedicated **`CountdownLabel`** — 72px, yellow, centered on screen — while the small top-bar timer just reads "Preparate...". The countdown originally lived in that corner label alone and was effectively invisible there.
-5. When the countdown elapses, `BeginRoundAfterCountdown()` branches on `IsBossRound` (`RoundNumber % 5 == 0`):
+2. Hides the [round recap](#the-round-recap) and re-snapshots the per-round counters.
+3. Fully heals the player's lives (`Player.HealFullLives()`) **and** tops their shield charges back to 100% (`Player.RefillShield()`). Every round starts at full health and full shield regardless of how banged-up you were at the end of the previous one.
+4. Unpauses (`GameManager.Resume()`) — but does **not** yet spawn anything.
+5. Starts a 5-second "get ready" countdown (`_roundStartTimer`, `RoundStartDelay = 5f`, exposed as `GameManager.RoundStartTimeRemaining`/`IsRoundStarting`). `HUD._Process` checks `IsRoundStarting` first, ahead of the boss-round check, and shows the remaining seconds in a dedicated **`CountdownLabel`** — 72px, yellow, centered on screen — while the small top-bar timer just reads "Preparate...". The countdown originally lived in that corner label alone and was effectively invisible there.
+6. When the countdown elapses, `BeginRoundAfterCountdown()` branches on `IsBossRound` (`RoundNumber % 5 == 0`):
    - **Boss round**: `EnemySpawner.ConfigureForBossRound(RoundNumber)` (spawns one Boss scaled to this round) and triggers `BossBanner.Announce(RoundNumber)`.
    - **Normal round**: `EnemySpawner.ConfigureForRound(RoundNumber)` (starts normal spawning) and starts the 60s round timer — see [difficulty-scaling.md](difficulty-scaling.md) for exactly what that changes.
 

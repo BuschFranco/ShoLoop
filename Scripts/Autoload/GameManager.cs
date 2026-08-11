@@ -50,6 +50,14 @@ public partial class GameManager : Node
     // right one instead of having to infer it from the chosen upgrade's type.
     private bool _pickerIsUltimateChoice = false;
 
+    // Every counter above is cumulative for the run, so the end-of-round recap has to diff against
+    // a snapshot taken when the round began. Re-taken in StartNextRound and ResetRun.
+    private int _roundStartKills;
+    private int _roundStartEliteKills;
+    private int _roundStartCoins;
+    private int _roundStartScore;
+    private int _roundStartLevel;
+
     public event Action<int, int> XpChanged;
     public event Action<int> LevelUp;
     public event Action<int> CoinsChanged;
@@ -95,20 +103,16 @@ public partial class GameManager : Node
 
         if (category == EnemyCategory.Boss)
         {
-            // Queued rather than ending the round outright: AddXp above may already have opened
-            // the level-up picker, and calling EndRound() here would drop the shop straight on top
-            // of it (the shop's CanvasLayer sits above the picker's, so the pick would be lost).
-            _pendingRoundEnd = true;
-
             // Beating the very first boss is what unlocks Ultimates as a mechanic — a free choice
-            // between three of them, once per run.
+            // between three of them, once per run. Queued *before* BeginRoundEnd so it's already in
+            // the queue when that drains it, and so the recap is up when the picker opens.
             if (!_bossUltimateGranted)
             {
                 _bossUltimateGranted = true;
                 _pendingUltimateChoice = true;
             }
 
-            ResolveNextInterstitial();
+            BeginRoundEnd();
         }
     }
 
@@ -217,7 +221,35 @@ public partial class GameManager : Node
 
     private void OnRoundTimeout()
     {
-        EndRound();
+        BeginRoundEnd();
+    }
+
+    // Single entry point for "the round is over", from either the timer or a boss kill. Puts the
+    // recap on screen up front so it's already visible behind the level-up / Ultimate / shop
+    // modals, then hands off to the queue. StartNextRound is what takes it back down.
+    private void BeginRoundEnd()
+    {
+        _pendingRoundEnd = true;
+
+        var summary = GetTree().GetFirstNodeInGroup("round_summary") as RoundSummary;
+        summary?.ShowSummary(
+            RoundNumber,
+            EnemiesKilled - _roundStartKills,
+            SpecialEnemiesKilled - _roundStartEliteKills,
+            TotalCoinsEarned - _roundStartCoins,
+            Score - _roundStartScore,
+            Level - _roundStartLevel);
+
+        ResolveNextInterstitial();
+    }
+
+    private void SnapshotRoundStart()
+    {
+        _roundStartKills = EnemiesKilled;
+        _roundStartEliteKills = SpecialEnemiesKilled;
+        _roundStartCoins = TotalCoinsEarned;
+        _roundStartScore = Score;
+        _roundStartLevel = Level;
     }
 
     private void EndRound()
@@ -256,6 +288,12 @@ public partial class GameManager : Node
     {
         RoundNumber++;
         RoundChanged?.Invoke(RoundNumber);
+
+        // The recap has been up since the round ended, through every modal. This is the point the
+        // player has finished choosing everything, so it comes down as the countdown begins.
+        var summary = GetTree().GetFirstNodeInGroup("round_summary") as RoundSummary;
+        summary?.HideSummary();
+        SnapshotRoundStart();
 
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
         player?.HealFullLives();
@@ -410,6 +448,11 @@ public partial class GameManager : Node
         EnemySpeedMultiplier = 1f;
         _slowTimer?.Stop();
         _roundStartTimer?.Stop();
+        SnapshotRoundStart();
+
+        var summary = GetTree().GetFirstNodeInGroup("round_summary") as RoundSummary;
+        summary?.HideSummary();
+
         Resume();
     }
 }

@@ -91,6 +91,21 @@ Each threshold crossed increments `GameManager._pendingLevelUps` instead of imme
 - Deals finite damage (`Enemy.TakeDamage`) to everything it hits, **including a Boss** — unlike the level-up nova, this isn't an instant-kill, so it doesn't need a Boss exclusion.
 - Each hit draws a brief fading magenta `Line2D` beam from the player to the enemy (`SpawnLaserBeam`), visually distinct from the nova's expanding ring.
 
+## Missile (Misil)
+
+- `MissileLevel` (0–4, take-the-best-ever) drives `_missileTimer` on its own low cadence — 4.5s at tier 1 down to 2.6s at tier 4, deliberately slow because it trades uptime for area damage. `MissileTiers` holds `(Interval, Damage, Radius)`.
+- `OnMissileTimeout` targets the nearest enemy inside `FireRange` (via the shared `FindNearestEnemyInRange()`, so every auto-weapon respects the same ring) and no-ops when nothing's in range.
+- **[`Missile.cs`](../Scripts/Projectile/Missile.cs) flies to a *point*, not a target.** `TargetPosition` is snapshotted at launch and never re-read, so a fast enemy can outrun it and the missile still detonates where it was aimed. That miss is the intended tradeoff for the blast, not a bug awaiting homing.
+- It detonates on whichever comes first: arriving at the point, touching an enemy, touching an obstacle (mask 10, same as a bullet), or a lifetime timeout as a safety net. An `_exploded` guard makes `Explode()` idempotent — `BodyEntered` can fire on the same frame an arrival already detonated, and a double blast would deal double damage.
+- The expanding blast ring is parented to the **Bullets container, not the missile**, because the missile frees itself on that same frame and would otherwise take the visual with it. Same trick as `Enemy.SpawnScorePopup`.
+- `ArrivalThreshold` (14px) must stay larger than one frame of travel (`Speed × delta`), or the missile can step straight past the point without ever landing inside it.
+
+## Burn (Incendiario)
+
+- `BurnLevel` (0–4, take-the-best-ever) sets `Bullet.BurnDps` / `Bullet.BurnDuration` in `FireInDirection`. It's a **modifier on your normal shots**, not a separate weapon — so Twin Shot and Side Shot lines all ignite, and a piercing bullet lights up everything it passes through for free.
+- Enemy-side state (ticking, refresh-don't-stack, the orange tint) lives on `Enemy` — see [enemies.md](enemies.md#burn-incendiario).
+- **The Companion drone deliberately doesn't burn.** [`Companion.cs`](../Scripts/Player/Companion.cs) builds its own bullets and only sets `Damage`, leaving `BurnDps` at 0. The drone is explicitly a fraction of the player's power; full-strength burn would make each of its shots strictly better than one of yours.
+
 ## Ultimates
 
 - `EquippedUltimate` (nullable `UltimateKind`), `UltimateProgress`/`UltimateChargeTarget` (250), and `TriggerUltimate()` — full mechanics documented in [rewards.md](rewards.md#ultimates) since it's really a reward-system concern (shop-only acquisition, swap rules, Score-driven charging). The HUD's Ultimate button/bar (`HUD.cs`) is hidden until one is equipped and disabled until the bar is full.
