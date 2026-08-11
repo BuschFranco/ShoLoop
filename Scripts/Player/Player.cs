@@ -6,7 +6,7 @@ public partial class Player : CharacterBody2D
     [Export] public int MaxLives = 3;
     [Export] public float FireRate = 3f;
     [Export] public int BulletDamage = 10;
-    [Export] public float FireRange = 190f;
+    [Export] public float FireRange = 220f;
 
     // Owned here rather than left to Bullet.tscn's own default so every shot the player fires gets
     // it from one place. Fixed stat — there's no reward that raises it.
@@ -121,6 +121,13 @@ public partial class Player : CharacterBody2D
     private Vector2 _knockbackVelocity = Vector2.Zero;
     private const float KnockbackForce = 220f;
     private const float KnockbackDecay = 900f;
+
+    // How fast the Visual triangle turns to face the movement direction, as an exponential
+    // catch-up rate (bigger = snappier). Kept separate from MoveAcceleration/Deceleration below —
+    // rotation and translation reading as loosely coupled, rather than locked in lockstep, is what
+    // makes the turn look like banking instead of the whole ship instantly snapping to face a
+    // direction change.
+    private const float FacingTurnRate = 16f;
 
     // Movement ramps in and out instead of snapping between full speed and a dead stop, so the
     // player carries a little inertia. Both rates are px/s²: at MoveSpeed 265 that's ~0.15s to
@@ -244,6 +251,8 @@ public partial class Player : CharacterBody2D
         Velocity = _moveVelocity + _knockbackVelocity;
         MoveAndSlide();
 
+        UpdateFacing(dir, (float)delta);
+
         GlobalPosition = new Vector2(
             Mathf.Clamp(GlobalPosition.X, -ArenaHalfExtents.X, ArenaHalfExtents.X),
             Mathf.Clamp(GlobalPosition.Y, -ArenaHalfExtents.Y, ArenaHalfExtents.Y)
@@ -257,6 +266,24 @@ public partial class Player : CharacterBody2D
             if (_invulnTimer <= 0f)
                 _visual.Visible = true;
         }
+    }
+
+    // Turns the triangle to face the direction the player is actually moving in — it used to be
+    // rigidly fixed pointing right regardless of input. Prefers raw input direction (the player's
+    // immediate intent) and falls back to the smoothed velocity while decelerating with no input
+    // held, so the ship keeps facing forward as it coasts to a stop rather than snapping to face
+    // whatever residual coast direction. Holds its last facing entirely when both are ~zero,
+    // instead of resetting to some default — a stationary ship has no "forward" to snap back to.
+    private void UpdateFacing(Vector2 inputDir, float delta)
+    {
+        Vector2 facing = inputDir != Vector2.Zero ? inputDir
+            : (_moveVelocity.LengthSquared() > 25f ? _moveVelocity : Vector2.Zero);
+        if (facing == Vector2.Zero) return;
+
+        // Exponential catch-up rather than an instant snap, so a sharp direction change reads as
+        // the triangle banking through the turn instead of teleporting to face the new heading.
+        float weight = 1f - Mathf.Exp(-FacingTurnRate * delta);
+        _visual.Rotation = Mathf.LerpAngle(_visual.Rotation, facing.Angle(), weight);
     }
 
     // WASD as a desktop-friendly alternative to the virtual joystick — only consulted when the
