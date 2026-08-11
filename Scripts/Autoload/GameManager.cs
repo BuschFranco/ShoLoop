@@ -84,7 +84,13 @@ public partial class GameManager : Node
         EnemiesKilled++;
         if (category != EnemyCategory.Common) SpecialEnemiesKilled++;
         AddXp(xpReward);
-        AddCoins(coinsReward);
+
+        // Botín reward scales coin payout only — XP/Score stay untouched, so stacking it can't
+        // accelerate leveling or inflate the high score, just the shop budget.
+        var player = GetTree().GetFirstNodeInGroup("player") as Player;
+        float coinMult = player?.CoinMultiplier ?? 1f;
+        AddCoins(Mathf.RoundToInt(coinsReward * coinMult));
+
         AddScore(xpReward);
 
         if (category == EnemyCategory.Boss)
@@ -186,7 +192,7 @@ public partial class GameManager : Node
         if (_pendingLevelUps > 0)
         {
             _pickerIsUltimateChoice = false;
-            picker.Open(UpgradeData.PickRandomTiered(3, RoundNumber, isUseless: player != null ? player.IsRewardUseless : null));
+            picker.Open(UpgradeData.PickRandomTiered(3, RoundNumber, RewardSource.LevelUp, isUseless: player != null ? player.IsRewardUseless : null));
             Pause();
             return;
         }
@@ -216,10 +222,16 @@ public partial class GameManager : Node
 
     private void EndRound()
     {
-        // Enemies vanish the instant a round ends — the next round's board should start clean,
-        // not with whatever was left standing (or mid-Split) from the previous one.
+        // Enemies and their in-flight shots both vanish the instant a round ends — the next round's
+        // board should start clean, not with whatever was left standing (or mid-Split, or mid-air)
+        // from the previous one. Clearing the bullets matters for fairness as much as tidiness: one
+        // frozen by the shop's pause would otherwise resume and land on the player during the next
+        // round's "get ready" countdown.
         foreach (Node enemy in GetTree().GetNodesInGroup("enemies"))
             enemy.QueueFree();
+
+        foreach (Node bullet in GetTree().GetNodesInGroup("enemy_bullets"))
+            bullet.QueueFree();
 
         // A Timer only freezes its remaining time while the tree is paused — it doesn't reset.
         // Without this, the spawner's own timer could have almost no time left by the time the

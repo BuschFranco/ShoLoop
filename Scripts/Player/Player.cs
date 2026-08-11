@@ -7,6 +7,10 @@ public partial class Player : CharacterBody2D
     [Export] public float FireRate = 3f;
     [Export] public int BulletDamage = 10;
     [Export] public float FireRange = 190f;
+
+    // Owned here rather than left to Bullet.tscn's own default, since the Bala Veloz reward needs a
+    // baseline to grow from and a single place to apply it when spawning each shot.
+    [Export] public float BulletSpeed = 500f;
     [Export] public PackedScene BulletScene;
     [Export] public PackedScene OrbitBladeScene;
     [Export] public PackedScene CompanionScene;
@@ -19,10 +23,23 @@ public partial class Player : CharacterBody2D
     // without any single stat spiraling unboundedly over a long run.
     private const float MaxBulletDamageBonus = 200f;
     private const float MaxFireRangeBonus = 500f;
+
+    // Absolute ceiling on FireRange, separate from the bonus cap above. Without it the only limit
+    // was "base + 500", which isn't a stated ceiling so much as a side effect — and a range that
+    // outgrows the visible screen stops being a meaningful stat, since you can't see what you're
+    // shooting at anyway. This is the number that actually binds.
+    private const float MaxFireRange = 600f;
     private const int MaxLivesCap = 10;
     private const int MaxShieldChargesCap = 8;
     public const int MaxExtraFiringLinesCap = 5;
     private const float SideShotSpacing = 14f;
+
+    private const int MaxPierceCap = 5;
+    private const float MaxCritChance = 60f;        // percent
+    private const float MaxBulletSpeedBonus = 700f;
+    private const float MaxBulletKnockbackBonus = 400f;
+    private const float MaxCoinBonusPercent = 150f;
+    private const int MaxReviveCharges = 2;
 
     public int CurrentLives;
     public int MaxShieldCharges = 0;
@@ -31,8 +48,17 @@ public partial class Player : CharacterBody2D
     public float CompanionStatPercent = 0f;
     public int ExtraFiringLines = 0;
     public int LaserLevel = 0;
+    public int BulletPierce = 0;
+    public float CritChance = 0f;            // percent, 0-60
+    public float BulletKnockback = 0f;
+    public float CoinBonusPercent = 0f;      // percent, 0-150
+    public int ReviveCharges = 0;
+    public float ShieldRegenPerMinute = 0f;
     public bool HasExtraProjectile => _hasExtraProjectile;
     public bool HasOrbitShield => OrbitCount > 0;
+
+    // Coin payout multiplier applied in GameManager.RegisterKill (Botín reward).
+    public float CoinMultiplier => 1f + CoinBonusPercent / 100f;
 
     public UltimateKind? EquippedUltimate = null;
     public float UltimateProgress = 0f;
@@ -87,6 +113,8 @@ public partial class Player : CharacterBody2D
     private float _baseFireRate;
     private float _baseBulletDamage;
     private float _baseFireRange;
+    private float _baseBulletSpeed;
+    private Timer _shieldRegenTimer;
     private Line2D _fireRangeRing;
     private Timer _laserTimer;
     private Timer _frenzyTimer;
@@ -99,6 +127,7 @@ public partial class Player : CharacterBody2D
         _baseFireRate = FireRate;
         _baseBulletDamage = BulletDamage;
         _baseFireRange = FireRange;
+        _baseBulletSpeed = BulletSpeed;
 
         _fireCooldown = GetNode<Timer>("FireCooldown");
         _fireCooldown.WaitTime = 1f / FireRate;
@@ -240,7 +269,20 @@ public partial class Player : CharacterBody2D
     public void LoseLife()
     {
         CurrentLives--;
+
+        // Segunda Oportunidad (shop-only): spend a charge to come back at full lives instead of
+        // ending the run. Checked before NotifyPlayerDied so the game-over screen never appears.
+        if (CurrentLives <= 0 && ReviveCharges > 0)
+        {
+            ReviveCharges--;
+            CurrentLives = MaxLives;
+            CurrentShieldCharges = MaxShieldCharges;
+            RaiseShieldChanged();
+            TriggerLevelUpBurst();   // reuse the nova as a "you got a second wind" clear + visual
+        }
+
         LivesChanged?.Invoke(CurrentLives, MaxLives);
+
         if (CurrentLives <= 0)
         {
             GameManager.Instance?.NotifyPlayerDied();
@@ -395,6 +437,12 @@ public partial class Player : CharacterBody2D
         tween.TweenCallback(Callable.From(() => beam.QueueFree()));
     }
 
+    // Current fire rate as a multiple of the round-1 baseline — 1.0 at run start, rising to
+    // MaxFireRate/base (4x) when fully upgraded. Orbit blades read this so their spin couples to
+    // attack speed; exposing the ratio rather than _baseFireRate keeps that snapshot private and
+    // the conversion in one place.
+    public float FireRateRatio => _baseFireRate > 0f ? FireRate / _baseFireRate : 1f;
+
     // Rough DPS-equivalent of the player's whole offensive kit, expressed as a ratio against the
     // round-1 baseline (an untouched player scores exactly 1.0). Feeds DifficultyBalancer, which
     // compares it to what the current round expected and nudges enemy HP/damage if the player has
@@ -411,7 +459,13 @@ public partial class Player : CharacterBody2D
         if (baselineDps <= 0f) return 1f;
 
         int shotsPerVolley = 1 + (_hasExtraProjectile ? 2 : 0) + ExtraFiringLines;
-        float gunDps = BulletDamage * FireRate * shotsPerVolley;
+
+        // Crit and pierce are genuine damage multipliers, so they belong here — without them a
+        // crit/pierce-heavy build would read as far weaker than it plays and dodge the adaptive
+        // difficulty correction entirely.
+        float critMult = 1f + (CritChance / 100f) * (CritMultiplier - 1f);
+        float pierceMult = 1f + BulletPierce * 0.5f;   // extra enemies hit per shot, discounted
+        float gunDps = BulletDamage * FireRate * shotsPerVolley * critMult * pierceMult;
 
         float laserDps = LaserLevel > 0 ? GetLaserDamage() / GetLaserInterval() : 0f;
         float orbitDps = OrbitCount * OrbitBladeDamage * OrbitHitsPerSecondEstimate;
@@ -450,9 +504,6 @@ public partial class Player : CharacterBody2D
                 break;
             case UltimateKind.Frenzy:
                 TriggerUltimateFrenzy();
-                break;
-            case UltimateKind.Nuke:
-                TriggerUltimateNuke();
                 break;
         }
 
@@ -495,42 +546,6 @@ public partial class Player : CharacterBody2D
         tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
     }
 
-    private const float UltimateNukeVisualRadius = 900f;
-
-    // Wipes the whole screen — except Bosses, which only lose a fixed 20% of their max HP so the
-    // Ultimate can't just skip an entire boss fight in one button press.
-    private void TriggerUltimateNuke()
-    {
-        var enemies = GetTree().GetNodesInGroup("enemies");
-        foreach (var n in enemies)
-        {
-            if (n is Enemy enemy && IsInstanceValid(enemy))
-            {
-                if (enemy.Category == EnemyCategory.Boss)
-                    enemy.TakeDamage(Mathf.Max(1, Mathf.RoundToInt(enemy.MaxHp * 0.2f)));
-                else
-                    enemy.TakeDamage(999999);
-            }
-        }
-
-        var visual = new Polygon2D();
-        var points = new Vector2[40];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * UltimateNukeVisualRadius;
-        }
-        visual.Polygon = points;
-        visual.Color = new Color(1f, 0.95f, 0.6f, 0.55f);
-        visual.Scale = Vector2.Zero;
-        AddChild(visual);
-
-        var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.25f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.6f).SetDelay(0.1f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
-    }
 
     private void TriggerUltimateFrenzy()
     {
@@ -617,6 +632,9 @@ public partial class Player : CharacterBody2D
         }
     }
 
+    private readonly Random _critRng = new();
+    private const float CritMultiplier = 2f;
+
     private void FireInDirection(Vector2 dir, Vector2 positionOffset = default)
     {
         if (BulletScene == null || _bulletsContainer == null) return;
@@ -624,7 +642,16 @@ public partial class Player : CharacterBody2D
         var bullet = BulletScene.Instantiate<Bullet>();
         bullet.GlobalPosition = GlobalPosition + positionOffset;
         bullet.Direction = dir;
-        bullet.Damage = BulletDamage;
+        bullet.Speed = BulletSpeed;
+        bullet.Pierce = BulletPierce;
+        bullet.Knockback = BulletKnockback;
+
+        // Rolled per bullet, not per volley, so a Twin/Side Shot spread can crit on some lines and
+        // not others — more visible feedback than an all-or-nothing volley.
+        bool isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
+        bullet.Damage = isCrit ? Mathf.RoundToInt(BulletDamage * CritMultiplier) : BulletDamage;
+        if (isCrit) bullet.Modulate = new Color(1f, 0.85f, 0.2f);
+
         _bulletsContainer.AddChild(bullet);
     }
 
@@ -633,7 +660,7 @@ public partial class Player : CharacterBody2D
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                FireRange = _baseFireRange + Mathf.Min(ApplyTieredStack(upgrade), MaxFireRangeBonus);
+                FireRange = Mathf.Min(_baseFireRange + Mathf.Min(ApplyTieredStack(upgrade), MaxFireRangeBonus), MaxFireRange);
                 RebuildFireRangeIndicator();
                 break;
             case UpgradeType.ExtraProjectile:
@@ -650,9 +677,12 @@ public partial class Player : CharacterBody2D
             case UpgradeType.BulletDamage:
                 BulletDamage = Mathf.RoundToInt(_baseBulletDamage + Mathf.Min(ApplyTieredStack(upgrade), MaxBulletDamageBonus));
                 break;
+            // Heart is a single Legendary tier now, so the old "max tracks the best tier ever
+            // picked" rule is meaningless (every pick is the same tier) — it's straightforwardly
+            // additive instead, +1 max per purchase up to the cap, and always a full heal.
             case UpgradeType.Heart:
-                MaxLives = Mathf.Min(Mathf.Max(MaxLives, (int)upgrade.Value), MaxLivesCap);
-                CurrentLives = Mathf.Min(CurrentLives + (int)upgrade.Value, MaxLives);
+                MaxLives = Mathf.Min(MaxLives + (int)upgrade.Value, MaxLivesCap);
+                CurrentLives = MaxLives;
                 LivesChanged?.Invoke(CurrentLives, MaxLives);
                 break;
             case UpgradeType.HitShield:
@@ -676,7 +706,59 @@ public partial class Player : CharacterBody2D
                 UltimateProgress = 0f;
                 UltimateChargeChanged?.Invoke(UltimateProgress, UltimateChargeTarget);
                 break;
+
+            // Counts and percentages accumulate flatly up to a cap (the SideShot model) — tier
+            // bucketing would be strange for "how many enemies does a bullet pass through".
+            case UpgradeType.Pierce:
+                BulletPierce = Mathf.Min(BulletPierce + (int)upgrade.Value, MaxPierceCap);
+                break;
+            case UpgradeType.CritChance:
+                CritChance = Mathf.Min(CritChance + upgrade.Value, MaxCritChance);
+                break;
+            case UpgradeType.CoinBonus:
+                CoinBonusPercent = Mathf.Min(CoinBonusPercent + upgrade.Value, MaxCoinBonusPercent);
+                break;
+
+            // Magnitude stats use the same tier-bucketing as FireRange/FireRate/BulletDamage.
+            case UpgradeType.BulletSpeed:
+                BulletSpeed = _baseBulletSpeed + Mathf.Min(ApplyTieredStack(upgrade), MaxBulletSpeedBonus);
+                break;
+            case UpgradeType.BulletKnockback:
+                BulletKnockback = Mathf.Min(ApplyTieredStack(upgrade), MaxBulletKnockbackBonus);
+                break;
+
+            case UpgradeType.Revive:
+                ReviveCharges = Mathf.Min(ReviveCharges + (int)upgrade.Value, MaxReviveCharges);
+                break;
+            case UpgradeType.ShieldRegen:
+                ShieldRegenPerMinute = Mathf.Max(ShieldRegenPerMinute, upgrade.Value);
+                EnsureShieldRegenTimer();
+                break;
         }
+    }
+
+    // Shield regen (shop-only Regeneración). Stored as charges-per-minute so "higher is better"
+    // stays uniform with every other take-the-best reward; the timer interval is derived from it.
+    private void EnsureShieldRegenTimer()
+    {
+        if (ShieldRegenPerMinute <= 0f) return;
+
+        if (_shieldRegenTimer == null)
+        {
+            _shieldRegenTimer = new Timer();
+            AddChild(_shieldRegenTimer);
+            _shieldRegenTimer.Timeout += OnShieldRegenTimeout;
+        }
+        _shieldRegenTimer.WaitTime = 60f / ShieldRegenPerMinute;
+        _shieldRegenTimer.Start();
+    }
+
+    private void OnShieldRegenTimeout()
+    {
+        if (MaxShieldCharges <= 0 || CurrentShieldCharges >= MaxShieldCharges) return;
+
+        CurrentShieldCharges++;
+        RaiseShieldChanged();
     }
 
     // True when actually picking this exact offer right now would improve the player's current
@@ -689,17 +771,15 @@ public partial class Player : CharacterBody2D
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                return Mathf.Min(PreviewTieredBonus(upgrade), MaxFireRangeBonus) > (FireRange - _baseFireRange);
+                return Mathf.Min(_baseFireRange + Mathf.Min(PreviewTieredBonus(upgrade), MaxFireRangeBonus), MaxFireRange) > FireRange;
             case UpgradeType.BulletDamage:
                 return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletDamageBonus) > (BulletDamage - _baseBulletDamage);
             case UpgradeType.FireRate:
                 return Mathf.Min(PreviewTieredBonus(upgrade), MaxFireRate - _baseFireRate) > (FireRate - _baseFireRate);
+            // Helps if it can still raise the ceiling, or if there's any damage for its full heal
+            // to undo — only a player at the cap *and* on full lives gains nothing.
             case UpgradeType.Heart:
-            {
-                int newMax = Mathf.Min(Mathf.Max(MaxLives, (int)upgrade.Value), MaxLivesCap);
-                int newCurrent = Mathf.Min(CurrentLives + (int)upgrade.Value, newMax);
-                return newMax > MaxLives || newCurrent > CurrentLives;
-            }
+                return MaxLives < MaxLivesCap || CurrentLives < MaxLives;
             case UpgradeType.HitShield:
             {
                 int newMax = Mathf.Min(Mathf.Max(MaxShieldCharges, (int)upgrade.Value), MaxShieldChargesCap);
@@ -716,6 +796,20 @@ public partial class Player : CharacterBody2D
                 return (int)upgrade.Value > LaserLevel;
             case UpgradeType.Ultimate:
                 return EquippedUltimate != upgrade.Ultimate;
+            case UpgradeType.Pierce:
+                return BulletPierce < MaxPierceCap;
+            case UpgradeType.CritChance:
+                return CritChance < MaxCritChance;
+            case UpgradeType.CoinBonus:
+                return CoinBonusPercent < MaxCoinBonusPercent;
+            case UpgradeType.BulletSpeed:
+                return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletSpeedBonus) > (BulletSpeed - _baseBulletSpeed);
+            case UpgradeType.BulletKnockback:
+                return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletKnockbackBonus) > BulletKnockback;
+            case UpgradeType.Revive:
+                return ReviveCharges < MaxReviveCharges;
+            case UpgradeType.ShieldRegen:
+                return upgrade.Value > ShieldRegenPerMinute;
             default:
                 return false;
         }
@@ -744,9 +838,14 @@ public partial class Player : CharacterBody2D
             case UpgradeType.HitShield:
             case UpgradeType.Laser:
             case UpgradeType.Ultimate:
+            case UpgradeType.Pierce:
+            case UpgradeType.CritChance:
+            case UpgradeType.CoinBonus:
+            case UpgradeType.Revive:
+            case UpgradeType.ShieldRegen:
                 return !IsUpgradeOverCurrent(upgrade);
             case UpgradeType.FireRange:
-                return FireRange - _baseFireRange >= MaxFireRangeBonus;
+                return FireRange >= MaxFireRange;
             case UpgradeType.BulletDamage:
                 return BulletDamage - _baseBulletDamage >= MaxBulletDamageBonus;
             case UpgradeType.FireRate:
@@ -769,6 +868,10 @@ public partial class Player : CharacterBody2D
             case UpgradeType.SideShot:
             case UpgradeType.Heart:
             case UpgradeType.HitShield:
+            case UpgradeType.Pierce:
+            case UpgradeType.CritChance:
+            case UpgradeType.CoinBonus:
+            case UpgradeType.Revive:
                 return "Al tope";
             default:
                 return "Adquirido";
@@ -819,13 +922,13 @@ public partial class Player : CharacterBody2D
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                return $"Tenés: +{Mathf.RoundToInt(FireRange - _baseFireRange)} (tope +{(int)MaxFireRangeBonus}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
+                return $"Tenés: {FireRange:0} de rango (tope {MaxFireRange:0}) — {(helps ? "se suma" : "no suma (ya estás en el tope)")}";
             case UpgradeType.BulletDamage:
                 return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
             case UpgradeType.FireRate:
                 return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
             case UpgradeType.Heart:
-                return $"Tenés: {MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "se suma" : "no suma (ya estás a full)")}";
+                return $"Tenés: {CurrentLives}/{MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "+1 al máximo y cura total" : "no suma (estás al tope y a full)")}";
             case UpgradeType.HitShield:
                 return $"Tenés: {MaxShieldCharges} cargas (tope {MaxShieldChargesCap}) — {(helps ? "se suma" : "no suma (ya estás a full)")}";
             case UpgradeType.SideShot:
@@ -841,6 +944,22 @@ public partial class Player : CharacterBody2D
                 string current = EquippedUltimate == null ? "ninguna" : EquippedUltimate.Value.ToString();
                 return $"Ultimate equipada: {current} — {(helps ? "la reemplaza" : "ya es esta")}";
             }
+            case UpgradeType.Pierce:
+                return $"Tenés: atraviesa {BulletPierce} (tope {MaxPierceCap}) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.CritChance:
+                return $"Tenés: {CritChance:0}% crítico (tope {MaxCritChance:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.CoinBonus:
+                return $"Tenés: +{CoinBonusPercent:0}% monedas (tope {MaxCoinBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.BulletSpeed:
+                return $"Tenés: {BulletSpeed:0} vel. de bala (tope {_baseBulletSpeed + MaxBulletSpeedBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
+            case UpgradeType.BulletKnockback:
+                return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
+            case UpgradeType.Revive:
+                return $"Tenés: {ReviveCharges} revividas (tope {MaxReviveCharges}) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.ShieldRegen:
+                return ShieldRegenPerMinute > 0f
+                    ? $"Tenés: 1 carga cada {60f / ShieldRegenPerMinute:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés regeneración de escudo todavía";
             default:
                 return null;
         }

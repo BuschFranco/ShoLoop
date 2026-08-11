@@ -11,6 +11,11 @@ public partial class EnemyBullet : Area2D
 
     public override void _Ready()
     {
+        // Grouped so GameManager.EndRound() can sweep in-flight shots along with the enemies that
+        // fired them — otherwise a bullet frozen mid-air by the shop's pause resumes afterwards and
+        // can land on the player during the next round's "get ready" countdown.
+        AddToGroup("enemy_bullets");
+
         BodyEntered += OnBodyEntered;
         Rotation = Direction.Angle();
     }

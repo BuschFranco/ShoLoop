@@ -15,6 +15,7 @@ XpReward = 6
 CoinsReward = 6
 ContactDamage = 20
 Category = 2
+AvoidanceProbeDistance = 90.0
 
 [node name="Visual" type="Polygon2D" parent="."]
 color = Color(1, 0.45, 0.1, 1)

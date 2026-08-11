@@ -1,6 +1,6 @@
 # Rewards: Tiers, Catalog & Stacking Rules
 
-Rewards come from two places — leveling up (free, XP-driven) and the shop (costs Coins, once per round) — and both draw from the same tiered catalog in [UpgradeData.cs](../Scripts/Upgrades/UpgradeData.cs).
+Rewards come from two places — **level-up picks** (free, XP-driven) and **shop items** (cost Coins, offered at round end). Both are defined in [UpgradeData.cs](../Scripts/Upgrades/UpgradeData.cs), but they are deliberately *separate pools*: see [Level-up picks vs. shop items](#level-up-picks-vs-shop-items) below.
 
 ## Tiers
 
@@ -26,32 +26,63 @@ Four tiers, each with a color used everywhere a reward is displayed (`RewardTier
 
 Rough result: round 1 ≈ 65/27/7/1%, round 10 ≈ 35/31/21/13%, round 20 ≈ 10/32/33/25%. Common's share shrinks, everything else grows, gradually and capped — no tier ever hits 0% or 100%.
 
-### Picking rewards: `UpgradeData.PickRandomTiered(count, round, includeHearts)`
+### Picking rewards: `UpgradeData.PickRandomTiered(count, round, source)`
 
-For each of the `count` slots offered: roll a tier via the weights above, then pick a random not-yet-offered item from that tier's list (falls back to any tier with something left if the rolled tier is exhausted — mainly relevant for the 1-item Epic/Legendary lists). `includeHearts` gates whether the Heart reward is in the pool at all:
+For each of the `count` slots offered: roll a tier via the weights above, then pick a random not-yet-offered item from that tier's list (falls back to any tier with something left if the rolled tier is exhausted).
 
-- **Level-up** (`GameManager.ShowNextLevelUpIfIdle`) calls `PickRandomTiered(3, RoundNumber)` — `includeHearts` defaults to `false`. Hearts never show up at level-up.
-- **Shop** (`Shop.Open`) calls `PickRandomTiered(3, RoundNumber, includeHearts: true)`.
+## Level-up picks vs. shop items
 
-Hearts are deliberately shop-only — framed as something you spend Coins on to buy safety, not something that shows up "for free" on level-up.
+Every catalog entry declares a `RewardSource`, a `[Flags]` enum:
+
+```csharp
+[Flags] public enum RewardSource { LevelUp = 1, Shop = 2, Both = LevelUp | Shop }
+```
+
+`BuildCatalog(source)` filters the single full catalog by that flag, and the two callers each ask for their own pool:
+
+| | Call | Pool |
+|---|---|---|
+| **Level-up picks** | `PickRandomTiered(3, round, RewardSource.LevelUp)` from `GameManager.ResolveNextInterstitial` | combat/stat rewards only |
+| **Shop items** | `PickRandomTiered(3, round, RewardSource.Shop)` from `Shop.Open` | everything above **plus** the shop exclusives |
+
+**Shop exclusives** (`RewardSource.Shop`) — things you deliberately spend Coins on rather than get handed for free:
+
+| Item | Tier | Cost | Effect |
+|---|---|---|---|
+| Corazón | Legendary | 60💰 | +1 max life & full heal |
+| Ultimate ×3 | Epic | 80💰 | equips one of the 3 Ultimates |
+| Regeneración | Epic | 55💰 | +1 shield charge every 12s |
+| Regeneración+ | Legendary | 75💰 | +1 shield charge every 7.5s |
+| Segunda Oportunidad | Legendary | 95💰 | revive once at full life on death (max 2) |
+
+This replaced a pair of ad-hoc `includeHearts` / `includeUltimates` bools threaded through the catalog builder. That approach needed a new flag per exclusive and encoded the rule at the *call site* rather than on the reward itself — with five exclusives it stops scaling. A per-entry `Source` keeps the rule next to the thing it describes, and makes "which pool is this in?" answerable by reading one field.
+
+Note this is availability only: a shop exclusive is still a normal tiered reward and still obeys every stacking rule below.
 
 ## The full catalog
 
-Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Heart (shop-only, all 4 tiers), Side Shot (Rare and Legendary only). Base values shown; see [economy.md](economy.md) for how shop cost is further adjusted at purchase time.
+Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot (Rare and Legendary only), and the shop exclusives marked *(shop)*. Base values shown; see [economy.md](economy.md) for how shop cost is further adjusted at purchase time.
 
 | Reward | Type | Common | Rare | Epic | Legendary | Hard cap |
 |---|---|---|---|---|---|---|
 | Fire Range | `FireRange` | +70 (8💰) | +130 (16💰) | +200 (28💰) | +300 (45💰) | +500 bonus |
 | Rapid Fire | `FireRate` | +0.5/s (8💰) | +1/s (16💰) | +1.8/s (28💰) | +3/s (45💰) | 12/s total |
 | Sharper Rounds | `BulletDamage` | +3 (8💰) | +5 (16💰) | +9 (28💰) | +15 (45💰) | +200 bonus |
-| Orbit Blade | `OrbitShield` | 1 blade (20💰) | 2 blades (32💰) | 3 blades (46💰) | 4 blades (60💰) | 4 blades, 65px orbit radius, 7 dmg/hit |
+| Orbit Blade | `OrbitShield` | 1 blade (20💰) | 2 blades (32💰) | 3 blades (46💰) | 4 blades (60💰) | 4 blades, 100px radius, 16 dmg every 0.4s each + knockback |
 | Barrier | `HitShield` | 1 charge (14💰) | 2 charges (24💰) | 3 charges (36💰) | 4 charges (48💰) | 8 charges |
 | Drone | `Companion` | 30% stats (12💰) | 35% stats (22💰) | 45% stats (34💰) | 50% stats (50💰) | 50% stats |
 | Side Shot | `SideShot` | — | +1 line (22💰) | — | +2 lines (55💰) | 5 lines |
 | Laser | `Laser` | Nv1: 4.0s/12dmg, máx. 5 blancos (20💰) | Nv2: 3.2s/20dmg (34💰) | Nv3: 2.5s/31dmg (50💰) | Nv4: 1.8s/50dmg (65💰) | Nv4 |
 | Twin Shot | `ExtraProjectile` | — | — | one-time (30💰) | — | on/off |
-| Heart (shop only) | `Heart` | +1 life (14💰) | +2 lives (24💰) | +3 lives (36💰) | +3 lives (48💰) | 10 lives |
-| Ultimate (shop only) | `Ultimate` | — | — | one of 4 kinds (80-100💰) | — | see [Ultimates](#ultimates) |
+| Pierce | `Pierce` | +1 (18💰) | +1 (26💰) | +2 (38💰) | +3 (55💰) | 5 extra enemies |
+| Crit | `CritChance` | +8% (12💰) | +12% (20💰) | +18% (32💰) | +25% (48💰) | 60% |
+| Bullet Speed | `BulletSpeed` | +80 (8💰) | +150 (14💰) | +240 (24💰) | +350 (38💰) | +700 bonus |
+| Knockback | `BulletKnockback` | +60 (10💰) | +110 (18💰) | +170 (28💰) | +240 (42💰) | +400 |
+| Coin Bonus | `CoinBonus` | +15% (14💰) | +25% (24💰) | +40% (36💰) | +60% (52💰) | +150% |
+| Heart *(shop)* | `Heart` | — | — | — | +1 max life & full heal (60💰) | 10 lives |
+| Ultimate *(shop)* | `Ultimate` | — | — | one of 3 kinds (80💰) | — | see [Ultimates](#ultimates) |
+| Shield Regen *(shop)* | `ShieldRegen` | — | — | 1/12s (55💰) | 1/7.5s (75💰) | best tier taken |
+| Revive *(shop)* | `Revive` | — | — | — | +1 charge (95💰) | 2 charges |
 
 See [player.md](player.md) for what each `UpgradeType` actually does mechanically. Every hard cap below is a named constant in [Player.cs](../Scripts/Player/Player.cs) — that's the one file to touch to retune any of them.
 
@@ -78,16 +109,29 @@ The player's *base* value (`_baseFireRange` / `_baseFireRate` / `_baseBulletDama
 
 Every Side Shot pickup — at either tier, mixed freely, no tier-bucketing — simply adds to `ExtraFiringLines`, up to a flat ceiling (`MaxExtraFiringLinesCap = 5`). There's no reason to ever want more than 5 simultaneous bullet lines, so the shop hides it as "Owned" once maxed, same as the take-the-best-ever rewards below.
 
-### Max-tracks-best-tier + additive refill: Heart, Barrier (HitShield)
+### Max-tracks-best-tier + additive refill: Barrier (HitShield)
 
-Both of these are a **Current/Max pair that depletes with use** (lives lost to hits, shield charges consumed absorbing hits) — a different shape from the pure permanent stat bonuses above, and they need their own rule:
+Barrier is a **Current/Max pair that depletes with use** (charges consumed absorbing hits) — a different shape from the pure permanent stat bonuses above, so it gets its own rule:
 
-- **Max** (`MaxLives` / `MaxShieldCharges`) tracks the single best tier ever picked — `Mathf.Max(currentMax, upgrade.Value)`, capped at `MaxLivesCap = 10` / `MaxShieldChargesCap = 8`. Picking a *weaker* tier than your current max never lowers it, and doesn't stack on top of it either.
-- **Current** (`CurrentLives` / `CurrentShieldCharges`) gets *this pickup's own value* added to it, capped at the (possibly just-raised) new max — `Mathf.Min(current + upgrade.Value, newMax)`. It does **not** jump straight to the new max.
+- **Max** (`MaxShieldCharges`) tracks the single best tier ever picked — `Mathf.Max(currentMax, upgrade.Value)`, capped at `MaxShieldChargesCap = 8`. Picking a *weaker* tier than your current max never lowers it, and doesn't stack on top of it either.
+- **Current** (`CurrentShieldCharges`) gets *this pickup's own value* added to it, capped at the (possibly just-raised) new max — `Mathf.Min(current + upgrade.Value, newMax)`. It does **not** jump straight to the new max.
 
-Concretely: pick a Legendary Barrier (3 charges) → max 3, current 3. Take 2 hits → current 1. Pick a Common Barrier (+1) afterward → max stays 3 (1 < 3, doesn't raise the ceiling), current becomes `min(1+1, 3) = 2` — you gained exactly the 1 charge that pickup promised, not a full refill to 3 and not a max of 4. This was a real bug in an earlier version (both numbers used to just add forever and current always snapped to the new max, so weaker tiers picked after stronger ones acted as if they were just as good) — fixed to match how `OrbitShield`/`Companion` already computed max (best-tier, via `Max`), just with an added current-side refill since these two are consumable rather than static "you always have N of these" values.
+Concretely: pick a Legendary Barrier (4 charges) → max 4, current 4. Take 3 hits → current 1. Pick a Common Barrier (+1) afterward → max stays 4 (1 < 4, doesn't raise the ceiling), current becomes `min(1+1, 4) = 2` — you gained exactly the 1 charge that pickup promised, not a full refill and not a max of 5. This was a real bug in an earlier version (both numbers used to just add forever and current always snapped to the new max, so weaker tiers picked after stronger ones acted as if they were just as good) — fixed to match how `OrbitShield`/`Companion` already computed max (best-tier, via `Max`), just with an added current-side refill since Barrier is consumable rather than a static "you always have N of these" value.
 
-The shop hides Heart/Barrier as "Owned" only when you're already fully topped off **and** this tier's value wouldn't raise your ceiling either — otherwise it still helps (refills some current), so it stays purchasable.
+The shop disables Barrier only when you're already fully topped off **and** this tier's value wouldn't raise your ceiling either — otherwise it still helps (refills some current), so it stays purchasable. Note this rule no longer covers Heart, which used to share it — see below.
+
+### Additive + full heal: Heart
+
+Heart used to exist at all four tiers (+1/+2/+3/+3 max lives) and followed the Barrier rule above. It's now a **single Legendary option**: `+1` max life *and* a full heal, for 60💰. Max lives is the most swingy stat in the game — it's literally how many mistakes you're allowed — so it shouldn't be something a cheap Common roll hands out repeatedly.
+
+With only one tier, "max tracks the best tier ever picked" became meaningless (every pick *is* the same tier), so the rule is simply:
+
+```csharp
+MaxLives = Mathf.Min(MaxLives + 1, MaxLivesCap);   // additive, capped at 10
+CurrentLives = MaxLives;                            // always a full heal
+```
+
+It's disabled only when you're at `MaxLivesCap` **and** already on full lives — until then it always does something, either raising the ceiling or undoing damage.
 
 ### Take-the-best-ever: Orbit Blade, Drone (Companion), Laser
 
@@ -97,20 +141,38 @@ The shop hides Heart/Barrier as "Owned" only when you're already fully topped of
 
 **Epic and Legendary (`LaserLevel >= 3`) couple to the player's live stats instead of using `LaserTiers`' fixed numbers**: `GetLaserDamage()` scales the tier's base damage by `BulletDamage / _baseBulletDamage`, and `GetLaserInterval()` scales the tier's base interval by `_baseFireRate / FireRate` (capped at a 0.3s floor so it can't go arbitrarily fast). `OnLaserTimeout()` re-reads `GetLaserInterval()` at the end of every tick and writes it back into `_laserTimer.WaitTime`, so the interval keeps tracking the player's current `FireRate` live rather than freezing at whatever it was when the Laser was picked or last upgraded — buying more Rapid Fire/Sharper Rounds later makes an Epic+ Laser faster/stronger too, automatically.
 
+### The new combat rewards, by model
+
+The five rewards added alongside the source split each reuse an existing stacking model rather than inventing one:
+
+| Reward | Model | Notes |
+|---|---|---|
+| **Pierce** | additive + cap (SideShot) | `Bullet.Pierce` counts *extra* enemies passed through. `Area2D.BodyEntered` fires once per body, so a piercing bullet can't re-hit the same enemy — no hit-tracking needed. Walls still stop it. |
+| **Crit** | additive + cap | Rolled **per bullet, not per volley**, so a Twin/Side Shot spread can crit on some lines and not others — much more visible feedback than all-or-nothing. Crit bullets are tinted gold. |
+| **Bullet Speed** | tier-bucketed (FireRange) | `BulletSpeed` moved onto `Player` from `Bullet.tscn`'s own default, so the reward has a baseline to grow from and one place to apply it. |
+| **Knockback** | tier-bucketed | Reuses the same `Enemy.ApplyKnockback` the orbit blades use; shoves along the bullet's travel direction. |
+| **Coin Bonus** | additive + cap | Multiplies **coins only** in `RegisterKill`. XP/Score are untouched on purpose, so stacking it can't accelerate leveling or inflate the high score — just the shop budget. |
+
+Crit and Pierce also feed `Player.GetOffensivePower()` as real damage multipliers. Without that a crit/pierce-heavy build would read as far weaker than it plays and would dodge the [adaptive difficulty](difficulty-scaling.md#adaptive-difficulty-difficultybalancer) correction entirely.
+
+### The new shop items
+
+- **Regeneración / Regeneración+** — take-the-best-ever, stored as *charges per minute* (5 / 8) so "higher is better" stays uniform with every other take-best reward; the timer interval is derived as `60 / rate`. Regen only tops up toward `MaxShieldCharges` and no-ops if you own no Barrier, so it complements Barrier rather than replacing it.
+- **Segunda Oportunidad** — additive up to 2 charges. `Player.LoseLife` spends a charge *before* calling `NotifyPlayerDied`, restoring full lives and shield, so the game-over screen never appears. It reuses the level-up nova for the screen-clear and visual, which also buys breathing room at the moment you'd otherwise have died.
+
 ### One-time toggle: Twin Shot
 
 `_hasExtraProjectile = true`. Boolean, Epic-only, no tiers. Also shop-"Owned"-gated once acquired.
 
 ## Ultimates
 
-Four practical, distinct abilities — no tiers, each is a single fixed pickup living in the Epic tier bucket of the catalog, but **shop-only** (`UpgradeData.BuildTieredCatalog`'s `includeUltimates` param mirrors the existing `includeHearts` pattern exactly — `Shop.Open()` passes `true`, the level-up call in `GameManager.ShowNextLevelUpIfIdle` doesn't, so Ultimates never show up for free at level-up).
+Three practical, distinct abilities — no tiers, each a single fixed pickup in the Epic bucket, marked `RewardSource.Shop` so they never show up for free at level-up (see [Level-up picks vs. shop items](#level-up-picks-vs-shop-items)).
 
 | Ultimate | Effect | Duration |
 |---|---|---|
 | Pulso Nova | 500 finite damage (not instant-kill) to every enemy within a fixed 500px radius | instant |
 | Zona Lenta | Multiplies every enemy's move speed by 0.3 (see [enemies.md](enemies.md#enemy-speed-multiplier)) | 6s |
 | Sobrecarga | Doubles the player's current `FireRate` and `BulletDamage` | 6s |
-| Nuke | Instantly kills every non-Boss enemy on screen; a Boss instead loses a flat 20% of its **max** HP (not current HP, so it's always the same bite regardless of how banged-up the boss already is) | instant |
 
 **First-boss unlock**: killing the **first** boss of a run (round 5, tracked by `GameManager._bossUltimateGranted`) hands out a free Ultimate — the `UpgradePicker` reopens with a choice of 3, drawn by `UpgradeData.PickUltimateChoices(3)`, under the heading "¡JEFE DERROTADO! Elige tu Ultimate". It prefers kinds the player doesn't already have equipped. Subsequent bosses don't repeat it; after the choice resolves, the normal round-end shop opens as usual.
 
@@ -130,7 +192,7 @@ True when taking this exact offer right now would change literally nothing. The 
 
 Covers the take-the-best/consumable families (Orbit Blade, Drone, Side Shot, Heart, Barrier, Laser, Ultimate, Twin Shot) via `!IsUpgradeOverCurrent`, **plus** the tiered-stacking stats once they hit their hard cap:
 ```csharp
-case UpgradeType.FireRange:    return FireRange - _baseFireRange >= MaxFireRangeBonus;
+case UpgradeType.FireRange:    return FireRange >= MaxFireRange;
 case UpgradeType.BulletDamage: return BulletDamage - _baseBulletDamage >= MaxBulletDamageBonus;
 case UpgradeType.FireRate:     return FireRate >= MaxFireRate;
 ```

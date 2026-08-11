@@ -17,6 +17,9 @@ CoinsReward = 40
 ContactDamage = 35
 Category = 4
 HealthBarOffset = -52.0
+AvoidanceProbeDistance = 120.0
+SeparationRadius = 70.0
+MaxChaseAngleOffset = 0.0
 EnemyBulletScene = ExtResource("2")
 FireRate = 0.25
 

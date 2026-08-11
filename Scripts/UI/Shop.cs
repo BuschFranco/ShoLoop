@@ -60,7 +60,7 @@ public partial class Shop : Control
     public void Open()
     {
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
-        _items = UpgradeData.PickRandomTiered(3, GameManager.Instance.RoundNumber, includeHearts: true, includeUltimates: true, isUseless: player != null ? player.IsRewardUseless : null);
+        _items = UpgradeData.PickRandomTiered(3, GameManager.Instance.RoundNumber, RewardSource.Shop, isUseless: player != null ? player.IsRewardUseless : null);
         _resolved = new bool[_items.Count];
         for (int i = 0; i < _items.Count; i++)
             _resolved[i] = player != null && player.IsRewardUseless(_items[i]);

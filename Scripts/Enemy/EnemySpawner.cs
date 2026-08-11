@@ -19,6 +19,12 @@ public partial class EnemySpawner : Node2D
     private static readonly RoundCurve SpawnIntervalCurve = new(0.6f, -0.035f, 0.12f, 0.6f);   // seconds between spawn ticks (lower = faster)
     private static readonly RoundCurve BurstCountCurve = new(1f, 0.35f, 1f, 8f);                // enemies spawned per tick
     private static readonly RoundCurve MaxConcurrentCurve = new(25f, 4f, 25f, 200f);           // cap on enemies alive at once
+
+    // Late-game crowd bump on top of MaxConcurrentCurve: flat 1.0x through round 10, then a linear
+    // ramp reaching 1.2x at round 13 and holding there. The odd-looking Base of 0.4 is what makes
+    // the clamps land on exactly those rounds — Evaluate is Base + (round-1)*PerRound clamped to
+    // [Min, Max], so it reads 1.0 at round 10, 1.067 at 11, 1.133 at 12, and pins to 1.2 from 13 on.
+    private static readonly RoundCurve LateCrowdMultCurve = new(0.4f, 0.0667f, 1f, 1.2f);
     private static readonly RoundCurve SpecialChanceCurve = new(0.05f, 0.05f, 0.05f, 0.6f);    // chance a spawn is a special enemy
     private static readonly RoundCurve RareChanceCurve = new(0.15f, 0.02f, 0.15f, 0.35f);      // chance a spawn (that isn't hidden/special) is rare
     private const float HiddenChance = 0.05f;                                                   // flat 5% per user request, not round-scaled
@@ -28,6 +34,13 @@ public partial class EnemySpawner : Node2D
     // an explicit multiplier on the spawn interval instead, tapering back to 1x by round 3 where
     // the normal curve takes over untouched. Purely an onboarding cushion for new players.
     private static readonly float[] EarlyRoundIntervalMult = { 1.6f, 1.25f };
+
+    // Mirror of the above at the other end of the run: from this round on the concurrent cap gets a
+    // flat bump, so the mid/late game keeps a denser screen than MaxConcurrentCurve's linear growth
+    // alone provides. Applied *after* the curve's own clamp, so it lifts the eventual 200 ceiling to
+    // 240 too rather than quietly doing nothing once the curve saturates.
+    private const int LateRoundStart = 11;
+    private const float LateRoundConcurrentMult = 1.2f;
 
     private static readonly RoundCurve HpMultCurve = new(1f, 0.25f, 1f, 10f);
     private static readonly RoundCurve DmgMultCurve = new(1f, 0.22f, 1f, 10f);
@@ -79,7 +92,7 @@ public partial class EnemySpawner : Node2D
         _burstCount = Mathf.RoundToInt(BurstCountCurve.Evaluate(round));
         _specialChance = SpecialChanceCurve.Evaluate(round);
         _rareChance = RareChanceCurve.Evaluate(round);
-        _maxConcurrentEnemies = Mathf.RoundToInt(MaxConcurrentCurve.Evaluate(round));
+        _maxConcurrentEnemies = Mathf.RoundToInt(MaxConcurrentCurve.Evaluate(round) * LateCrowdMultCurve.Evaluate(round));
 
         EvaluateStatCurves(round);
 
@@ -132,10 +145,18 @@ public partial class EnemySpawner : Node2D
             if (_player == null) return;
         }
 
+        // Count the "enemies" group, NOT _enemiesContainer.GetChildCount(). Enemies parent their
+        // score popups, damage numbers, and fired bullets into that same container, so the child
+        // count silently includes transient VFX — which made the cap bind far earlier than its
+        // number suggests, worst exactly in the busy late rounds where it matters most.
+        // Read once per tick rather than per burst item, then tracked locally.
+        int aliveEnemies = GetTree().GetNodesInGroup("enemies").Count;
+
         for (int i = 0; i < _burstCount; i++)
         {
-            if (_enemiesContainer.GetChildCount() >= _maxConcurrentEnemies) return;
+            if (aliveEnemies >= _maxConcurrentEnemies) return;
             SpawnOne(ChooseEnemyScene());
+            aliveEnemies++;
         }
     }
 

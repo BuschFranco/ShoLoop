@@ -12,7 +12,14 @@ public enum UpgradeType
     Companion,
     SideShot,
     Laser,
-    Ultimate
+    Ultimate,
+    Pierce,
+    CritChance,
+    BulletSpeed,
+    BulletKnockback,
+    CoinBonus,
+    Revive,
+    ShieldRegen
 }
 
 public enum RewardTier
@@ -28,8 +35,20 @@ public enum UltimateKind
 {
     Nova,
     TimeSlow,
-    Frenzy,
-    Nuke
+    Frenzy
+}
+
+// Where a reward is allowed to show up. This replaced a pair of ad-hoc `includeHearts` /
+// `includeUltimates` bools threaded through the catalog builder: with more than a couple of
+// exclusives that approach needs a new flag per exclusive and encodes the rule at the *call site*
+// instead of on the reward itself. Now each entry states its own availability, and the two pools
+// — free level-up picks vs. paid shop stock — are a real, readable distinction.
+[Flags]
+public enum RewardSource
+{
+    LevelUp = 1,
+    Shop = 2,
+    Both = LevelUp | Shop,
 }
 
 public class UpgradeData
@@ -40,9 +59,10 @@ public class UpgradeData
     public float Value;
     public int Cost;
     public RewardTier Tier;
+    public RewardSource Source;
     public UltimateKind Ultimate;
 
-    public UpgradeData(string name, string description, UpgradeType type, RewardTier tier, float value = 0f, int cost = 0, UltimateKind ultimate = UltimateKind.Nova)
+    public UpgradeData(string name, string description, UpgradeType type, RewardTier tier, float value = 0f, int cost = 0, RewardSource source = RewardSource.Both, UltimateKind ultimate = UltimateKind.Nova)
     {
         Name = name;
         Description = description;
@@ -50,86 +70,111 @@ public class UpgradeData
         Tier = tier;
         Value = value;
         Cost = cost;
+        Source = source;
         Ultimate = ultimate;
     }
 
     private static readonly Random Rng = new();
 
-    public static Dictionary<RewardTier, List<UpgradeData>> BuildTieredCatalog(bool includeHearts, bool includeUltimates = false)
+    // Every reward in the game, keyed by tier. Callers filter by RewardSource rather than getting
+    // a pre-trimmed list, so there's exactly one place to read the full catalog from.
+    private static Dictionary<RewardTier, List<UpgradeData>> BuildFullCatalog() => new()
     {
-        var catalog = new Dictionary<RewardTier, List<UpgradeData>>
+        [RewardTier.Common] = new List<UpgradeData>
         {
-            [RewardTier.Common] = new List<UpgradeData>
-            {
-                new("Alcance de Disparo I", "+70 rango de disparo automático", UpgradeType.FireRange, RewardTier.Common, 70f, cost: 8),
-                new("Fuego Rápido I", "+0.5 disparos/seg", UpgradeType.FireRate, RewardTier.Common, 0.5f, cost: 8),
-                new("Balas Afiladas I", "+3 daño de bala", UpgradeType.BulletDamage, RewardTier.Common, 3f, cost: 8),
-                new("Cuchilla Orbital I", "1 cuchilla giratoria daña a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Common, 1f, cost: 20),
-                new("Barrera I", "Bloquea el próximo 1 golpe", UpgradeType.HitShield, RewardTier.Common, 1f, cost: 14),
-                new("Dron I", "Un mini compañero dispara al 30% de tus estadísticas", UpgradeType.Companion, RewardTier.Common, 30f, cost: 12),
-                new("Láser I", "Dispara un láser cada 4s a hasta 5 enemigos dentro de tu rango (12 daño)", UpgradeType.Laser, RewardTier.Common, 1f, cost: 20),
-            },
-            [RewardTier.Rare] = new List<UpgradeData>
-            {
-                new("Alcance de Disparo II", "+130 rango de disparo automático", UpgradeType.FireRange, RewardTier.Rare, 130f, cost: 16),
-                new("Fuego Rápido II", "+1 disparo/seg", UpgradeType.FireRate, RewardTier.Rare, 1f, cost: 16),
-                new("Balas Afiladas II", "+5 daño de bala", UpgradeType.BulletDamage, RewardTier.Rare, 5f, cost: 16),
-                new("Cuchilla Orbital II", "2 cuchillas giratorias dañan a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Rare, 2f, cost: 32),
-                new("Barrera II", "Bloquea los próximos 2 golpes", UpgradeType.HitShield, RewardTier.Rare, 2f, cost: 24),
-                new("Dron II", "Un mini compañero dispara al 35% de tus estadísticas", UpgradeType.Companion, RewardTier.Rare, 35f, cost: 22),
-                new("Disparo Lateral", "+1 línea de tiro en paralelo (máx. 5)", UpgradeType.SideShot, RewardTier.Rare, 1f, cost: 22),
-                new("Láser II", "Dispara un láser cada 3.2s a todos los enemigos dentro de tu rango (20 daño)", UpgradeType.Laser, RewardTier.Rare, 2f, cost: 34),
-            },
-            [RewardTier.Epic] = new List<UpgradeData>
-            {
-                new("Alcance de Disparo III", "+200 rango de disparo automático", UpgradeType.FireRange, RewardTier.Epic, 200f, cost: 28),
-                new("Fuego Rápido III", "+1.8 disparos/seg", UpgradeType.FireRate, RewardTier.Epic, 1.8f, cost: 28),
-                new("Balas Afiladas III", "+9 daño de bala", UpgradeType.BulletDamage, RewardTier.Epic, 9f, cost: 28),
-                new("Disparo Doble", "Dispara dos proyectiles extra en diagonal", UpgradeType.ExtraProjectile, RewardTier.Epic, cost: 30),
-                new("Cuchilla Orbital III", "3 cuchillas giratorias dañan a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Epic, 3f, cost: 46),
-                new("Barrera III", "Bloquea los próximos 3 golpes", UpgradeType.HitShield, RewardTier.Epic, 3f, cost: 36),
-                new("Dron III", "Un mini compañero dispara al 45% de tus estadísticas", UpgradeType.Companion, RewardTier.Epic, 45f, cost: 34),
-                new("Láser III", "Dispara un láser cada 2.5s a todos los enemigos dentro de tu rango (31 daño)", UpgradeType.Laser, RewardTier.Epic, 3f, cost: 50),
-            },
-            [RewardTier.Legendary] = new List<UpgradeData>
-            {
-                new("Alcance de Disparo IV", "+300 rango de disparo automático", UpgradeType.FireRange, RewardTier.Legendary, 300f, cost: 45),
-                new("Fuego Rápido IV", "+3 disparos/seg", UpgradeType.FireRate, RewardTier.Legendary, 3f, cost: 45),
-                new("Balas Afiladas IV", "+15 daño de bala", UpgradeType.BulletDamage, RewardTier.Legendary, 15f, cost: 45),
-                new("Cuchilla Orbital IV", "4 cuchillas giratorias dañan a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Legendary, 4f, cost: 60),
-                new("Barrera IV", "Bloquea los próximos 4 golpes", UpgradeType.HitShield, RewardTier.Legendary, 4f, cost: 48),
-                new("Dron IV", "Un mini compañero dispara al 50% de tus estadísticas", UpgradeType.Companion, RewardTier.Legendary, 50f, cost: 50),
-                new("Disparo Lateral", "+2 líneas de tiro en paralelo (máx. 5)", UpgradeType.SideShot, RewardTier.Legendary, 2f, cost: 55),
-                new("Láser IV", "Dispara un láser cada 1.8s a todos los enemigos dentro de tu rango (50 daño)", UpgradeType.Laser, RewardTier.Legendary, 4f, cost: 65),
-            },
-        };
-
-        if (includeHearts)
+            new("Alcance de Disparo I", "+70 rango de disparo automático", UpgradeType.FireRange, RewardTier.Common, 70f, cost: 8),
+            new("Fuego Rápido I", "+0.5 disparos/seg", UpgradeType.FireRate, RewardTier.Common, 0.5f, cost: 8),
+            new("Balas Afiladas I", "+3 daño de bala", UpgradeType.BulletDamage, RewardTier.Common, 3f, cost: 8),
+            new("Cuchilla Orbital I", "1 cuchilla giratoria daña a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Common, 1f, cost: 20),
+            new("Barrera I", "Bloquea el próximo 1 golpe", UpgradeType.HitShield, RewardTier.Common, 1f, cost: 14),
+            new("Dron I", "Un mini compañero dispara al 30% de tus estadísticas", UpgradeType.Companion, RewardTier.Common, 30f, cost: 12),
+            new("Láser I", "Dispara un láser cada 4s a hasta 5 enemigos dentro de tu rango (12 daño)", UpgradeType.Laser, RewardTier.Common, 1f, cost: 20),
+            new("Perforación I", "Tus balas atraviesan 1 enemigo más", UpgradeType.Pierce, RewardTier.Common, 1f, cost: 18),
+            new("Crítico I", "+8% de probabilidad de daño crítico (x2)", UpgradeType.CritChance, RewardTier.Common, 8f, cost: 12),
+            new("Bala Veloz I", "+80 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Common, 80f, cost: 8),
+            new("Retroceso I", "Tus balas empujan a los enemigos (+60)", UpgradeType.BulletKnockback, RewardTier.Common, 60f, cost: 10),
+            new("Botín I", "+15% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Common, 15f, cost: 14),
+        },
+        [RewardTier.Rare] = new List<UpgradeData>
         {
-            catalog[RewardTier.Common].Add(new UpgradeData("Corazón", "+1 vida, cura por completo", UpgradeType.Heart, RewardTier.Common, 1f, cost: 14));
-            catalog[RewardTier.Rare].Add(new UpgradeData("Corazón", "+2 vidas, cura por completo", UpgradeType.Heart, RewardTier.Rare, 2f, cost: 24));
-            catalog[RewardTier.Epic].Add(new UpgradeData("Corazón", "+3 vidas, cura por completo", UpgradeType.Heart, RewardTier.Epic, 3f, cost: 36));
-            catalog[RewardTier.Legendary].Add(new UpgradeData("Corazón", "+3 vidas, cura por completo", UpgradeType.Heart, RewardTier.Legendary, 3f, cost: 48));
-        }
-
-        if (includeUltimates)
+            new("Alcance de Disparo II", "+130 rango de disparo automático", UpgradeType.FireRange, RewardTier.Rare, 130f, cost: 16),
+            new("Fuego Rápido II", "+1 disparo/seg", UpgradeType.FireRate, RewardTier.Rare, 1f, cost: 16),
+            new("Balas Afiladas II", "+5 daño de bala", UpgradeType.BulletDamage, RewardTier.Rare, 5f, cost: 16),
+            new("Cuchilla Orbital II", "2 cuchillas giratorias dañan a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Rare, 2f, cost: 32),
+            new("Barrera II", "Bloquea los próximos 2 golpes", UpgradeType.HitShield, RewardTier.Rare, 2f, cost: 24),
+            new("Dron II", "Un mini compañero dispara al 35% de tus estadísticas", UpgradeType.Companion, RewardTier.Rare, 35f, cost: 22),
+            new("Disparo Lateral", "+1 línea de tiro en paralelo (máx. 5)", UpgradeType.SideShot, RewardTier.Rare, 1f, cost: 22),
+            new("Láser II", "Dispara un láser cada 3.2s a todos los enemigos dentro de tu rango (20 daño)", UpgradeType.Laser, RewardTier.Rare, 2f, cost: 34),
+            new("Perforación II", "Tus balas atraviesan 1 enemigo más", UpgradeType.Pierce, RewardTier.Rare, 1f, cost: 26),
+            new("Crítico II", "+12% de probabilidad de daño crítico (x2)", UpgradeType.CritChance, RewardTier.Rare, 12f, cost: 20),
+            new("Bala Veloz II", "+150 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Rare, 150f, cost: 14),
+            new("Retroceso II", "Tus balas empujan a los enemigos (+110)", UpgradeType.BulletKnockback, RewardTier.Rare, 110f, cost: 18),
+            new("Botín II", "+25% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Rare, 25f, cost: 24),
+        },
+        [RewardTier.Epic] = new List<UpgradeData>
         {
-            catalog[RewardTier.Epic].Add(new UpgradeData("Ultimate: Pulso Nova", "Daña fuerte a todos los enemigos cercanos de una vez", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, ultimate: UltimateKind.Nova));
-            catalog[RewardTier.Epic].Add(new UpgradeData("Ultimate: Zona Lenta", "Ralentiza a todos los enemigos por varios segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, ultimate: UltimateKind.TimeSlow));
-            catalog[RewardTier.Epic].Add(new UpgradeData("Ultimate: Sobrecarga", "Duplica tu cadencia y daño por varios segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, ultimate: UltimateKind.Frenzy));
-            catalog[RewardTier.Epic].Add(new UpgradeData("Ultimate: Nuke", "Elimina a todos los enemigos en una explosión (a los jefes les quita 20% de su vida máxima)", UpgradeType.Ultimate, RewardTier.Epic, cost: 100, ultimate: UltimateKind.Nuke));
-        }
+            new("Alcance de Disparo III", "+200 rango de disparo automático", UpgradeType.FireRange, RewardTier.Epic, 200f, cost: 28),
+            new("Fuego Rápido III", "+1.8 disparos/seg", UpgradeType.FireRate, RewardTier.Epic, 1.8f, cost: 28),
+            new("Balas Afiladas III", "+9 daño de bala", UpgradeType.BulletDamage, RewardTier.Epic, 9f, cost: 28),
+            new("Disparo Doble", "Dispara dos proyectiles extra en diagonal", UpgradeType.ExtraProjectile, RewardTier.Epic, cost: 30),
+            new("Cuchilla Orbital III", "3 cuchillas giratorias dañan a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Epic, 3f, cost: 46),
+            new("Barrera III", "Bloquea los próximos 3 golpes", UpgradeType.HitShield, RewardTier.Epic, 3f, cost: 36),
+            new("Dron III", "Un mini compañero dispara al 45% de tus estadísticas", UpgradeType.Companion, RewardTier.Epic, 45f, cost: 34),
+            new("Láser III", "Dispara un láser cada 2.5s a todos los enemigos dentro de tu rango (31 daño)", UpgradeType.Laser, RewardTier.Epic, 3f, cost: 50),
+            new("Perforación III", "Tus balas atraviesan 2 enemigos más", UpgradeType.Pierce, RewardTier.Epic, 2f, cost: 38),
+            new("Crítico III", "+18% de probabilidad de daño crítico (x2)", UpgradeType.CritChance, RewardTier.Epic, 18f, cost: 32),
+            new("Bala Veloz III", "+240 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Epic, 240f, cost: 24),
+            new("Retroceso III", "Tus balas empujan a los enemigos (+170)", UpgradeType.BulletKnockback, RewardTier.Epic, 170f, cost: 28),
+            new("Botín III", "+40% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Epic, 40f, cost: 36),
 
-        return catalog;
+            // --- Shop-exclusive from here ---
+            new("Ultimate: Pulso Nova", "Daña fuerte a todos los enemigos cercanos de una vez", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Nova),
+            new("Ultimate: Zona Lenta", "Ralentiza a todos los enemigos por varios segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.TimeSlow),
+            new("Ultimate: Sobrecarga", "Duplica tu cadencia y daño por varios segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Frenzy),
+            new("Regeneración", "Recuperás 1 carga de escudo cada 12s", UpgradeType.ShieldRegen, RewardTier.Epic, 5f, cost: 55, source: RewardSource.Shop),
+        },
+        [RewardTier.Legendary] = new List<UpgradeData>
+        {
+            new("Alcance de Disparo IV", "+300 rango de disparo automático", UpgradeType.FireRange, RewardTier.Legendary, 300f, cost: 45),
+            new("Fuego Rápido IV", "+3 disparos/seg", UpgradeType.FireRate, RewardTier.Legendary, 3f, cost: 45),
+            new("Balas Afiladas IV", "+15 daño de bala", UpgradeType.BulletDamage, RewardTier.Legendary, 15f, cost: 45),
+            new("Cuchilla Orbital IV", "4 cuchillas giratorias dañan a los enemigos al contacto", UpgradeType.OrbitShield, RewardTier.Legendary, 4f, cost: 60),
+            new("Barrera IV", "Bloquea los próximos 4 golpes", UpgradeType.HitShield, RewardTier.Legendary, 4f, cost: 48),
+            new("Dron IV", "Un mini compañero dispara al 50% de tus estadísticas", UpgradeType.Companion, RewardTier.Legendary, 50f, cost: 50),
+            new("Disparo Lateral", "+2 líneas de tiro en paralelo (máx. 5)", UpgradeType.SideShot, RewardTier.Legendary, 2f, cost: 55),
+            new("Láser IV", "Dispara un láser cada 1.8s a todos los enemigos dentro de tu rango (50 daño)", UpgradeType.Laser, RewardTier.Legendary, 4f, cost: 65),
+            new("Perforación IV", "Tus balas atraviesan 3 enemigos más", UpgradeType.Pierce, RewardTier.Legendary, 3f, cost: 55),
+            new("Crítico IV", "+25% de probabilidad de daño crítico (x2)", UpgradeType.CritChance, RewardTier.Legendary, 25f, cost: 48),
+            new("Bala Veloz IV", "+350 velocidad de bala", UpgradeType.BulletSpeed, RewardTier.Legendary, 350f, cost: 38),
+            new("Retroceso IV", "Tus balas empujan a los enemigos (+240)", UpgradeType.BulletKnockback, RewardTier.Legendary, 240f, cost: 42),
+            new("Botín IV", "+60% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Legendary, 60f, cost: 52),
+
+            // --- Shop-exclusive from here ---
+            // A single Legendary Heart rather than one per tier: max lives is the most swingy stat
+            // in the game (it's literally how many mistakes you're allowed), so it shouldn't be
+            // something a cheap Common roll hands out repeatedly.
+            new("Corazón", "+1 vida máxima y cura toda tu vida", UpgradeType.Heart, RewardTier.Legendary, 1f, cost: 60, source: RewardSource.Shop),
+            new("Regeneración+", "Recuperás 1 carga de escudo cada 7.5s", UpgradeType.ShieldRegen, RewardTier.Legendary, 8f, cost: 75, source: RewardSource.Shop),
+            new("Segunda Oportunidad", "Al morir revivís una vez con la vida llena (máx. 2)", UpgradeType.Revive, RewardTier.Legendary, 1f, cost: 95, source: RewardSource.Shop),
+        },
+    };
+
+    public static Dictionary<RewardTier, List<UpgradeData>> BuildCatalog(RewardSource source)
+    {
+        var full = BuildFullCatalog();
+        var filtered = new Dictionary<RewardTier, List<UpgradeData>>();
+        foreach (var kv in full)
+            filtered[kv.Key] = kv.Value.FindAll(u => (u.Source & source) != 0);
+        return filtered;
     }
 
     // isUseless: optional filter (typically Player.IsRewardUseless) so a reward that would have
     // zero effect right now — e.g. a Common Barrier while already topped off on a better tier —
     // is avoided when there's any alternative, instead of wasting one of the offered slots (or,
     // worse, leaving the free level-up picker with all 3 choices disabled and no way to proceed).
-    public static List<UpgradeData> PickRandomTiered(int count, int round, bool includeHearts = false, bool includeUltimates = false, Func<UpgradeData, bool> isUseless = null)
+    public static List<UpgradeData> PickRandomTiered(int count, int round, RewardSource source, Func<UpgradeData, bool> isUseless = null)
     {
-        var catalog = BuildTieredCatalog(includeHearts, includeUltimates);
+        var catalog = BuildCatalog(source);
         var weights = RewardTierRoller.GetWeights(round);
         var usedNames = new HashSet<string>();
         var result = new List<UpgradeData>();
@@ -153,7 +198,7 @@ public class UpgradeData
     // equipped, falling back to the full set if that leaves too few to fill the picker.
     public static List<UpgradeData> PickUltimateChoices(int count, Func<UpgradeData, bool> isUseless = null)
     {
-        var all = BuildTieredCatalog(includeHearts: false, includeUltimates: true)[RewardTier.Epic]
+        var all = BuildCatalog(RewardSource.Shop)[RewardTier.Epic]
             .FindAll(u => u.Type == UpgradeType.Ultimate);
 
         var preferred = isUseless == null ? all : all.FindAll(u => !isUseless(u));

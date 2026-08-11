@@ -25,8 +25,43 @@ public partial class Enemy : CharacterBody2D
 
     // "Magnet-like" repulsion radius — any other enemy closer than this gets pushed directly away
     // from its own center, so a crowd converging on the player doesn't just stack on one point.
-    [Export] public float SeparationRadius = 24f;
-    private const float SeparationStrength = 80f;
+    // Both numbers were roughly doubled after the original values lost outright to the chase force:
+    // 24px is barely more than touching for the bigger enemies, and a strength of 80 against move
+    // speeds of 90-190 meant a herded crowd still collapsed into a ball.
+    [Export] public float SeparationRadius = 46f;
+    private const float SeparationStrength = 170f;
+
+    // Persistent per-enemy heading offset (degrees, randomised once in _Ready). Without it every
+    // enemy computes the *identical* chase vector and the pack travels in one straight column;
+    // a few degrees of variation makes them converge along slightly different arcs instead.
+    // Persistent rather than per-frame so it reads as a different approach line, not as jitter.
+    // Small enough to still converge — a constant angular offset spirals inward, not around.
+    [Export] public float MaxChaseAngleOffset = 14f;
+    private float _chaseAngleOffset;
+
+    // How far ahead an enemy looks for obstacles when steering around them. Bigger/faster enemies
+    // want more warning, hence the per-scene override.
+    [Export] public float AvoidanceProbeDistance = 70f;
+
+    // Detour angles tried in order, nearest-to-straight first, so an enemy deviates as little as
+    // it can get away with. Only layer 8 (obstacles) is probed — see docs/enemies.md.
+    private static readonly float[] AvoidanceAngles = { 20f, 40f, 60f, 80f, 100f, 125f };
+    private const uint ObstacleCollisionMask = 8;
+
+    // Which way this enemy has committed to going around its current obstacle (-1 left, +1 right,
+    // 0 = not avoiding). Held across frames because re-deciding every frame makes enemies jitter
+    // in place at a wall instead of actually committing to a way around it.
+    private int _avoidanceSide = 0;
+
+    // Transient shove applied on top of normal movement (currently from orbit blade hits), decaying
+    // back to zero. Same shape as the player's own knockback in Player.cs.
+    private Vector2 _knockbackVelocity = Vector2.Zero;
+    private const float KnockbackDecay = 700f;
+
+    public void ApplyKnockback(Vector2 impulse)
+    {
+        _knockbackVelocity = impulse;
+    }
 
     public int CurrentHp;
 
@@ -40,11 +75,24 @@ public partial class Enemy : CharacterBody2D
     private const float HealthBarWidth = 30f;
     private const float HealthBarHeight = 4f;
 
+    // Hit-reaction state. The flash restores this exact colour rather than assuming one, since
+    // every enemy scene picks its own.
+    private Polygon2D _visual;
+    private Color _visualBaseColor = Colors.White;
+    private Tween _hitTween;
+    private const float HitFlashDuration = 0.14f;
+    private const float HitPunchScale = 1.3f;
+
     public override void _Ready()
     {
         AddToGroup("enemies");
         CurrentHp = MaxHp;
         _player = GetTree().GetFirstNodeInGroup("player") as Node2D;
+
+        _visual = GetNodeOrNull<Polygon2D>("Visual");
+        if (_visual != null) _visualBaseColor = _visual.Color;
+
+        _chaseAngleOffset = Mathf.DegToRad((float)(_rng.NextDouble() * 2.0 - 1.0) * MaxChaseAngleOffset);
 
         if (Category == EnemyCategory.Special || Category == EnemyCategory.Boss)
             CreateHealthBar();
@@ -112,11 +160,66 @@ public partial class Enemy : CharacterBody2D
         }
 
         float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
-        Vector2 chaseDir = (_player.GlobalPosition - GlobalPosition).Normalized();
+        Vector2 chaseDir = (_player.GlobalPosition - GlobalPosition).Normalized().Rotated(_chaseAngleOffset);
+
+        // Steer around obstacles rather than into them. MoveAndSlide alone isn't enough: it only
+        // slides when the velocity has a tangential component, so an enemy meeting a wall face
+        // head-on resolves to ~zero slide and just grinds against it forever.
+        Vector2 moveDir = ComputeAvoidanceDirection(chaseDir);
         Vector2 separation = ComputeSeparation();
 
-        Velocity = (chaseDir * MoveSpeed + separation) * speedMult;
+        _knockbackVelocity = _knockbackVelocity.MoveToward(Vector2.Zero, KnockbackDecay * (float)delta);
+
+        // Knockback sits outside the speedMult so a Zona Lenta ultimate doesn't also weaken the
+        // shove — it's an impulse from the player's weapon, not part of the enemy's own movement.
+        Velocity = (moveDir * MoveSpeed + separation) * speedMult + _knockbackVelocity;
         MoveAndSlide();
+    }
+
+    // Straight at the player when the way is clear; otherwise the smallest detour that isn't
+    // blocked, committed to one side so the path around reads as deliberate.
+    private Vector2 ComputeAvoidanceDirection(Vector2 desired)
+    {
+        if (!IsPathBlocked(desired))
+        {
+            _avoidanceSide = 0;
+            return desired;
+        }
+
+        if (_avoidanceSide == 0)
+            _avoidanceSide = PickAvoidanceSide(desired);
+
+        foreach (float degrees in AvoidanceAngles)
+        {
+            Vector2 candidate = desired.Rotated(Mathf.DegToRad(degrees) * _avoidanceSide);
+            if (!IsPathBlocked(candidate)) return candidate;
+        }
+
+        // Every detour on this side is blocked (inside a corner, or wedged between obstacles).
+        // Flip the commitment so the next frame explores the other way out, and meanwhile slide
+        // straight along the wall instead of pushing into it.
+        _avoidanceSide = -_avoidanceSide;
+        return desired.Rotated(Mathf.Pi / 2f * _avoidanceSide);
+    }
+
+    private int PickAvoidanceSide(Vector2 desired)
+    {
+        bool leftClear = !IsPathBlocked(desired.Rotated(-Mathf.Pi / 2f));
+        bool rightClear = !IsPathBlocked(desired.Rotated(Mathf.Pi / 2f));
+
+        if (leftClear && !rightClear) return -1;
+        if (rightClear && !leftClear) return 1;
+        return _rng.NextDouble() < 0.5 ? -1 : 1;
+    }
+
+    private bool IsPathBlocked(Vector2 direction)
+    {
+        var query = PhysicsRayQueryParameters2D.Create(
+            GlobalPosition,
+            GlobalPosition + direction.Normalized() * AvoidanceProbeDistance,
+            ObstacleCollisionMask);
+
+        return GetWorld2D().DirectSpaceState.IntersectRay(query).Count > 0;
     }
 
     private Vector2 ComputeSeparation()
@@ -135,7 +238,12 @@ public partial class Enemy : CharacterBody2D
                 push += offset / dist * (minDist - dist) / minDist;
             }
         }
-        return push * SeparationStrength;
+
+        // Clamped before scaling: push accumulates one term per crowding neighbour, so deep inside
+        // a pack the raw sum can get large enough to fling an enemy across the arena. Capping the
+        // direction vector at unit length keeps the shove at exactly SeparationStrength at most,
+        // which is comparable to move speed — firm, but never launching.
+        return push.LimitLength(1f) * SeparationStrength;
     }
 
     public void TakeDamage(int amount)
@@ -169,6 +277,33 @@ public partial class Enemy : CharacterBody2D
 
             QueueFree();
         }
+        else
+        {
+            PlayHitFeedback();
+        }
+    }
+
+    // Brief white flash + scale punch so a hit that doesn't kill still reads as having landed.
+    // Skipped entirely on the killing blow — the enemy is freed on the same frame, so there'd be
+    // nothing left to animate.
+    private void PlayHitFeedback()
+    {
+        if (_visual == null) return;
+
+        // Rapid hits (a laser volley, a blade sweep) would otherwise stack tweens that fight over
+        // the same two properties and can leave the enemy stuck mid-flash or mid-punch.
+        if (_hitTween != null && _hitTween.IsValid()) _hitTween.Kill();
+
+        _visual.Color = Colors.White;
+        _visual.Scale = Vector2.One * HitPunchScale;
+
+        // Tweens the Visual child, not the enemy itself — the enemy's own Scale carries the
+        // Splitter's per-generation shrink and must not be clobbered.
+        _hitTween = CreateTween();
+        _hitTween.SetParallel(true);
+        _hitTween.TweenProperty(_visual, "color", _visualBaseColor, HitFlashDuration);
+        _hitTween.TweenProperty(_visual, "scale", Vector2.One, HitFlashDuration)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
     }
 
     private void SpawnScorePopup(int amount)
@@ -212,6 +347,7 @@ public partial class Enemy : CharacterBody2D
             child.SplitVisualScale = SplitVisualScale;
             child.Category = Category;
             child.HealthBarOffset = HealthBarOffset;
+            child.AvoidanceProbeDistance = AvoidanceProbeDistance;
 
             child.MaxHp = Mathf.Max(1, Mathf.RoundToInt(MaxHp * SplitHpScale));
             child.ContactDamage = ContactDamage;

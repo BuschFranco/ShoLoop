@@ -22,7 +22,8 @@ All enemy/spawn curves are `private static readonly RoundCurve` fields at the to
 |---|---|---|---|---|---|
 | `SpawnIntervalCurve` | 0.6s | −0.035s | 0.12s | 0.6s | seconds between spawn ticks (lower = faster) — see the early-round grace below |
 | `BurstCountCurve` | 1 | +0.35 | 1 | 8 | enemies spawned per tick |
-| `MaxConcurrentCurve` | 25 | +4 | 25 | 200 | soft cap on enemies alive at once |
+| `MaxConcurrentCurve` | 25 | +4 | 25 | 200 | cap on enemies alive at once (× `LateCrowdMultCurve`) |
+| `LateCrowdMultCurve` | 0.4 | +0.0667 | 1.0 | 1.2 | late-game crowd bump, see below |
 | `SpecialChanceCurve` | 0.05 | +0.05 | 0.05 | 0.6 | chance a given spawn is a special enemy |
 | `HpMultCurve` | 1.0 | +0.25 | 1.0 | 10.0 | enemy `MaxHp` multiplier |
 | `DmgMultCurve` | 1.0 | +0.22 | 1.0 | 10.0 | enemy `ContactDamage` multiplier |
@@ -30,6 +31,19 @@ All enemy/spawn curves are `private static readonly RoundCurve` fields at the to
 | `RewardMultCurve` | 1.0 | +0.25 | 1.0 | 12.0 | enemy `XpReward`/`CoinsReward` multiplier |
 
 Applied in `EnemySpawner.SpawnOne()`: each newly-instantiated enemy has `MaxHp`, `ContactDamage`, `MoveSpeed`, `XpReward`, `CoinsReward` multiplied by the current round's evaluated values **before** it's added to the tree (so `Enemy._Ready()` picks up the already-scaled `MaxHp` when it sets `CurrentHp = MaxHp`).
+
+### Late-game crowd bump
+
+`LateCrowdMultCurve` multiplies `MaxConcurrentCurve` to put visibly more enemies on screen at once in the late game: flat **1.0× through round 10**, a linear ramp over rounds 11–12, and pinned at **1.2× from round 13 onward**.
+
+| Round | 10 | 11 | 12 | 13+ |
+|---|---|---|---|---|
+| Multiplier | 1.00 | 1.067 | 1.133 | 1.20 |
+| Concurrent cap | 61 | 69 | 78 | 88 → 92 → … |
+
+`RoundCurve`'s clamps express a flat→ramp→flat shape exactly, so this needed no new mechanism — but the `Base` of `0.4` looks arbitrary out of context. It's derived: `Evaluate` is `Base + (round-1) × PerRound` clamped to `[Min, Max]`, and `0.4` is what makes the `Min`/`Max` clamps land on rounds 10 and 13 specifically.
+
+**A prerequisite bug fix made this actually work.** `OnSpawnTimeout` enforced the cap with `_enemiesContainer.GetChildCount()`, but enemies parent their score popups, damage numbers, and fired bullets into that same container — so the "max concurrent enemies" cap was really "enemies + transient VFX + bullets", and bound far earlier than its number suggested, worst exactly in the busy late rounds this bump targets. It now counts the `enemies` group instead, read once per tick and tracked locally rather than re-queried per burst item.
 
 ### Where enemies appear
 

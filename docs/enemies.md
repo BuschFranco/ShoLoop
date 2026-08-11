@@ -4,8 +4,19 @@ Base behavior lives in [Enemy.cs](../Scripts/Enemy/Enemy.cs) — every enemy typ
 
 ## Common behavior (all enemy types)
 
-- `CharacterBody2D`, group `enemies`, seeks the player in a straight line every physics frame, plus a separation push away from any other enemy that's too close (see below). No pathfinding/avoidance beyond that.
-- Collision: `layer = 2` (Enemies), `mask = 8` (Obstacles) — enemies don't physically collide with the player or each other (that would need the physics engine to resolve it; separation is instead a plain script-side velocity nudge, see below), but they *do* collide with arena obstacles, and `MoveAndSlide` slides them along the edges. Damage to the player only happens through the player's `Hurtbox` `Area2D` detecting overlap (see [player.md](player.md)); this is why enemies never "shove" the player around.
+- `CharacterBody2D`, group `enemies`, seeks the player every physics frame, steering around obstacles (see below) and pushed apart from any other enemy that's too close (see further below). No full pathfinding — it's reactive steering, not a route plan.
+- Collision: `layer = 2` (Enemies), `mask = 8` (Obstacles) — enemies don't physically collide with the player or each other (that would need the physics engine to resolve it; separation is instead a plain script-side velocity nudge, see below), but they *do* collide with arena obstacles. Damage to the player only happens through the player's `Hurtbox` `Area2D` detecting overlap (see [player.md](player.md)); this is why enemies never "shove" the player around.
+
+### Obstacle avoidance
+
+`ComputeAvoidanceDirection` raycasts `AvoidanceProbeDistance` ahead (default 70px; 90 on the Tank, 120 on the Boss, since a wider body needs more warning) against **layer 8 only**. Clear path → drive straight at the player. Blocked → try the detour angles in `AvoidanceAngles` (20°, 40°, … 125°) in order, nearest-to-straight first, and take the first one that isn't blocked — so an enemy deviates as little as it can get away with and re-converges once past the corner.
+
+Two details that matter:
+
+- **The chosen side is committed to** (`_avoidanceSide`, held across frames until the path is clear again). Re-deciding every frame makes enemies jitter left-right in place at a wall instead of actually going around it. The initial side is picked by probing 90° each way and taking whichever is clear, coin-flipping when both are.
+- **If every detour on the committed side is blocked** — an inside corner, or wedged between two obstacles — the commitment flips so the next frame explores the other way out, and meanwhile the enemy slides straight along the wall rather than pressing into it.
+
+This layer is why obstacles work at all: relying on `MoveAndSlide` alone wasn't enough, because it only slides when the velocity has a tangential component. An enemy meeting a wall face head-on resolves to ~zero slide and just grinds against it forever. Physics collision is still there underneath as the safety net.
 
 ### Collision layer map
 
@@ -13,10 +24,16 @@ Base behavior lives in [Enemy.cs](../Scripts/Enemy/Enemy.cs) — every enemy typ
 |---|---|---|---|
 | 1 | Player | `Player.tscn` body | 8 (obstacles) |
 | 2 | Enemies | every enemy body | 8 (obstacles) |
-| 4 | Player bullets | `Bullet.tscn` | 2 (enemies) |
+| 4 | Player bullets | `Bullet.tscn` | 2 + 8 (enemies, obstacles) |
 | 8 | Obstacles | `Obstacle` static bodies | — (static) |
 
-Areas sit on layer 0 and only mask: the player's `Hurtbox` masks 2, `EnemyBullet` masks 1, `OrbitBlade` masks 2. **Projectiles deliberately ignore layer 8** — obstacles shape movement and kiting routes without ever blocking your own shots (and, symmetrically, without giving you cover from enemy fire).
+Areas sit on layer 0 and only mask: the player's `Hurtbox` masks 2, `EnemyBullet` masks 1, `OrbitBlade` masks 2.
+
+**Player bullets are stopped by obstacles** — `Bullet.OnBodyEntered` frees the bullet on *any* body its mask lets through, damaging it first only if it's an `Enemy`. This covers Companion drone shots too, since the drone fires the same `Bullet.tscn`.
+
+**Enemy bullets are not** — `EnemyBullet` still masks only layer 1, so it flies through walls. That asymmetry is deliberate for now but worth knowing: obstacles currently cost the player shots without giving them cover. Making it symmetric is a one-line mask change (`1` → `9`) plus the same free-on-any-body tweak in `EnemyBullet.OnBodyEntered`.
+
+Non-projectile damage is unaffected by obstacles either way: the Laser, the level-up nova, and the Pulso Nova ultimate are all plain distance checks with no line-of-sight test, so they still reach through walls.
 - On death (`CurrentHp <= 0` in `TakeDamage`): registers a kill with `GameManager.RegisterKill(XpToGive, CoinsReward, Category)`, then `QueueFree()`.
 - Exported base stats: `MoveSpeed`, `MaxHp`, `XpReward`, `CoinsReward`, `ContactDamage`, `Category`.
 
@@ -47,9 +64,33 @@ Grunts are always available. `EnemySpawner.ChooseEnemyScene()` rolls sequentiall
 
 Every hit on a health-bar enemy also spawns a floating red `-10`-style number (`SpawnDamageNumber`, same drift-up-and-fade pattern as the score popup) showing the actual HP lost — clamped to whatever HP the enemy actually had left, so an overkill hit shows the real remaining HP rather than the raw (possibly enormous) damage number.
 
-## Separation (enemies don't stack)
+## Hit reaction
 
-`Enemy._PhysicsProcess` adds a repulsion term on top of the usual chase velocity: `ComputeSeparation()` scans the `enemies` group and, for every other enemy within `SeparationRadius` ([Export], default 24px), pushes this one directly away from that enemy's center — stronger the closer they are (`(minDist - dist) / minDist`, scaled by a flat `SeparationStrength = 80`). This is a plain script-side velocity nudge, not physics-engine collision (enemies still have `collision_mask = 0`, see above) — cheap, fully predictable, and immune to Godot's kinematic-body collision quirks. Without it, a crowd all converging on the same player position would happily stack directly on top of each other; with it, they visibly jostle for space instead, "magnet"-repelling apart when they get too close.
+`PlayHitFeedback()` gives every enemy — not just the health-bar ones — a short white flash and a scale punch (1.3× easing back over 0.14s) whenever a hit lands. Three details:
+
+- It's **skipped on the killing blow**, since the enemy is `QueueFree`d on that same frame and there'd be nothing left to animate.
+- It tweens the **`Visual` child**, not the enemy node. The enemy's own `Scale` carries the Splitter's per-generation shrink (`SplitVisualScale`) and must not be clobbered.
+- Any in-flight tween is `Kill()`ed before starting a new one. Rapid hits (a laser volley, a blade sweep) would otherwise stack tweens fighting over the same two properties and could leave an enemy stuck mid-flash or mid-punch.
+
+The flash restores each enemy's own base colour, captured from the `Visual` node in `_Ready()` rather than assumed, since every enemy scene picks its own.
+
+## Keeping the pack dispersed
+
+Two independent mechanisms, because a herded crowd was collapsing into a single ball *and* trailing the player in one straight column. They fix different halves of that.
+
+### Separation (enemies don't stack)
+
+`ComputeSeparation()` scans the `enemies` group and, for every other enemy within `SeparationRadius` ([Export], default **46px**), pushes this one directly away from that enemy's center — stronger the closer they are (`(minDist - dist) / minDist`, scaled by a flat `SeparationStrength = 170`). This is a plain script-side velocity nudge, not physics-engine collision (enemies only mask obstacles, see above) — cheap, fully predictable, and immune to Godot's kinematic-body collision quirks.
+
+Both constants were roughly doubled from an earlier 24px / 80: 24px is barely more than touching for the larger enemies, and a strength of 80 against move speeds of 90–190 simply lost to the chase force, so a cornered crowd still balled up.
+
+The summed push is `LimitLength(1f)`-clamped **before** scaling. It accumulates one term per crowding neighbour, so deep inside a pack the raw sum gets large enough to fling an enemy across the arena; clamping caps the shove at exactly `SeparationStrength`, comparable to move speed — firm, but never launching.
+
+### Chase-angle offset (enemies don't single-file)
+
+Separation alone doesn't stop the pack travelling as one column, because every enemy computes the *identical* chase vector toward the player. Each enemy therefore gets `_chaseAngleOffset`, a persistent heading offset randomised once in `_Ready()` within ±`MaxChaseAngleOffset` ([Export], default 14°), applied to its chase direction.
+
+It's persistent rather than per-frame so it reads as a different approach *line*, not as jitter. And it's kept small deliberately: a constant angular offset makes the path a slow inward spiral rather than an orbit, so enemies still converge — they just arrive along different arcs. The Boss overrides it to `0` for a direct, unwavering approach (and uses a wider 70px separation radius to match its size).
 
 ## Enemy speed multiplier
 

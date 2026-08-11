@@ -5,6 +5,7 @@ Two separate currencies exist. Confusing them is the most common bug source here
 ## Coins (`GameManager.Coins`)
 
 - The **spendable wallet**. Earned per kill, spent in the shop.
+- The **Botín** reward (`UpgradeType.CoinBonus`, up to +150%) multiplies the per-kill payout via `Player.CoinMultiplier`, applied in `RegisterKill`. It scales coins *only* — XP and Score are untouched, so stacking it can't accelerate leveling or inflate the high score, just the shop budget. Note it does feed the wealth-based price inflation below, so a coin-heavy build also sees prices climb faster.
 - `AddCoins(amount)` / `SpendCoins(amount)` — see [GameManager.cs](../Scripts/Autoload/GameManager.cs).
 - Resets to 0 on `ResetRun()` (new game).
 
