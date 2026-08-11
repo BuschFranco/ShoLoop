@@ -20,6 +20,10 @@ public partial class Missile : Area2D
     public int Damage = 30;
     public float ExplosionRadius = 70f;
 
+    // Incendiario reward: burns everything caught in the blast, same as every other player weapon.
+    public float BurnDps = 0f;
+    public float BurnDuration = 0f;
+
     private float _timeAlive = 0f;
     private bool _exploded = false;
 
@@ -67,6 +71,9 @@ public partial class Missile : Area2D
             if (node is Enemy enemy && IsInstanceValid(enemy)
                 && GlobalPosition.DistanceTo(enemy.GlobalPosition) <= ExplosionRadius)
             {
+                if (BurnDps > 0f)
+                    enemy.ApplyBurn(BurnDps, BurnDuration);
+
                 enemy.TakeDamage(Damage);
             }
         }

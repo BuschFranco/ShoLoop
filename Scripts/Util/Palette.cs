@@ -28,6 +28,11 @@ public static class Palette
     public static readonly Color LevelUpNova = new("ffa8f0", 0.5f);
     public static readonly Color UltimateNova = new("ff2fb9", 0.4f);
 
+    // --- Pickups ---
+    // World drops from enemies, distinct from the reward-shop rewards of the same name.
+    public static readonly Color HeartPickup = new("ff2e88");
+    public static readonly Color ShieldPickupColor = new("4fa8ff");
+
     // --- Enemies ---
     public static readonly Color EnemyBullet = new("ff3860");
     public static readonly Color EnemyBurnTint = new("ff8a5c");
@@ -49,11 +54,31 @@ public static class Palette
     public static readonly Color CritBullet = new("ffe066");
 
     // --- UI / feedback ---
-    public static readonly Color ScorePopup = new("ffa8f0");
-    public static readonly Color DamageNumber = new("ff6b8a");
+    // These two used to be ff6b8a (damage) vs ffa8f0 (score) — both bright warm pinks, and once
+    // bloom washes out the hue difference a "-5" over an enemy and a "+5" reward popup read as the
+    // same kind of event. Damage now uses a hot orange, entirely outside the pink family (matching
+    // how CritBullet below is deliberately non-pink for the same reason), while score is pulled onto
+    // Accent/Player's cyan — it already IS the XP bar's colour, so a kill's payout visually ties back
+    // to the same bar it's about to fill instead of competing with damage for the same warm hue.
+    // Same hex as Accent/Player below — written as a literal rather than a reference to it because
+    // C# initializes static fields in declaration order, and Accent isn't declared until further
+    // down this class; referencing it here would read its (0,0,0,0) default instead.
+    public static readonly Color ScorePopup = new("7dfdfe");
+    public static readonly Color DamageNumber = new("ff7a1a");
     public static readonly Color HealthBarBg = new("1a0f2b", 0.75f);
     public static readonly Color HealthBarFill = new("ff2e88");
     public static readonly Color GlowHighlight = new("ff9ff3");
+
+    // Same hue as the HUD's "Nv" label (see HUD.tscn) so the level-up popup reads as
+    // "this is about the level number" purely from colour, at a glance.
+    public static readonly Color LevelPopup = new("ff9ff3");
     public static readonly Color Accent = new("7dfdfe");
     public static readonly Color Warning = new("ff2e88");
+
+    // HUD chrome: the panel the top-bar stats sit on, so labels read as one instrument cluster
+    // instead of loose text floating over the arena. Deliberately low-alpha and dark — it has to
+    // stay a backdrop, not compete with the neon gameplay it's overlaid on.
+    public static readonly Color HudPanelBg = new(Backdrop, 0.62f);
+    public static readonly Color HudPanelBorder = new(Accent, 0.35f);
+    public static readonly Color HudBarBg = new("1a0f2b", 0.8f);
 }

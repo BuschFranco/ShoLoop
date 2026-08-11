@@ -3,6 +3,8 @@ namespace ShooterLoop;
 public partial class HUD : Control
 {
     private Label _livesLabel;
+    private HeartIcon[] _heartIcons;
+    private const int MaxHeartIcons = 3;
     private Label _shieldLabel;
     private ProgressBar _xpBar;
     private Label _levelLabel;
@@ -16,18 +18,36 @@ public partial class HUD : Control
     private ProgressBar _ultimateBar;
     private Label _countdownLabel;
     private Player _player;
+    private PanelContainer _topBarPanel;
+    private Control _cooldownIcons;
+    private CooldownIcon _laserIcon;
+    private CooldownIcon _missileIcon;
+    private CooldownIcon _shieldRegenIcon;
+    private CooldownIcon _ultimateIcon;
 
     public override void _Ready()
     {
-        _roundLabel = GetNode<Label>("TopBar/RoundLabel");
-        _roundTimerLabel = GetNode<Label>("TopBar/RoundTimerLabel");
-        _levelLabel = GetNode<Label>("TopBar/LevelLabel");
-        _livesLabel = GetNode<Label>("TopBar/LivesLabel");
-        _shieldLabel = GetNode<Label>("TopBar/ShieldLabel");
-        _xpBar = GetNode<ProgressBar>("TopBar/XpBar");
-        _coinsLabel = GetNode<Label>("TopBar/PointsLabel");
-        _scoreLabel = GetNode<Label>("TopBar/ScoreLabel");
+        _roundLabel = GetNode<Label>("TopBarPanel/TopBar/RoundLabel");
+        _roundTimerLabel = GetNode<Label>("TopBarPanel/TopBar/RoundTimerLabel");
+        _levelLabel = GetNode<Label>("TopBarPanel/TopBar/LevelLabel");
+        _livesLabel = GetNode<Label>("TopBarPanel/TopBar/LivesRow/LivesLabel");
+        _heartIcons = new[]
+        {
+            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart1"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart2"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart3"),
+        };
+        _shieldLabel = GetNode<Label>("TopBarPanel/TopBar/ShieldLabel");
+        _xpBar = GetNode<ProgressBar>("TopBarPanel/TopBar/XpBar");
+        _coinsLabel = GetNode<Label>("TopBarPanel/TopBar/PointsLabel");
+        _scoreLabel = GetNode<Label>("TopBarPanel/TopBar/ScoreLabel");
         _countdownLabel = GetNode<Label>("CountdownLabel");
+        _topBarPanel = GetNode<PanelContainer>("TopBarPanel");
+        _cooldownIcons = GetNode<Control>("CooldownIcons");
+        _laserIcon = GetNode<CooldownIcon>("CooldownIcons/LaserIcon");
+        _missileIcon = GetNode<CooldownIcon>("CooldownIcons/MissileIcon");
+        _shieldRegenIcon = GetNode<CooldownIcon>("CooldownIcons/ShieldRegenIcon");
+        _ultimateIcon = GetNode<CooldownIcon>("CooldownIcons/UltimateIcon");
 
         _scoreDeltaTimer = new Timer();
         _scoreDeltaTimer.OneShot = true;
@@ -37,6 +57,7 @@ public partial class HUD : Control
 
         GameManager.Instance.XpChanged += OnXpChanged;
         GameManager.Instance.LevelUp += OnLevelUp;
+        GameManager.Instance.LevelsGained += OnLevelsGained;
         GameManager.Instance.RoundChanged += OnRoundChanged;
         GameManager.Instance.CoinsChanged += OnCoinsChanged;
         GameManager.Instance.ScoreChanged += OnScoreChanged;
@@ -55,8 +76,6 @@ public partial class HUD : Control
 
             _player.ShieldChanged += OnShieldChanged;
             OnShieldChanged(_player.CurrentShieldCharges, _player.MaxShieldCharges);
-
-            _player.UltimateChargeChanged += OnUltimateChargeChanged;
         }
 
         _ultimateButton = GetNode<Button>("UltimateButton");
@@ -66,6 +85,12 @@ public partial class HUD : Control
 
         var pauseButton = GetNode<Button>("PauseButton");
         pauseButton.Pressed += OnPausePressed;
+
+        // The .tscn's own offsets give TopBarPanel a fixed 200x200 box purely as a safe non-zero
+        // fallback. ResetSize() (called here and every frame below) shrinks it to exactly fit its
+        // labels instead, so the panel hugs whatever text is actually showing rather than leaving
+        // dead space or, worse, clipping it.
+        _topBarPanel.ResetSize();
     }
 
     public override void _ExitTree()
@@ -77,6 +102,7 @@ public partial class HUD : Control
         if (GameManager.Instance == null) return;
         GameManager.Instance.XpChanged -= OnXpChanged;
         GameManager.Instance.LevelUp -= OnLevelUp;
+        GameManager.Instance.LevelsGained -= OnLevelsGained;
         GameManager.Instance.RoundChanged -= OnRoundChanged;
         GameManager.Instance.CoinsChanged -= OnCoinsChanged;
         GameManager.Instance.ScoreChanged -= OnScoreChanged;
@@ -93,11 +119,9 @@ public partial class HUD : Control
         UpdateUltimateUi();
     }
 
-    private void OnUltimateChargeChanged(float current, float target)
-    {
-        UpdateUltimateUi();
-    }
-
+    // Polled every frame from _Process rather than pushed off an event — the cooldown just
+    // decays continuously (see Player._PhysicsProcess), there's no discrete "it changed" moment
+    // to hang an event off of the way the old Score-driven charge meter had.
     private void UpdateUltimateUi()
     {
         bool hasUltimate = _player != null && _player.EquippedUltimate != null;
@@ -105,15 +129,30 @@ public partial class HUD : Control
         _ultimateBar.Visible = hasUltimate;
         if (!hasUltimate) return;
 
-        _ultimateBar.MaxValue = Player.UltimateChargeTarget;
-        _ultimateBar.Value = _player.UltimateProgress;
-        bool ready = _player.UltimateProgress >= Player.UltimateChargeTarget;
+        float remaining = _player.UltimateCooldownRemaining;
+        float duration = _player.UltimateCooldownDuration;
+        bool ready = remaining <= 0f;
+
+        _ultimateBar.MaxValue = duration;
+        _ultimateBar.Value = duration - remaining;
         _ultimateButton.Disabled = !ready;
-        _ultimateButton.Text = ready ? "¡ULTIMATE!" : $"{_player.EquippedUltimate}";
+        _ultimateButton.Text = ready ? "¡ULTIMATE!" : $"{remaining:0.0}s";
     }
 
     public override void _Process(double delta)
     {
+        // Re-fit every frame: round number, timer, and coin/score text all change length at
+        // runtime (e.g. "Ronda 9" -> "Ronda 10"), and a stale size would either clip the new text
+        // or leave the panel oversized for shorter text. Cheap for a handful of labels.
+        _topBarPanel.ResetSize();
+
+        // Pinned to the stats panel's right edge rather than a fixed offset, since the panel's
+        // own width breathes with its text (see above) — a fixed offset would drift away from or
+        // overlap the panel as "Ronda 9" becomes "Ronda 10".
+        _cooldownIcons.Position = _topBarPanel.Position + new Vector2(_topBarPanel.Size.X + 12f, 0f);
+        UpdateCooldownIcons();
+        UpdateUltimateUi();
+
         // The pre-round countdown gets its own big centered label rather than the small top-bar
         // one — at 72px in the middle of the screen it's actually noticeable, which the corner
         // timer wasn't.
@@ -137,9 +176,45 @@ public partial class HUD : Control
         _roundTimerLabel.Text = $"{secondsLeft / 60}:{secondsLeft % 60:D2}";
     }
 
+    private void UpdateCooldownIcons()
+    {
+        if (_player == null) return;
+
+        _laserIcon.Visible = _player.LaserLevel > 0;
+        _laserIcon.CooldownFraction = _player.LaserCooldownFraction;
+
+        _missileIcon.Visible = _player.MissileLevel > 0;
+        _missileIcon.CooldownFraction = _player.MissileCooldownFraction;
+
+        _shieldRegenIcon.Visible = _player.ShieldRegenPerMinute > 0f;
+        _shieldRegenIcon.CooldownFraction = _player.ShieldRegenCooldownFraction;
+
+        bool hasUltimate = _player.EquippedUltimate != null;
+        _ultimateIcon.Visible = hasUltimate;
+        if (hasUltimate)
+            _ultimateIcon.CooldownFraction = _player.UltimateCooldownRemaining / _player.UltimateCooldownDuration;
+    }
+
+    // Up to MaxHeartIcons individual hearts, filled/unfilled to show current vs. lost lives —
+    // falls back to the old "Vidas: x/y" text once MaxLives grows past what reads cleanly as
+    // separate icons (Corazón Legendario can push it well past 3).
     private void OnLivesChanged(int current, int max)
     {
-        _livesLabel.Text = $"Vidas: {current}/{max}";
+        bool showIcons = max <= MaxHeartIcons;
+        _livesLabel.Visible = !showIcons;
+        if (!showIcons)
+        {
+            _livesLabel.Text = $"Vidas: {current}/{max}";
+            foreach (var heart in _heartIcons) heart.Visible = false;
+            return;
+        }
+
+        for (int i = 0; i < _heartIcons.Length; i++)
+        {
+            _heartIcons[i].Visible = i < max;
+            _heartIcons[i].Filled = i < current;
+            _heartIcons[i].QueueRedraw();
+        }
     }
 
     private void OnShieldChanged(int current, int max)
@@ -157,6 +232,35 @@ public partial class HUD : Control
     private void OnLevelUp(int level)
     {
         _levelLabel.Text = $"Nv {level}";
+    }
+
+    // Fires once per AddXp call with the TOTAL levels crossed (not once per threshold like
+    // LevelUp above), so a triple level-up from one big XP reward shows a single "+3" rather than
+    // three "+1"s landing on top of each other in the same frame. Spawned as a sibling of TopBar,
+    // not a child of _levelLabel — parenting it into the VBoxContainer would make VBoxContainer try
+    // to lay it out as part of the stat list instead of letting it float freely over everything.
+    private void OnLevelsGained(int count)
+    {
+        var label = new Label();
+        label.Text = $"+{count}";
+        label.AddThemeColorOverride("font_color", Palette.LevelPopup);
+        label.AddThemeColorOverride("font_outline_color", Colors.Black);
+        label.AddThemeConstantOverride("outline_size", 2);
+        label.AddThemeFontSizeOverride("font_size", 16);
+        label.MouseFilter = MouseFilterEnum.Ignore;
+        label.ZIndex = 20;
+        AddChild(label);
+        label.GlobalPosition = _levelLabel.GlobalPosition + new Vector2(_levelLabel.Size.X + 6f, 0f);
+        label.Scale = Vector2.One * 1.6f;
+
+        var tween = label.CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(label, "scale", Vector2.One, 0.25f)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(label, "position", label.Position + new Vector2(0f, -20f), 0.7f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(label, "modulate:a", 0f, 0.5f).SetDelay(0.35f);
+        tween.Chain().TweenCallback(Callable.From(() => label.QueueFree()));
     }
 
     private void OnRoundChanged(int round)

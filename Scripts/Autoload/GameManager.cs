@@ -60,6 +60,12 @@ public partial class GameManager : Node
 
     public event Action<int, int> XpChanged;
     public event Action<int> LevelUp;
+
+    // Distinct from LevelUp above: LevelUp fires once per threshold crossed (so a triple level-up
+    // invokes it 3 times, correctly updating "Nv N" to its final value one step at a time).
+    // LevelsGained fires once per AddXp call with the *total* crossed, so the HUD popup reads as
+    // one "+3" rather than three overlapping "+1"s in the same frame.
+    public event Action<int> LevelsGained;
     public event Action<int> CoinsChanged;
     public event Action<int> ScoreChanged;
     public event Action<int> RoundChanged;
@@ -100,8 +106,7 @@ public partial class GameManager : Node
 
         // Deliberately the *unmultiplied* xpReward, which breaks the otherwise 1:1 Score/XP sync.
         // Score is persisted as a high score, so letting a reward choice inflate it would make runs
-        // incomparable — and since AddScore also charges the Ultimate meter, multiplying here would
-        // quietly make Sabiduría an Ultimate-charge reward too.
+        // incomparable.
         AddScore(xpReward);
 
         if (category == EnemyCategory.Boss)
@@ -136,9 +141,6 @@ public partial class GameManager : Node
     {
         Score += amount;
         ScoreChanged?.Invoke(Score);
-
-        var player = GetTree().GetFirstNodeInGroup("player") as Player;
-        player?.AddUltimateProgress(amount);
     }
 
     // Global multiplier every Enemy's velocity is scaled by — centralized here (rather than
@@ -164,15 +166,29 @@ public partial class GameManager : Node
     public void AddXp(int amount)
     {
         Xp += amount;
-        XpChanged?.Invoke(Xp, XpToNextLevel);
 
+        // Counted rather than fired inline per threshold: a single big XP reward can cross several
+        // thresholds in one call (see _pendingLevelUps above), and the level-up popup should read
+        // as one "+3", not three separate "+1"s stacking on top of each other in the same frame.
+        int levelsGained = 0;
         while (Xp >= XpToNextLevel)
         {
             Xp -= XpToNextLevel;
             Level++;
             XpToNextLevel = Mathf.RoundToInt(XpToNextLevel * 1.3f);
+            levelsGained++;
             OnLevelGained();
         }
+
+        // Fired once, AFTER any rollover — this used to fire before the loop, against the
+        // pre-rollover Xp and XpToNextLevel. That reads as "at/over max" the instant a level-up
+        // happens, and since nothing re-fired the event once the loop corrected Xp/XpToNextLevel,
+        // the bar just sat there looking full until the next kill's AddXp call happened to invoke
+        // it again with values that were, by then, already correct.
+        XpChanged?.Invoke(Xp, XpToNextLevel);
+
+        if (levelsGained > 0)
+            LevelsGained?.Invoke(levelsGained);
     }
 
     private void OnLevelGained()
@@ -268,6 +284,11 @@ public partial class GameManager : Node
         foreach (Node bullet in GetTree().GetNodesInGroup("enemy_bullets"))
             bullet.QueueFree();
 
+        // Same reasoning as above: a Heart/Shield drop still sitting on the field shouldn't carry
+        // over into the next round's clean board.
+        foreach (Node pickup in GetTree().GetNodesInGroup("pickups"))
+            pickup.QueueFree();
+
         // A Timer only freezes its remaining time while the tree is paused — it doesn't reset.
         // Without this, the spawner's own timer could have almost no time left by the time the
         // shop closes, firing an immediate spawn the instant the tree unpauses and completely
@@ -281,7 +302,7 @@ public partial class GameManager : Node
         Pause();
     }
 
-    private const float RoundStartDelay = 5f;
+    private const float RoundStartDelay = 3f;
     private Timer _roundStartTimer;
 
     public float RoundStartTimeRemaining => (float)(_roundStartTimer?.TimeLeft ?? 0f);

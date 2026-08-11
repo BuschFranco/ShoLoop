@@ -42,12 +42,15 @@ Two ceilings apply, and the second is the one that actually binds: `MaxFireRange
 - `CurrentLives <= 0` → `GameManager.NotifyPlayerDied()` → Game Over screen.
 - Fully refilled to `MaxLives` at the **start of every round** (`Player.HealFullLives()`, called from `GameManager.StartNextRound()`) — see [rounds.md](rounds.md).
 - The Heart reward (a single Legendary, shop-only) adds `+1` to `MaxLives` up to `MaxLivesCap = 10` and fully heals you. See [rewards.md](rewards.md#additive--full-heal-heart) — it used to exist at all four tiers under a more convoluted "max tracks best tier" rule, which stopped making sense once there was only one tier.
+- `Player.AddLife(int amount = 1)` heals without touching `MaxLives`, capped at whatever `MaxLives` currently is — a separate, smaller top-up used by the Heart *pickup* enemies can drop (see [enemies.md](enemies.md#world-pickups-heart--shield-drops)), not the Legendary reward above.
+- HUD shows up to 3 individual heart icons (`HeartIcon.cs`, filled = a life you have, dim outline = a life you've lost) instead of "Vidas: x/y" text — falls back to the text once `MaxLives > 3`, since past that a row of tiny hearts stops reading cleanly.
 
 ## Shield (Barrier reward)
 
 - `MaxShieldCharges`, `CurrentShieldCharges`. A charge, if any are available, is consumed **before** a life is lost on a hit (`Player.OnHurtboxBodyEntered`) — shield always takes priority over lives.
 - Does **not** regenerate on its own during a round — only another Barrier pickup adds charges mid-round (up to the tier-tracked max — same rule as Heart above, see [rewards.md](rewards.md#max-tracks-best-tier--additive-refill-heart-barrier-hitshield)). It **is** topped back up to 100% at the start of every round though (`Player.RefillShield()`, called from `GameManager.StartNextRound()` right next to `HealFullLives()`), so shield follows the same "every round starts fresh" rule lives already did. No-ops for a player who's never bought a Barrier.
 - HUD shows a "Shield: X/Y" row, hidden entirely while `MaxShieldCharges == 0` so it doesn't clutter the display for players who haven't picked one up. The blue aura around the player (`ShieldAura` in [Player.tscn](../Scenes/Player.tscn)) is visible exactly while `CurrentShieldCharges > 0`.
+- `Player.AddShieldCharge()` adds one charge capped at `MaxShieldCharges`, no-oping entirely for a player with no Barrier. Shared by the passive Regeneración timer (`OnShieldRegenTimeout`) and the Shield *pickup* enemies can drop (see [enemies.md](enemies.md#world-pickups-heart--shield-drops)).
 
 ## Level-up nova
 
@@ -63,6 +66,14 @@ Two ceilings apply, and the second is the one that actually binds: `MaxFireRange
 
 Each threshold crossed increments `GameManager._pendingLevelUps` instead of immediately opening the picker again. `ShowNextLevelUpIfIdle()` only opens the picker if it isn't already showing one — so a 4-level jump still opens exactly one picker at first, but `UpgradePicker.OnChoicePressed` already hides itself before handing control back to `GameManager.ApplyUpgradeAndResume()`, which decrements `_pendingLevelUps` and, if more are owed, immediately reopens the picker with a fresh set of 3 choices (still paused) instead of resuming. Only once `_pendingLevelUps` reaches 0 does the game actually unpause. Net effect: a 4-level jump means picking 4 separate upgrades in a row, one screen at a time — none of them skipped.
 
+### The XP bar reset bug
+
+`XpChanged` (which the HUD's XP `ProgressBar` listens to) used to fire **before** the roll-over `while` loop, against the pre-rollover `Xp`/`XpToNextLevel`. That reads as "at or over max" the instant a level-up happens, and since nothing re-fired the event once the loop finished correcting `Xp`/`XpToNextLevel`, the bar just sat there looking full — until the *next* kill's `AddXp` call happened to invoke `XpChanged` again with values that were, by then, already correct. `XpChanged` now fires exactly once per `AddXp` call, **after** the loop, so the bar always reflects the final post-rollover state immediately.
+
+### The level-up popup
+
+`LevelsGained` is a second event, distinct from `LevelUp`: `LevelUp` fires once per threshold crossed (so it can update the "Nv N" label to its final value one increment at a time), while `LevelsGained` fires **once per `AddXp` call** with the total levels crossed. `HUD.OnLevelsGained` spawns a floating `+N` label next to the level number — punch-scaled in via `Back`/`Out` easing, drifts up, fades — the same procedural-popup shape used everywhere else (`Enemy.SpawnScorePopup`/`SpawnDamageNumber`). A triple level-up therefore shows one `+3`, not three overlapping `+1`s in the same frame. The popup is added as a sibling of the stat panel, not a child of the level `Label` — parenting it inside the `VBoxContainer` would make the container try to lay it out as part of the stat list instead of letting it float freely over everything.
+
 ## Orbit Blades (Orbit Blade reward)
 
 - `OrbitCount` is the target number of blades (0–4, tier-determined — see [rewards.md](rewards.md)). `Player.RefreshOrbitBlades()` instantiates [`OrbitBlade.tscn`](../Scenes/Player/OrbitBlade.tscn) instances as children of the player until `_orbitBlades.Count == OrbitCount`, never removing any.
@@ -71,6 +82,7 @@ Each threshold crossed increments `GameManager._pendingLevelUps` instead of imme
 - **Damage ticks on an interval** (`HitInterval = 0.4s`, `Damage = 16` → 40 DPS per blade), driven by `GetOverlappingBodies()` in `_PhysicsProcess`. This replaced a `BodyEntered` hook, which fires only on *entry*: an enemy that stayed inside the blade's area took one hit and then nothing until the blade came all the way back around (~2.1s at `OrbitSpeed = 3`), i.e. roughly 3 DPS. The reward felt like it did nothing, and the fix was the tick rate at least as much as the damage number. Ticking also decouples DPS from orbit speed, so tuning one doesn't silently change the other.
 - The shove is directed **away from the player**, not away from the blade. Pushing off the blade itself would sometimes fling enemies *inward* past it, which is the opposite of what a defensive orbital is for. It's applied before `TakeDamage`, since that call can free the enemy (and spawns a Splitter's children from inside itself).
 - Enemies take knockback through `Enemy.ApplyKnockback`, which decays back to zero in `_PhysicsProcess` — the same shape as the player's own knockback. It's deliberately added *outside* the `EnemySpeedMultiplier`, so a Zona Lenta ultimate doesn't also weaken the shove: it's an impulse from your weapon, not part of the enemy's own movement.
+- `Enemy.ApplyKnockback` no-ops for `EnemyCategory.Boss` — bosses are immune to every knockback source (blades, bullets), since flinching around under a swarm of hits reads as weak rather than as a boss, and it was disrupting their own attack patterns.
 - `HasOrbitShield => OrbitCount > 0` is the public flag other systems (like the shop's "Owned" check) read.
 
 ## Companion (Drone reward)
@@ -78,6 +90,7 @@ Each threshold crossed increments `GameManager._pendingLevelUps` instead of imme
 - `CompanionStatPercent` (0–0.5, i.e. 0–50%) is the fraction of the player's *current* `FireRate`/`BulletDamage` the companion fires at. Buying a better tier raises this (never lowers it — `Max`).
 - Only **one** companion ever exists (`Player._companion`); the first Companion-type pickup instantiates [`Companion.tscn`](../Scenes/Player/Companion.tscn) as a child of the player at a fixed local offset `(-36, -36)` (so it just follows the player automatically, no tracking logic needed) and gives it a live reference (`Companion.Owner = this`).
 - [`Companion.cs`](../Scripts/Player/Companion.cs) re-reads `Owner.FireRate` / `Owner.BulletDamage` on every shot (not a frozen snapshot), so the companion's output scales up automatically as the player's own stats improve later in the run. It targets the nearest enemy exactly like the player does, independently.
+- **Facing**: same fix as the player's own triangle (see [Facing](#controls) above), just facing what it's shooting at instead of a movement direction — the drone doesn't move independently, so "direction" for it means "current target," not travel. `_PhysicsProcess` finds the nearest enemy every frame (`FindNearestEnemy()`, shared with `OnFireCooldownTimeout` so both read off the same target) and turns the `Visual` triangle toward it with the same exponential catch-up as the player (`FacingTurnRate = 16`) — running every frame rather than only at fire time keeps it tracking a moving target smoothly between shots instead of snapping to a new heading on each timeout. Holds its last facing when no enemy exists, same "nothing to reset to" reasoning as the player.
 
 ## Side Shot
 
@@ -87,15 +100,15 @@ Each threshold crossed increments `GameManager._pendingLevelUps` instead of imme
 
 ## Laser
 
-- `LaserLevel` (0–4, tier-determined, take-the-best-ever like Orbit Blade — see [rewards.md](rewards.md#take-the-best-ever-orbit-blade-drone-companion-laser)) drives a `Timer` (`_laserTimer`, lazily created by `EnsureLaserTimer` on first pickup) that periodically zaps enemies within `FireRange` — reusing the same range the auto-fire gun uses, and the same visible ring.
-- `LaserTiers` is a `(Interval, Damage, MaxTargets)` lookup array. Only **tier 1** caps how many enemies a single zap can hit (5) — higher tiers hit everything in range uncapped. `OnLaserTimeout` gathers every in-range enemy, and when the tier is capped, sorts by distance and keeps only the closest `MaxTargets` before applying damage — so a capped zap always prioritizes the nearest threats, not an arbitrary subset.
+- `LaserLevel` (0–4, tier-determined, take-the-best-ever like Orbit Blade — see [rewards.md](rewards.md#take-the-best-ever-orbit-blade-drone-companion-laser)) gates `TryFireLaser()`, polled every physics frame (not a repeating `Timer`) while `LaserLevel > 0` and `LaserCooldownFraction <= 0`. A Timer fires on its own fixed schedule regardless of whether anything's in range; polling instead means the laser goes off the instant a target enters range with the cooldown already clear, rather than waiting out a whole extra interval because the target showed up between two scheduled ticks.
+- `LaserTiers` is a `(Interval, Damage, MaxTargets)` lookup array — `Interval` now only sets how fast `LaserCooldownFraction` decays, not a Timer's `WaitTime`. Only **tier 1** caps how many enemies a single zap can hit (5) — higher tiers hit everything in range uncapped. `TryFireLaser` gathers every in-range enemy, and when the tier is capped, sorts by distance and keeps only the closest `MaxTargets` before applying damage — so a capped zap always prioritizes the nearest threats, not an arbitrary subset. It's a no-op (cooldown stays at 0, retried next frame) when nothing's in range.
 - Deals finite damage (`Enemy.TakeDamage`) to everything it hits, **including a Boss** — unlike the level-up nova, this isn't an instant-kill, so it doesn't need a Boss exclusion.
 - Each hit draws a brief fading magenta `Line2D` beam from the player to the enemy (`SpawnLaserBeam`), visually distinct from the nova's expanding ring.
 
 ## Missile (Misil)
 
-- `MissileLevel` (0–4, take-the-best-ever) drives `_missileTimer` on its own low cadence — 4.5s at tier 1 down to 2.6s at tier 4, deliberately slow because it trades uptime for area damage. `MissileTiers` holds `(Interval, Damage, Radius)`.
-- `OnMissileTimeout` targets the nearest enemy inside `FireRange` (via the shared `FindNearestEnemyInRange()`, so every auto-weapon respects the same ring) and no-ops when nothing's in range.
+- `MissileLevel` (0–4, take-the-best-ever) gates `TryFireMissile()`, polled every physics frame the same way `TryFireLaser` is (see [Laser](#laser) above) rather than a repeating `Timer` — `MissileCooldownFraction` decays on its own low cadence, 4.5s at tier 1 down to 2.6s at tier 4, deliberately slow because it trades uptime for area damage. `MissileTiers` holds `(Interval, Damage, Radius)`.
+- `TryFireMissile` targets the nearest enemy inside `FireRange` (via the shared `FindNearestEnemyInRange()`, so every auto-weapon respects the same ring) and no-ops (cooldown holds at 0, retried next frame) when nothing's in range.
 - **[`Missile.cs`](../Scripts/Projectile/Missile.cs) flies to a *point*, not a target.** `TargetPosition` is snapshotted at launch and never re-read, so a fast enemy can outrun it and the missile still detonates where it was aimed. That miss is the intended tradeoff for the blast, not a bug awaiting homing.
 - It detonates on whichever comes first: arriving at the point, touching an enemy, touching an obstacle (mask 10, same as a bullet), or a lifetime timeout as a safety net. An `_exploded` guard makes `Explode()` idempotent — `BodyEntered` can fire on the same frame an arrival already detonated, and a double blast would deal double damage.
 - The expanding blast ring is parented to the **Bullets container, not the missile**, because the missile frees itself on that same frame and would otherwise take the visual with it. Same trick as `Enemy.SpawnScorePopup`.
@@ -103,13 +116,36 @@ Each threshold crossed increments `GameManager._pendingLevelUps` instead of imme
 
 ## Burn (Incendiario)
 
-- `BurnLevel` (0–4, take-the-best-ever) sets `Bullet.BurnDps` / `Bullet.BurnDuration` in `FireInDirection`. It's a **modifier on your normal shots**, not a separate weapon — so Twin Shot and Side Shot lines all ignite, and a piercing bullet lights up everything it passes through for free.
+- `BurnLevel` (0–4, take-the-best-ever) is exposed as two read-only properties, `CurrentBurnDps` / `CurrentBurnDuration`, rather than each weapon keeping its own copy of the `BurnTiers` lookup. It's a **modifier applied by every source of player damage**, not a separate weapon of its own.
+- **Every weapon applies it**, each calling `Enemy.ApplyBurn` right alongside its own `TakeDamage`:
+  - Basic shots (`Player.FireInDirection`) — including Twin Shot and Side Shot lines, and a piercing bullet lights up everything it passes through for free.
+  - The Laser (`OnLaserTimeout`) — every enemy caught in a zap.
+  - Orbit Blades (`OrbitShield.DamageOverlappingEnemies`) — every 0.4s tick.
+  - Missiles (`Missile.Explode`) — everything caught in the blast radius.
+  - The Companion drone (`Companion.OnFireCooldownTimeout`) — at full DPS/duration, *not* scaled by `StatPercent` the way `Damage` is. Incendiario is a status the target catches, not a magnitude stat, so there's no "35% of the burn" to apply.
 - Enemy-side state (ticking, refresh-don't-stack, the orange tint) lives on `Enemy` — see [enemies.md](enemies.md#burn-incendiario).
-- **The Companion drone deliberately doesn't burn.** [`Companion.cs`](../Scripts/Player/Companion.cs) builds its own bullets and only sets `Damage`, leaving `BurnDps` at 0. The drone is explicitly a fraction of the player's power; full-strength burn would make each of its shots strictly better than one of yours.
+
+## Crit (Golpe Crítico)
+
+- `CritChance` (0–60%, additive + cap) and the roll itself are centralized in one method, `Player.ApplyCrit(int baseDamage, out bool isCrit)`, rather than each weapon re-rolling `_critRng` against `CritChance` on its own. It's a **modifier applied by every source of player damage**, same shape as Burn above.
+- **Every weapon calls it**, right where it would otherwise just use its own flat damage value:
+  - Basic shots (`Player.FireInDirection`) — rolled per bullet, not per volley, so a Twin/Side Shot spread can crit on some lines and not others.
+  - The Laser (`OnLaserTimeout`) — rolled per enemy hit per tick; a crit hit also tints that beam gold instead of magenta.
+  - Orbit Blades (`OrbitShield.DamageOverlappingEnemies`) — rolled every 0.4s tick, no visual tint (a per-tick flicker on the blade's own fixed colour would read as jitter, not feedback).
+  - Missiles (`OnMissileTimeout`) — rolled once at launch, same as `BurnDps`/`BurnDuration` being snapshotted then; a crit tints the whole missile gold.
+  - The Companion drone (`Companion.OnFireCooldownTimeout`) — rolled against the drone's own `StatPercent`-scaled damage, tinting that bullet gold on a crit same as the player's own.
+- `GetOffensivePower()`'s `critMult` term now scales `laserDps`, `missileDps`, and `orbitDps` in addition to `gunDps`, since all four can actually crit — otherwise a crit-heavy Laser/Blade build would under-report its power and dodge the [adaptive difficulty](difficulty-scaling.md#adaptive-difficulty-difficultybalancer) correction.
+- Deliberately **not** applied to the level-up nova's instant-kill burst or the Nova ultimate's blast damage — both are one-off utility effects, not weapons, matching the same boundary Burn draws.
 
 ## Ultimates
 
-- `EquippedUltimate` (nullable `UltimateKind`), `UltimateProgress`/`UltimateChargeTarget` (250), and `TriggerUltimate()` — full mechanics documented in [rewards.md](rewards.md#ultimates) since it's really a reward-system concern (shop-only acquisition, swap rules, Score-driven charging). The HUD's Ultimate button/bar (`HUD.cs`) is hidden until one is equipped and disabled until the bar is full.
+- `EquippedUltimate` (nullable `UltimateKind`), `UltimateCooldownRemaining`/`UltimateCooldownDuration`, and `TriggerUltimate()` — full mechanics documented in [rewards.md](rewards.md#ultimates) since it's really a reward-system concern (shop-only acquisition, swap rules, the round-scaled cooldown curve). The HUD's Ultimate button/bar (`HUD.cs`) is hidden until one is equipped and disabled until the cooldown clears, showing a `{remaining:0.0}s` countdown on the button meanwhile.
+
+## Cooldown icons (HUD)
+
+- `HUD.cs`'s `CooldownIcons` row sits beside the top-left stats panel — repositioned every frame off `TopBarPanel`'s live size/position rather than a fixed offset, since that panel's width breathes with its own text. One `CooldownIcon` (`Scripts/UI/CooldownIcon.cs`) per timed ability — Laser, Missile, Shield Regen, Ultimate — each hidden until its ability is actually owned/equipped.
+- `Player` exposes a `*CooldownFraction` (0–1) per ability. `ShieldRegenCooldownFraction` is computed live from `_shieldRegenTimer`'s `TimeLeft / WaitTime` (0 when the timer isn't running). `LaserCooldownFraction`/`MissileCooldownFraction` are plain fields, not read off a `Timer` at all — see [Laser](#laser)/[Missile](#missile-misil) above — set to `1` only from `TryFireLaser`/`TryFireMissile` on a tick that actually found a target, and decayed toward `0` every physics frame, holding at exactly `0` until the next real hit resets them. The Ultimate icon reads `UltimateCooldownRemaining / UltimateCooldownDuration` directly, since that pair *is* already a 0–1-shaped fraction (1 = just used, 0 = ready) — no translation needed the way the old Score-charge meter required.
+- `CooldownIcon` draws its own clock: a filled circle in the ability's colour, with a dark pie sector covering the fraction still on cooldown, swept from 12 o'clock. No texture — plain `_Draw()`/`DrawPolygon`, same procedural-only approach as the rest of the game's visuals. 1 = just used (fully covered), 0 = ready (fully clear).
 
 ## Stacking
 

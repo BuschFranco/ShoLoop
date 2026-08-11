@@ -62,7 +62,19 @@ Grunts are always available. `EnemySpawner.ChooseEnemyScene()` rolls sequentiall
 
 `Enemy._Ready()` only builds a health bar (`CreateHealthBar`) when `Category == Special || Category == Boss` — Common/Rare/Hidden enemies die fast enough that a bar would just be noise. Two stacked `Polygon2D` rectangles (dark background + red fill, both plain procedural geometry, no texture) sit above the enemy at `HealthBarOffset` ([Export], tuned per-scene to clear each enemy's own visual radius — e.g. `-18` for the small Speedy, `-52` for the big Boss); `UpdateHealthBar()` resizes the fill's polygon width proportionally to `CurrentHp / MaxHp` on every `TakeDamage` call. A Splitter's children inherit their parent's `HealthBarOffset` via `Split()` (along with `Category`) so they keep a health bar too.
 
-Every hit on a health-bar enemy also spawns a floating red `-10`-style number (`SpawnDamageNumber`, same drift-up-and-fade pattern as the score popup) showing the actual HP lost — clamped to whatever HP the enemy actually had left, so an overkill hit shows the real remaining HP rather than the raw (possibly enormous) damage number.
+Every hit on **every** enemy — not just the ones with a health bar — spawns a floating `-10`-style number (`SpawnDamageNumber`, same drift-up-and-fade pattern as the score popup) showing the actual HP lost, clamped to whatever HP the enemy actually had left so an overkill hit shows the real remaining HP rather than the raw (possibly enormous) damage number. This used to be gated on the enemy having a health bar (i.e. Special/Boss only), which quietly meant a Common/Rare kill gave no per-hit feedback at all — worth calling out since it also used to get mistaken for a completely different popup, see the colour note below.
+
+**Colour is deliberately outside the pink family**: `Palette.DamageNumber` is a hot orange (`#ff7a1a`), and `Palette.ScorePopup` (the `+N` that shows on a kill) was moved onto `Player`'s own cyan. They used to both be bright pinks (`ff6b8a` vs `ffa8f0`) — different hues on paper, but once the arena's bloom washes out saturation, a `-5` over an enemy and a `+5` reward popup read as the same kind of event, and specifically as *the player* losing something rather than the enemy. See [visuals.md](visuals.md) for the rest of the palette.
+
+## World pickups (Heart / Shield drops)
+
+`Enemy.TryDropPickup()` rolls two independent chances on **every** kill, split generations included (same rule Coins already follows) — see [`HeartPickup.cs`](../Scripts/Pickup/HeartPickup.cs) / [`ShieldPickup.cs`](../Scripts/Pickup/ShieldPickup.cs):
+
+- **1% (`HeartDropChance`)**: spawns a `HeartPickup` — walking into it calls `Player.AddLife(1)`, healing 1 life capped at `MaxLives`. Distinct from the Corazón Legendario reward, which raises `MaxLives` itself; this is a mid-run top-up only.
+- **1% (`ShieldDropChance`)**: spawns a `ShieldPickup`, but only rolled at all when `Player.MaxShieldCharges > 0` (i.e. the player has actually bought a Barrier) — otherwise it'd drop into the world with nothing to do. Walking into it calls `Player.AddShieldCharge()`, the same method the passive Regeneración timer uses.
+- **From round 11 on (`LateDropRound`), both chances drop to 0.15% (`LateDropChance`)** — by then the player has usually stacked enough Barrier/lives sources that the early rate would flood the field with pickups.
+- Both scenes are loaded once via `GD.Load<PackedScene>` (static fields on `Enemy`) rather than `[Export]`, so every enemy scene picks them up automatically without hand-wiring the reference into all eight enemy `.tscn` files.
+- Both pulse gently and auto-expire after 10s (fading out over the last second) if never collected, and are added to the `pickups` group so `GameManager.EndRound()` clears any still on the field — same "next round starts clean" rule already applied to enemies and their bullets.
 
 ## Burn (Incendiario)
 
@@ -70,7 +82,7 @@ Damage-over-time applied by the player's bullets (see [player.md](player.md#burn
 
 - **Refreshes rather than stacks** — a second hit takes `Max` of both the DPS and the remaining duration. Stacking separate instances would make sustained fire scale burn quadratically with fire rate, dwarfing every other damage source almost immediately.
 - Ticks every `BurnTickInterval` (0.25s), dealing `dps × accumulated` so the total is correct regardless of framerate.
-- Damage goes through `TakeDamage(damage, showFeedback: false)`. That flag exists for exactly this: at 4 ticks/second the white hit flash strobes and the floating damage numbers bury everything else on screen. Everything else calls the 1-arg form and keeps its feedback.
+- Damage goes through `TakeDamage(damage, showFlash: false)` — only the flash+scale-punch is suppressed, not the floating damage number. At 4 ticks/second the flash would strobe rather than read as a hit landing, but the number is exactly what tells you Incendiario is doing anything, so it stays on. (`TakeDamage`'s two flags, `showFlash` and `showNumber`, used to be a single `showFeedback` bool; burn passing that as `false` silently meant burn ticks showed no number at all, which read as burn not working.) Everything else calls the 3-arg form's defaults and keeps both.
 - Tinted via **`Modulate`, not the `Visual`'s `Color`** — the [hit reaction](#hit-reaction) below owns `Color` and the two would fight over it. `Modulate` multiplies on top, so a burning enemy still flashes white when shot.
 - `TickBurn` is called **before** movement in `_PhysicsProcess`, with an early `return` if it killed the enemy, since `TakeDamage` can `QueueFree` from inside it.
 

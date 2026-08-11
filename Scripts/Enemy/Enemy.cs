@@ -18,9 +18,11 @@ public partial class Enemy : CharacterBody2D
     [Export] public float SplitHpScale = 0.5f;
     [Export] public float SplitVisualScale = 0.75f;
 
-    // Only Boss/Special enemies show a health bar + floating damage numbers — commons/rares die
-    // fast enough that it'd just be visual noise. Offset tuned per-scene to roughly clear each
-    // enemy's own visual radius (bigger enemies need a bigger offset).
+    // Only Boss/Special enemies get an actual health bar — commons/rares die fast enough that a
+    // permanent bar would just be visual noise. This offset does double duty though: it's also
+    // where the floating damage number spawns on *every* enemy, health bar or not, so it stays
+    // exported (not folded into CreateHealthBar) and tuned per-scene to roughly clear each enemy's
+    // own visual radius (bigger enemies need a bigger offset).
     [Export] public float HealthBarOffset = -30f;
 
     // "Magnet-like" repulsion radius — any other enemy closer than this gets pushed directly away
@@ -60,6 +62,9 @@ public partial class Enemy : CharacterBody2D
 
     public void ApplyKnockback(Vector2 impulse)
     {
+        // Bosses hold their ground — getting shoved around by every blade/bullet hit reads as
+        // flinching rather than as a boss, and it disrupts their own attack patterns.
+        if (Category == EnemyCategory.Boss) return;
         _knockbackVelocity = impulse;
     }
 
@@ -107,9 +112,9 @@ public partial class Enemy : CharacterBody2D
         int damage = Mathf.RoundToInt(_burnDps * _burnTickAccumulator);
         _burnTickAccumulator = 0f;
 
-        // showFeedback: false — at 4 ticks/second the flash would strobe and the damage numbers
-        // would bury everything else on screen.
-        if (damage > 0) TakeDamage(damage, showFeedback: false);
+        // showFlash: false only — the flash+punch would strobe at 4 ticks/second, but the number
+        // is exactly what tells the player Incendiario is doing anything, so it stays on.
+        if (damage > 0) TakeDamage(damage, showFlash: false);
     }
 
     public int CurrentHp;
@@ -120,6 +125,20 @@ public partial class Enemy : CharacterBody2D
 
     private Node2D _player;
     private readonly Random _rng = new();
+
+    // World drops, rolled independently on every kill. Loaded once via GD.Load rather than an
+    // [Export] field so every enemy scene picks these up automatically, without hand-wiring the
+    // reference into all eight enemy .tscn files.
+    private static readonly PackedScene HeartPickupScene = GD.Load<PackedScene>("res://Scenes/Pickup/HeartPickup.tscn");
+    private static readonly PackedScene ShieldPickupScene = GD.Load<PackedScene>("res://Scenes/Pickup/ShieldPickup.tscn");
+    private const float HeartDropChance = 0.01f;
+    private const float ShieldDropChance = 0.01f;
+
+    // From round 11 on, both drops fall to a quarter of their early-game rate — by then the
+    // player has usually accumulated enough Barrier/lives sources that the early rate would flood
+    // the field with pickups.
+    private const int LateDropRound = 11;
+    private const float LateDropChance = 0.0015f;
     private Polygon2D _healthBarFill;
     private const float HealthBarWidth = 30f;
     private const float HealthBarHeight = 4f;
@@ -320,12 +339,20 @@ public partial class Enemy : CharacterBody2D
         return push.LimitLength(1f) * SeparationStrength;
     }
 
-    // showFeedback defaults to true so every ordinary damage source (bullets, laser, blades, the
-    // nova, ultimates) keeps behaving exactly as before. Burn passes false: at 4 ticks/second the
-    // flash strobes and the floating numbers bury everything else on screen.
-    public void TakeDamage(int amount, bool showFeedback = true)
+    // Split into two independent flags rather than one showFeedback bool: burn wants the damage
+    // number (it's real, useful information — how else would you know Incendiario is doing
+    // anything) but NOT the white flash + scale punch, which at 4 ticks/second would strobe rather
+    // than read as a hit landing. Burn was passing showFeedback: false for both together, which
+    // silently meant burn damage never showed a number at all.
+    //
+    // The damage number shows on every enemy, not just Special/Boss — that gate used to exist
+    // because it doubled as the health bar's own reveal condition, but "does this enemy have a
+    // health bar" and "should this hit show a number" are different questions, and leaving
+    // Common/Rare hits silent was the main reason damage feedback read as invisible or, worse,
+    // got mistaken for something happening to the player's own stats instead of the enemy's.
+    public void TakeDamage(int amount, bool showFlash = true, bool showNumber = true)
     {
-        if (showFeedback && _healthBarFill != null)
+        if (showNumber)
         {
             int actualDamage = Mathf.Min(amount, Mathf.Max(CurrentHp, 0));
             if (actualDamage > 0)
@@ -352,9 +379,10 @@ public partial class Enemy : CharacterBody2D
             if (xpToGive > 0)
                 SpawnScorePopup(xpToGive);
 
+            TryDropPickup();
             QueueFree();
         }
-        else if (showFeedback)
+        else if (showFlash)
         {
             PlayHitFeedback();
         }
@@ -402,6 +430,37 @@ public partial class Enemy : CharacterBody2D
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
         tween.TweenProperty(label, "modulate:a", 0f, 0.6f).SetDelay(0.2f);
         tween.Chain().TweenCallback(Callable.From(() => label.QueueFree()));
+    }
+
+    // Rolled independently for every kill, split generations included (same as Coins already
+    // paying out on every generation) — simplest reading of "enemies drop this", not just bosses
+    // or only final-generation kills.
+    private void TryDropPickup()
+    {
+        var parent = GetParent();
+        if (parent == null) return;
+
+        bool isLateRound = (GameManager.Instance?.RoundNumber ?? 1) >= LateDropRound;
+        float heartChance = isLateRound ? LateDropChance : HeartDropChance;
+        float shieldChance = isLateRound ? LateDropChance : ShieldDropChance;
+
+        if (HeartPickupScene != null && _rng.NextDouble() < heartChance)
+        {
+            var heart = HeartPickupScene.Instantiate<Node2D>();
+            parent.AddChild(heart);
+            heart.GlobalPosition = GlobalPosition;
+        }
+
+        // Shield drops only matter to a player who's actually bought a Barrier — otherwise it'd
+        // land in the world with nothing to do.
+        var player = GetTree().GetFirstNodeInGroup("player") as Player;
+        if (ShieldPickupScene != null && player != null && player.MaxShieldCharges > 0
+            && _rng.NextDouble() < shieldChance)
+        {
+            var shield = ShieldPickupScene.Instantiate<Node2D>();
+            parent.AddChild(shield);
+            shield.GlobalPosition = GlobalPosition;
+        }
     }
 
     private void Split()

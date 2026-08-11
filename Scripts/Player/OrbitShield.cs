@@ -63,7 +63,14 @@ public partial class OrbitShield : Area2D
             if (away != Vector2.Zero)
                 enemy.ApplyKnockback(away.Normalized() * KnockbackForce);
 
-            enemy.TakeDamage(Damage);
+            // Incendiario reward: blades burn on every tick just like every other weapon does.
+            if (_owner != null && _owner.CurrentBurnDps > 0f)
+                enemy.ApplyBurn(_owner.CurrentBurnDps, _owner.CurrentBurnDuration);
+
+            // Golpe Crítico reward: blades roll crit like every other weapon. No visual tint here —
+            // a per-tick flicker on the blade's own fixed colour would read as jitter, not feedback.
+            int finalDamage = _owner != null ? _owner.ApplyCrit(Damage, out _) : Damage;
+            enemy.TakeDamage(finalDamage);
         }
     }
 }

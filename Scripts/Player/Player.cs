@@ -69,12 +69,17 @@ public partial class Player : CharacterBody2D
     public float XpMultiplier => 1f + XpBonusPercent / 100f;
 
     public UltimateKind? EquippedUltimate = null;
-    public float UltimateProgress = 0f;
-    public const float UltimateChargeTarget = 250f;
+
+    // Time-based cooldown, not a Score-driven charge meter — usable immediately on first pickup
+    // (starts at 0, i.e. ready), then a flat wait after every use. The wait itself shrinks with
+    // RoundNumber: 10s at round 1 down to 3.5s by round 11, same RoundCurve shape every other
+    // round-indexed knob in the game uses (see difficulty-scaling.md).
+    public float UltimateCooldownRemaining { get; private set; } = 0f;
+    public float UltimateCooldownDuration => UltimateCooldownCurve.Evaluate(GameManager.Instance?.RoundNumber ?? 1);
+    private static readonly RoundCurve UltimateCooldownCurve = new(10f, -0.65f, 3.5f, 10f);
 
     public event Action<int, int> LivesChanged;
     public event Action<int, int> ShieldChanged;
-    public event Action<float, float> UltimateChargeChanged;
 
     // Level → (fire interval, damage, max targets per zap). Index 0 = tier 1 (Common) ... index 3
     // = tier 4 (Legendary). Only tier 1 caps how many enemies a single zap can hit — higher tiers
@@ -97,7 +102,12 @@ public partial class Player : CharacterBody2D
         (2.6f, 110, 120f),
     };
 
-    // Level → (damage per second, duration). Applied by the player's own bullets on hit.
+    // Level → (damage per second, duration). Incendiario is a modifier applied by every source of
+    // player damage — basic shots, the Laser, Orbit Blades, and Missiles all read these two
+    // properties rather than each keeping their own copy of the tier lookup.
+    public float CurrentBurnDps => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Dps : 0f;
+    public float CurrentBurnDuration => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Duration : 0f;
+
     private static readonly (float Dps, float Duration)[] BurnTiers =
     {
         (6f, 3.0f),
@@ -149,9 +159,20 @@ public partial class Player : CharacterBody2D
     private float _baseFireRange;
     private Timer _shieldRegenTimer;
     private Line2D _fireRangeRing;
-    private Timer _laserTimer;
-    private Timer _missileTimer;
     private Timer _frenzyTimer;
+
+    // Read by HUD's cooldown icons. 1 = just fired at an enemy (icon fully covered), decaying
+    // to 0 and HOLDING there. Laser/Missile aren't driven by a repeating Timer at all (see
+    // TryFireLaser/TryFireMissile, polled every physics frame instead) — a Timer fires on its own
+    // schedule regardless of whether anything is in range, which both made the icon flicker
+    // uncovered for a single frame on every empty retry, AND meant an enemy walking into range
+    // right after an empty tick had to wait out a whole extra interval before actually firing.
+    public float LaserCooldownFraction { get; private set; }
+    public float MissileCooldownFraction { get; private set; }
+
+    public float ShieldRegenCooldownFraction =>
+        _shieldRegenTimer == null || _shieldRegenTimer.IsStopped() || _shieldRegenTimer.WaitTime <= 0f
+            ? 0f : (float)(_shieldRegenTimer.TimeLeft / _shieldRegenTimer.WaitTime);
 
     public override void _Ready()
     {
@@ -247,6 +268,27 @@ public partial class Player : CharacterBody2D
         _moveVelocity = _moveVelocity.MoveToward(targetVelocity, rate * (float)delta);
 
         _knockbackVelocity = _knockbackVelocity.MoveToward(Vector2.Zero, KnockbackDecay * (float)delta);
+
+        // Laser/Missile fire from here directly (no repeating Timer) — see the property comments
+        // on LaserCooldownFraction above for why. Decay first so a tick that just cleared the
+        // cooldown can also fire immediately in the same frame, rather than firing next frame.
+        if (LaserLevel > 0)
+        {
+            if (LaserCooldownFraction > 0f)
+                LaserCooldownFraction = Mathf.Max(0f, LaserCooldownFraction - (float)delta / GetLaserInterval());
+            if (LaserCooldownFraction <= 0f)
+                TryFireLaser();
+        }
+        if (MissileLevel > 0)
+        {
+            if (MissileCooldownFraction > 0f)
+                MissileCooldownFraction = Mathf.Max(0f, MissileCooldownFraction - (float)delta / MissileTiers[MissileLevel - 1].Interval);
+            if (MissileCooldownFraction <= 0f)
+                TryFireMissile();
+        }
+
+        if (UltimateCooldownRemaining > 0f)
+            UltimateCooldownRemaining = Mathf.Max(0f, UltimateCooldownRemaining - (float)delta);
 
         Velocity = _moveVelocity + _knockbackVelocity;
         MoveAndSlide();
@@ -374,6 +416,15 @@ public partial class Player : CharacterBody2D
         LivesChanged?.Invoke(CurrentLives, MaxLives);
     }
 
+    // Heals 1 life, capped at MaxLives — used by the Heart pickup an enemy can drop. A mid-run
+    // top-up, distinct from the Corazón Legendario reward which raises MaxLives itself.
+    public void AddLife(int amount = 1)
+    {
+        if (CurrentLives >= MaxLives) return;
+        CurrentLives = Mathf.Min(CurrentLives + amount, MaxLives);
+        LivesChanged?.Invoke(CurrentLives, MaxLives);
+    }
+
     // Shield charges are consumable and never regenerate during a round, but a new round tops them
     // back up to full — the same "every round starts fresh" rule lives already follow. No-ops for a
     // player who's never bought a Barrier, so it can be called unconditionally on round start.
@@ -436,18 +487,6 @@ public partial class Player : CharacterBody2D
     // down too if those stats were ever reduced.
     private const int LaserStatCoupledMinLevel = 3;
 
-    private void EnsureLaserTimer()
-    {
-        if (_laserTimer == null)
-        {
-            _laserTimer = new Timer();
-            AddChild(_laserTimer);
-            _laserTimer.Timeout += OnLaserTimeout;
-        }
-        _laserTimer.WaitTime = GetLaserInterval();
-        _laserTimer.Start();
-    }
-
     private float GetLaserInterval()
     {
         float baseInterval = LaserTiers[LaserLevel - 1].Interval;
@@ -462,7 +501,12 @@ public partial class Player : CharacterBody2D
         return baseDamage * (BulletDamage / _baseBulletDamage);
     }
 
-    private void OnLaserTimeout()
+    // Called every physics frame while LaserLevel > 0 and the cooldown has fully cleared — NOT a
+    // repeating Timer. A Timer fires on its own schedule regardless of whether a target is in
+    // range, so an enemy walking into range right after an empty tick had to wait out a whole
+    // extra interval before the laser could actually go off. Polling every frame means it fires
+    // the instant both conditions are true, with no dead time in between.
+    private void TryFireLaser()
     {
         float damage = GetLaserDamage();
         int maxTargets = LaserTiers[LaserLevel - 1].MaxTargets;
@@ -483,38 +527,30 @@ public partial class Player : CharacterBody2D
             inRange.RemoveRange(maxTargets, inRange.Count - maxTargets);
         }
 
+        if (inRange.Count > 0)
+            LaserCooldownFraction = 1f;
+
         foreach (var enemy in inRange)
         {
-            enemy.TakeDamage(Mathf.RoundToInt(damage));
-            SpawnLaserBeam(enemy.GlobalPosition);
-        }
+            if (CurrentBurnDps > 0f)
+                enemy.ApplyBurn(CurrentBurnDps, CurrentBurnDuration);
 
-        // Stat-coupled tiers re-read the player's current FireRate every tick so the interval
-        // keeps tracking it live (a fixed WaitTime set once at pickup time would go stale the
-        // moment FireRate changed again).
-        if (LaserLevel >= LaserStatCoupledMinLevel)
-            _laserTimer.WaitTime = GetLaserInterval();
+            int finalDamage = ApplyCrit(Mathf.RoundToInt(damage), out bool isCrit);
+            enemy.TakeDamage(finalDamage);
+            SpawnLaserBeam(enemy.GlobalPosition, isCrit);
+        }
     }
 
-    private void EnsureMissileTimer()
-    {
-        if (_missileTimer == null)
-        {
-            _missileTimer = new Timer();
-            AddChild(_missileTimer);
-            _missileTimer.Timeout += OnMissileTimeout;
-        }
-        _missileTimer.WaitTime = MissileTiers[MissileLevel - 1].Interval;
-        _missileTimer.Start();
-    }
-
-    private void OnMissileTimeout()
+    // Called every physics frame while MissileLevel > 0 and the cooldown has fully cleared — same
+    // reasoning as TryFireLaser above.
+    private void TryFireMissile()
     {
         if (MissileScene == null || _bulletsContainer == null) return;
 
         var target = FindNearestEnemyInRange();
-        if (target == null) return;   // nothing to shoot at; the timer just ticks again
+        if (target == null) return;   // nothing to shoot at; cooldown stays at 0, retried next frame
 
+        MissileCooldownFraction = 1f;
         var (_, damage, radius) = MissileTiers[MissileLevel - 1];
 
         var missile = MissileScene.Instantiate<Missile>();
@@ -523,8 +559,11 @@ public partial class Player : CharacterBody2D
         // Snapshot of where the target is *now*. Missile.cs never re-reads it, which is what makes
         // the shot dodgeable rather than homing.
         missile.TargetPosition = target.GlobalPosition;
-        missile.Damage = damage;
+        missile.Damage = ApplyCrit(damage, out bool isCrit);
+        if (isCrit) missile.Modulate = Palette.CritBullet;
         missile.ExplosionRadius = radius;
+        missile.BurnDps = CurrentBurnDps;
+        missile.BurnDuration = CurrentBurnDuration;
 
         _bulletsContainer.AddChild(missile);
     }
@@ -550,13 +589,13 @@ public partial class Player : CharacterBody2D
         return nearestDist <= FireRange * FireRange ? nearest : null;
     }
 
-    private void SpawnLaserBeam(Vector2 targetGlobalPos)
+    private void SpawnLaserBeam(Vector2 targetGlobalPos, bool isCrit = false)
     {
         var beam = new Line2D();
         beam.AddPoint(Vector2.Zero);
         beam.AddPoint(ToLocal(targetGlobalPos));
         beam.Width = 3f;
-        beam.DefaultColor = Palette.LaserBeam;
+        beam.DefaultColor = isCrit ? Palette.CritBullet : Palette.LaserBeam;
         AddChild(beam);
 
         var tween = beam.CreateTween();
@@ -594,7 +633,7 @@ public partial class Player : CharacterBody2D
         float pierceMult = 1f + BulletPierce * 0.5f;   // extra enemies hit per shot, discounted
         float gunDps = BulletDamage * FireRate * shotsPerVolley * critMult * pierceMult;
 
-        float laserDps = LaserLevel > 0 ? GetLaserDamage() / GetLaserInterval() : 0f;
+        float laserDps = LaserLevel > 0 ? GetLaserDamage() / GetLaserInterval() * critMult : 0f;
 
         // Both AoE, so their nominal single-target DPS understates them — a modest multiplier keeps
         // a missile/burn build from reading as weaker than it plays and slipping past the balancer.
@@ -602,13 +641,16 @@ public partial class Player : CharacterBody2D
         if (MissileLevel > 0)
         {
             var (interval, damage, _) = MissileTiers[MissileLevel - 1];
-            missileDps = damage / interval * 1.5f;
+            missileDps = damage / interval * 1.5f * critMult;
         }
 
         // Sustained fire keeps burn permanently refreshed, so its DPS is effectively always on.
-        float burnDps = BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Dps : 0f;
+        // Applies once here even though it's now layered onto every weapon (bullets/laser/blades/
+        // missiles) — modeling per-weapon burn uptime precisely isn't worth the complexity for an
+        // estimate that only needs to catch order-of-magnitude runaway builds.
+        float burnDps = CurrentBurnDps;
 
-        float orbitDps = OrbitCount * OrbitBladeDamage * OrbitHitsPerSecondEstimate;
+        float orbitDps = OrbitCount * OrbitBladeDamage * OrbitHitsPerSecondEstimate * critMult;
 
         // The companion re-derives its own output from the player's live stats, so it's a flat
         // percentage bonus on top of everything rather than its own independent term.
@@ -620,19 +662,9 @@ public partial class Player : CharacterBody2D
     // blade so the power estimate still works before any blade has been instantiated.
     private const int OrbitBladeDamage = 7;
 
-    // Called by GameManager.AddScore whenever Score goes up — Score is synced 1:1 with XP, so
-    // this is what fills the Ultimate meter. Only accumulates once an Ultimate is actually
-    // equipped; a bare Score gain with nothing equipped does nothing here.
-    public void AddUltimateProgress(int amount)
-    {
-        if (EquippedUltimate == null) return;
-        UltimateProgress = Mathf.Min(UltimateProgress + amount, UltimateChargeTarget);
-        UltimateChargeChanged?.Invoke(UltimateProgress, UltimateChargeTarget);
-    }
-
     public void TriggerUltimate()
     {
-        if (EquippedUltimate == null || UltimateProgress < UltimateChargeTarget) return;
+        if (EquippedUltimate == null || UltimateCooldownRemaining > 0f) return;
 
         switch (EquippedUltimate.Value)
         {
@@ -647,8 +679,7 @@ public partial class Player : CharacterBody2D
                 break;
         }
 
-        UltimateProgress = 0f;
-        UltimateChargeChanged?.Invoke(UltimateProgress, UltimateChargeTarget);
+        UltimateCooldownRemaining = UltimateCooldownDuration;
     }
 
     private const float UltimateNovaRadius = 500f;
@@ -775,6 +806,15 @@ public partial class Player : CharacterBody2D
     private readonly Random _critRng = new();
     private const float CritMultiplier = 2f;
 
+    // Rolled per hit, not per volley/tick — same reasoning as burn being applied per hit rather
+    // than per pickup. Shared by every weapon (bullets, laser, blades, missiles, the drone) so a
+    // Crítico build feels like it crits everywhere, not just on the basic gun.
+    public int ApplyCrit(int baseDamage, out bool isCrit)
+    {
+        isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
+        return isCrit ? Mathf.RoundToInt(baseDamage * CritMultiplier) : baseDamage;
+    }
+
     private void FireInDirection(Vector2 dir, Vector2 positionOffset = default)
     {
         if (BulletScene == null || _bulletsContainer == null) return;
@@ -786,17 +826,12 @@ public partial class Player : CharacterBody2D
         bullet.Pierce = BulletPierce;
         bullet.Knockback = BulletKnockback;
 
-        if (BurnLevel > 0)
-        {
-            var (burnDps, burnDuration) = BurnTiers[BurnLevel - 1];
-            bullet.BurnDps = burnDps;
-            bullet.BurnDuration = burnDuration;
-        }
+        bullet.BurnDps = CurrentBurnDps;
+        bullet.BurnDuration = CurrentBurnDuration;
 
         // Rolled per bullet, not per volley, so a Twin/Side Shot spread can crit on some lines and
         // not others — more visible feedback than an all-or-nothing volley.
-        bool isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
-        bullet.Damage = isCrit ? Mathf.RoundToInt(BulletDamage * CritMultiplier) : BulletDamage;
+        bullet.Damage = ApplyCrit(BulletDamage, out bool isCrit);
         if (isCrit) bullet.Modulate = Palette.CritBullet;
 
         _bulletsContainer.AddChild(bullet);
@@ -846,19 +881,16 @@ public partial class Player : CharacterBody2D
                 break;
             case UpgradeType.Laser:
                 LaserLevel = Mathf.Max(LaserLevel, (int)upgrade.Value);
-                EnsureLaserTimer();
                 break;
             case UpgradeType.Missile:
                 MissileLevel = Mathf.Max(MissileLevel, (int)upgrade.Value);
-                EnsureMissileTimer();
                 break;
             case UpgradeType.Burn:
                 BurnLevel = Mathf.Max(BurnLevel, (int)upgrade.Value);
                 break;
             case UpgradeType.Ultimate:
                 EquippedUltimate = upgrade.Ultimate;
-                UltimateProgress = 0f;
-                UltimateChargeChanged?.Invoke(UltimateProgress, UltimateChargeTarget);
+                UltimateCooldownRemaining = 0f;
                 break;
 
             // Counts and percentages accumulate flatly up to a cap (the SideShot model) — tier
@@ -908,6 +940,14 @@ public partial class Player : CharacterBody2D
     }
 
     private void OnShieldRegenTimeout()
+    {
+        AddShieldCharge();
+    }
+
+    // Adds one shield charge, capped at MaxShieldCharges. No-ops for a player with no Barrier
+    // (MaxShieldCharges == 0). Shared by the passive Regeneración timer above and the Shield
+    // pickup an enemy can drop.
+    public void AddShieldCharge()
     {
         if (MaxShieldCharges <= 0 || CurrentShieldCharges >= MaxShieldCharges) return;
 
