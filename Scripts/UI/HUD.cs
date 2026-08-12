@@ -19,6 +19,8 @@ public partial class HUD : Control
     private Label _countdownLabel;
     private Player _player;
     private PanelContainer _topBarPanel;
+    private int _lastPulsedSecond = -1;
+    private const int TimerPulseThreshold = 5;
     private Control _cooldownIcons;
     private CooldownIcon _laserIcon;
     private CooldownIcon _missileIcon;
@@ -28,7 +30,7 @@ public partial class HUD : Control
     public override void _Ready()
     {
         _roundLabel = GetNode<Label>("TopBarPanel/TopBar/RoundLabel");
-        _roundTimerLabel = GetNode<Label>("TopBarPanel/TopBar/RoundTimerLabel");
+        _roundTimerLabel = GetNode<Label>("RoundTimerLabel");
         _levelLabel = GetNode<Label>("TopBarPanel/TopBar/LevelLabel");
         _livesLabel = GetNode<Label>("TopBarPanel/TopBar/LivesRow/LivesLabel");
         _heartIcons = new[]
@@ -150,6 +152,11 @@ public partial class HUD : Control
         // own width breathes with its text (see above) — a fixed offset would drift away from or
         // overlap the panel as "Ronda 9" becomes "Ronda 10".
         _cooldownIcons.Position = _topBarPanel.Position + new Vector2(_topBarPanel.Size.X + 12f, 0f);
+
+        // Same reasoning, but pinned below the panel's bottom edge instead of its right — the
+        // panel's height also breathes (e.g. the Shield row only appears once you own a Barrier).
+        _roundTimerLabel.Position = _topBarPanel.Position + new Vector2(0f, _topBarPanel.Size.Y + 10f);
+
         UpdateCooldownIcons();
         UpdateUltimateUi();
 
@@ -161,6 +168,7 @@ public partial class HUD : Control
             _countdownLabel.Visible = true;
             _countdownLabel.Text = Mathf.CeilToInt(GameManager.Instance.RoundStartTimeRemaining).ToString();
             _roundTimerLabel.Text = "Preparate...";
+            ResetRoundTimerLook();
             return;
         }
 
@@ -169,11 +177,48 @@ public partial class HUD : Control
         if (GameManager.Instance.IsBossRound)
         {
             _roundTimerLabel.Text = "¡JEFE!";
+            ResetRoundTimerLook();
             return;
         }
 
         int secondsLeft = Mathf.CeilToInt(GameManager.Instance.RoundTimeRemaining);
         _roundTimerLabel.Text = $"{secondsLeft / 60}:{secondsLeft % 60:D2}";
+
+        // The countdown used to be buried at font_size 15 inside the corner stat list — easy to
+        // miss even though it's arguably the most time-pressured number on screen. Pulsing on
+        // every one of the last 5 seconds (rather than just turning red once) is what actually
+        // catches the eye at a glance without having to read the number.
+        bool urgent = secondsLeft > 0 && secondsLeft <= TimerPulseThreshold;
+        _roundTimerLabel.AddThemeColorOverride("font_color", urgent ? Palette.Warning : new Color(0.85f, 0.9f, 0.95f));
+
+        if (urgent && secondsLeft != _lastPulsedSecond)
+        {
+            _lastPulsedSecond = secondsLeft;
+            PulseRoundTimer();
+        }
+        else if (!urgent)
+        {
+            _lastPulsedSecond = -1;
+        }
+    }
+
+    private Tween _roundTimerPulseTween;
+
+    private void PulseRoundTimer()
+    {
+        _roundTimerPulseTween?.Kill();
+        _roundTimerLabel.Scale = Vector2.One * 1.5f;
+        _roundTimerPulseTween = _roundTimerLabel.CreateTween();
+        _roundTimerPulseTween.TweenProperty(_roundTimerLabel, "scale", Vector2.One, 0.35)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+    }
+
+    private void ResetRoundTimerLook()
+    {
+        _lastPulsedSecond = -1;
+        _roundTimerPulseTween?.Kill();
+        _roundTimerLabel.Scale = Vector2.One;
+        _roundTimerLabel.AddThemeColorOverride("font_color", new Color(0.85f, 0.9f, 0.95f));
     }
 
     private void UpdateCooldownIcons()

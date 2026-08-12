@@ -13,7 +13,6 @@ namespace ShooterLoop;
 public partial class CameraRig : Camera2D
 {
     private Node2D _player;
-    private bool _limitsApplied;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -23,18 +22,13 @@ public partial class CameraRig : Camera2D
             if (_player == null) return;
         }
 
-        // Camera limits are derived from the player's own ArenaHalfExtents rather than duplicated
-        // in the scene file, so the playfield size stays a single number to change.
-        if (!_limitsApplied && _player is Player player)
-        {
-            var extents = player.ArenaHalfExtents;
-            LimitLeft = Mathf.RoundToInt(-extents.X);
-            LimitRight = Mathf.RoundToInt(extents.X);
-            LimitTop = Mathf.RoundToInt(-extents.Y);
-            LimitBottom = Mathf.RoundToInt(extents.Y);
-            _limitsApplied = true;
-        }
-
+        // Deliberately no Limit* clamping to ArenaHalfExtents: clamping the camera to the arena
+        // bounds means the player drifts toward the edge of the screen (and, on mobile, under the
+        // player's own thumb/fingers on the touch controls) the moment they get near a wall — the
+        // exact opposite of what "the camera follows you" should feel like. Panning past the
+        // arena's edge just reveals the dark backdrop (see docs/visuals.md), which is screen-
+        // anchored on its own CanvasLayer and already covers the viewport regardless of where the
+        // camera points, so there's nothing uglier to clip into by removing the clamp.
         GlobalPosition = _player.GlobalPosition;
     }
 }

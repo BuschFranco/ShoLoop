@@ -5,6 +5,15 @@ public partial class Shop : Control
     private static readonly StyleBoxFlat GlowStyle = CreateGlowStyle();
 
     private Label _coinsLabel;
+
+    // Each item's outer node is a PanelContainer (needed so it actually lays out its Label+Button
+    // children — a plain Button isn't a Container and won't size/position arbitrary child nodes,
+    // which is exactly what made every card's content overlap when this used to be a Button).
+    // Tapping anywhere on it that isn't BuyButton itself — which keeps its own default
+    // mouse_filter=Stop and so still claims/consumes its own clicks first — falls through
+    // (Label/HBox children below are mouse_filter=Ignore) to this panel's own GuiInput.
+    // OnBuyPressed already re-validates resolved/useless/afford on every call, so no extra guard
+    // is needed here the way UpgradePicker needs one for its non-revalidating OnChoicePressed.
     private PanelContainer[] _itemPanels;
     private Label[] _itemLabels;
     private Button[] _buyButtons;
@@ -19,35 +28,43 @@ public partial class Shop : Control
         Visible = false;
         ProcessMode = ProcessModeEnum.Always;
 
-        _coinsLabel = GetNode<Label>("Panel/VBoxContainer/PointsLabel");
+        _coinsLabel = GetNode<Label>("CenterContainer/Panel/VBoxContainer/PointsLabel");
         _itemPanels = new[]
         {
-            GetNode<PanelContainer>("Panel/VBoxContainer/Item1"),
-            GetNode<PanelContainer>("Panel/VBoxContainer/Item2"),
-            GetNode<PanelContainer>("Panel/VBoxContainer/Item3"),
+            GetNode<PanelContainer>("CenterContainer/Panel/VBoxContainer/Item1"),
+            GetNode<PanelContainer>("CenterContainer/Panel/VBoxContainer/Item2"),
+            GetNode<PanelContainer>("CenterContainer/Panel/VBoxContainer/Item3"),
         };
         _itemLabels = new[]
         {
-            GetNode<Label>("Panel/VBoxContainer/Item1/Content/Label"),
-            GetNode<Label>("Panel/VBoxContainer/Item2/Content/Label"),
-            GetNode<Label>("Panel/VBoxContainer/Item3/Content/Label"),
+            GetNode<Label>("CenterContainer/Panel/VBoxContainer/Item1/Content/Label"),
+            GetNode<Label>("CenterContainer/Panel/VBoxContainer/Item2/Content/Label"),
+            GetNode<Label>("CenterContainer/Panel/VBoxContainer/Item3/Content/Label"),
         };
         _buyButtons = new[]
         {
-            GetNode<Button>("Panel/VBoxContainer/Item1/Content/BuyButton"),
-            GetNode<Button>("Panel/VBoxContainer/Item2/Content/BuyButton"),
-            GetNode<Button>("Panel/VBoxContainer/Item3/Content/BuyButton"),
+            GetNode<Button>("CenterContainer/Panel/VBoxContainer/Item1/Content/BuyButton"),
+            GetNode<Button>("CenterContainer/Panel/VBoxContainer/Item2/Content/BuyButton"),
+            GetNode<Button>("CenterContainer/Panel/VBoxContainer/Item3/Content/BuyButton"),
         };
-        _continueButton = GetNode<Button>("Panel/VBoxContainer/ContinueButton");
+        _continueButton = GetNode<Button>("CenterContainer/Panel/VBoxContainer/ContinueButton");
 
         for (int i = 0; i < _buyButtons.Length; i++)
         {
             int index = i;
             _buyButtons[i].Pressed += () => OnBuyPressed(index);
+            _itemPanels[i].GuiInput += @event => OnItemGuiInput(@event, index);
         }
         _continueButton.Pressed += OnContinuePressed;
 
         GameManager.Instance.CoinsChanged += OnCoinsChanged;
+    }
+
+    private void OnItemGuiInput(InputEvent @event, int index)
+    {
+        bool released = (@event is InputEventScreenTouch touch && !touch.Pressed)
+            || (@event is InputEventMouseButton mouse && mouse.ButtonIndex == MouseButton.Left && !mouse.Pressed);
+        if (released) OnBuyPressed(index);
     }
 
     public override void _ExitTree()

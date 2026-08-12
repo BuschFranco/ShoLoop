@@ -10,3 +10,12 @@ obj/
 
 # Stale local backups (e.g. ShooterLoop.csproj.old)
 *.old
+
+# Local export outputs (Godot's Export dialog writes these to the project root) — large binaries
+# and a machine-specific preset config, neither belongs in source control.
+/ShooterLoop.apk
+/ShooterLoop.exe
+/ShooterLoop.console.exe
+/ShooterLoop.pck
+/data_ShooterLoop_windows_x86_64/
+/export_presets.cfg

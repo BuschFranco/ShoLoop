@@ -16,6 +16,18 @@ public partial class GameManager : Node
     public int RoundNumber = 1;
     public bool IsPaused = false;
 
+    public enum ScreenOrientation { Landscape, Portrait }
+    public ScreenOrientation CurrentOrientation { get; private set; } = ScreenOrientation.Portrait;
+
+    // The project's reference/base size (matches project.godot's implicit 1152x648 default, made
+    // explicit there) and its portrait counterpart. window/stretch/mode="canvas_items" + "expand"
+    // scales UI, and reveals extra world through the camera, relative to whichever of these is
+    // currently set as the root Window's ContentScaleSize — swapping it to match the chosen
+    // orientation is what keeps both UI layout and how much of the arena is visible consistent
+    // between landscape and portrait, instead of "expand" distorting one of them.
+    private static readonly Vector2I LandscapeBaseSize = new(1152, 648);
+    private static readonly Vector2I PortraitBaseSize = new(648, 1152);
+
     // Coin income compounds faster than RoundNumber (more enemies AND a higher per-kill payout
     // each round — see EnemySpawner's BurstCountCurve/RewardMultCurve), so a round-indexed price
     // curve always loses the race and the shop stops being a real spending decision. Tying prices
@@ -78,6 +90,12 @@ public partial class GameManager : Node
     public override void _Ready()
     {
         Instance = this;
+
+        // Applied before anything else so the very first frame (main menu included) already
+        // renders in whatever orientation the player last picked, not a landscape flash that
+        // then snaps to portrait.
+        CurrentOrientation = LoadOrientationPreference();
+        ApplyOrientation();
 
         _roundTimer = new Timer();
         _roundTimer.OneShot = true;
@@ -223,7 +241,7 @@ public partial class GameManager : Node
         if (_pendingUltimateChoice)
         {
             _pickerIsUltimateChoice = true;
-            picker.Open(UpgradeData.PickUltimateChoices(3, player != null ? player.IsRewardUseless : null), UpgradePicker.UltimateTitle);
+            picker.Open(UpgradeData.PickUltimateChoices(3, player != null ? player.IsRewardUseless : null), UpgradePicker.UltimateTitle, isUltimate: true);
             Pause();
             return;
         }
@@ -442,6 +460,48 @@ public partial class GameManager : Node
     {
         using var file = FileAccess.Open(HighScoreFilePath, FileAccess.ModeFlags.Write);
         file?.StoreLine(score.ToString());
+    }
+
+    private const string OrientationFilePath = "user://orientation.save";
+
+    // Same plain-text-file pattern as HighScore above. Static since MainMenu (no GameManager
+    // instance guaranteed loaded yet the very first time) needs to read the saved choice too.
+    // Portrait is the default for a first-ever launch (no save file yet) — only an explicit
+    // saved "Landscape" switches it, everything else (missing file, unreadable, unrecognized
+    // text) falls back to Portrait.
+    public static ScreenOrientation LoadOrientationPreference()
+    {
+        if (!FileAccess.FileExists(OrientationFilePath)) return ScreenOrientation.Portrait;
+        using var file = FileAccess.Open(OrientationFilePath, FileAccess.ModeFlags.Read);
+        if (file == null) return ScreenOrientation.Portrait;
+        return file.GetLine() == "Landscape" ? ScreenOrientation.Landscape : ScreenOrientation.Portrait;
+    }
+
+    private static void SaveOrientationPreference(ScreenOrientation orientation)
+    {
+        using var file = FileAccess.Open(OrientationFilePath, FileAccess.ModeFlags.Write);
+        file?.StoreLine(orientation.ToString());
+    }
+
+    // Called from the main menu's orientation picker. Takes effect immediately — no restart
+    // needed — since both DisplayServer's orientation request and ContentScaleSize are live
+    // runtime properties.
+    public void SetOrientation(ScreenOrientation orientation)
+    {
+        CurrentOrientation = orientation;
+        SaveOrientationPreference(orientation);
+        ApplyOrientation();
+    }
+
+    private void ApplyOrientation()
+    {
+        bool portrait = CurrentOrientation == ScreenOrientation.Portrait;
+
+        DisplayServer.ScreenSetOrientation(portrait
+            ? DisplayServer.ScreenOrientation.Portrait
+            : DisplayServer.ScreenOrientation.Landscape);
+
+        GetTree().Root.ContentScaleSize = portrait ? PortraitBaseSize : LandscapeBaseSize;
     }
 
     private void RegisterFinalScore()

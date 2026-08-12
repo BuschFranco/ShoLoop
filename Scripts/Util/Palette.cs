@@ -81,4 +81,13 @@ public static class Palette
     public static readonly Color HudPanelBg = new(Backdrop, 0.62f);
     public static readonly Color HudPanelBorder = new(Accent, 0.35f);
     public static readonly Color HudBarBg = new("1a0f2b", 0.8f);
+
+    // --- Modals ---
+    // A distinct border colour per interstitial type, so the free level-up picker, the one-time
+    // post-boss Ultimate choice, and the paid shop don't read as interchangeable copies of the
+    // same screen — that's what made it easy to tap "Comprar" thinking it was a free pick, or
+    // vice versa.
+    public static readonly Color RewardPanelBorder = Accent;          // cyan — free level-up picks
+    public static readonly Color ShopPanelBorder = new("ff4fd8");     // magenta — spending coins
+    public static readonly Color UltimatePanelBorder = new("ffe066"); // gold — the rare post-boss pick
 }

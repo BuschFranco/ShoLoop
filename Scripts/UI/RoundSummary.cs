@@ -8,6 +8,7 @@ namespace ShooterLoop;
 // its lifetime up exactly with the queue drained by ResolveNextInterstitial().
 public partial class RoundSummary : Control
 {
+    private PanelContainer _panel;
     private Label _title;
     private Label _stats;
 
@@ -19,11 +20,12 @@ public partial class RoundSummary : Control
         // Rendered while the tree is paused, same as the shop and pause menu.
         ProcessMode = ProcessModeEnum.Always;
 
-        // It sits on a CanvasLayer *above* the shop so the shop's full-screen dim doesn't grey it
-        // out — which means it would otherwise sit on top of the shop's buttons and swallow their
-        // clicks. Ignoring mouse input entirely keeps it purely decorative.
+        // Ignoring mouse input entirely keeps it purely decorative — it's meant to read as an
+        // extension of the HUD's own stats, not a menu, and never swallows clicks meant for
+        // whichever modal (level-up/Ultimate/shop) happens to be open on top of it.
         MouseFilter = MouseFilterEnum.Ignore;
 
+        _panel = GetNode<PanelContainer>("Panel");
         _title = GetNode<Label>("Panel/VBoxContainer/Title");
         _stats = GetNode<Label>("Panel/VBoxContainer/Stats");
     }
@@ -46,6 +48,11 @@ public partial class RoundSummary : Control
 
         _stats.Text = string.Join("\n", lines);
         Visible = true;
+
+        // The .tscn's own offset_bottom is a safe non-zero fallback, same trick as HUD's
+        // TopBarPanel — this shrinks the box to exactly fit however many stat lines actually
+        // showed up (4 or 5), so it can never overflow into whatever modal is centered below it.
+        _panel.ResetSize();
     }
 
     public void HideSummary() => Visible = false;

@@ -123,15 +123,6 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 text = "Ronda 1"
 
-[node name="RoundTimerLabel" type="Label" parent="TopBarPanel/TopBar"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_font_sizes/font_size = 15
-theme_override_colors/font_color = Color(0.85, 0.9, 0.95, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 2
-text = "1:00"
-
 [node name="LevelLabel" type="Label" parent="TopBarPanel/TopBar"]
 layout_mode = 2
 mouse_filter = 2
@@ -251,6 +242,23 @@ script = ExtResource("3")
 icon_color = Color(1, 0.878, 0.4, 1)
 label = "U"
 
+[node name="RoundTimerLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 200.0
+offset_bottom = 70.0
+pivot_offset = Vector2(90, 25)
+mouse_filter = 2
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(0.85, 0.9, 0.95, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+horizontal_alignment = 0
+vertical_alignment = 1
+text = "1:00"
+
 [node name="CountdownLabel" type="Label" parent="."]
 visible = false
 layout_mode = 1
@@ -275,15 +283,15 @@ text = "5"
 [node name="UltimateBar" type="ProgressBar" parent="."]
 visible = false
 layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
-anchor_right = 0.5
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -90.0
-offset_top = -82.0
-offset_right = 90.0
-offset_bottom = -66.0
+offset_left = -170.0
+offset_top = -182.0
+offset_right = -20.0
+offset_bottom = -166.0
 mouse_filter = 2
 theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
 theme_override_styles/fill = SubResource("StyleBoxFlat_bar_fill_ultimate")
@@ -292,16 +300,16 @@ show_percentage = false
 [node name="UltimateButton" type="Button" parent="."]
 visible = false
 layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
-anchor_right = 0.5
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -90.0
-offset_top = -60.0
-offset_right = 90.0
-offset_bottom = -22.0
-theme_override_font_sizes/font_size = 15
+offset_left = -170.0
+offset_top = -160.0
+offset_right = -20.0
+offset_bottom = -90.0
+theme_override_font_sizes/font_size = 17
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button_normal")
@@ -315,10 +323,10 @@ layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -70.0
+offset_left = -76.0
 offset_top = 20.0
 offset_right = -20.0
-offset_bottom = 60.0
+offset_bottom = 68.0
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2

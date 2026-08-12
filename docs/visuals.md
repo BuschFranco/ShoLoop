@@ -108,3 +108,120 @@ All of it is `Tween`-driven; there are no `AnimationPlayer`s.
 **Animations that touch a `Visual` child never touch the parent node's own `Scale`.** On enemies that
 property carries the Splitter's per-generation shrink (`SplitVisualScale`); on the player it would
 fight the arena clamp. Every scale tween in the project targets the child for that reason.
+
+## Screen orientation (Horizontal / Vertical)
+
+Chosen from the main menu (`MainMenu.tscn`'s `OrientationRow`, two mutually-exclusive toggle
+`Button`s sharing a `ButtonGroup`), persisted to `user://orientation.save`, and applied by
+`GameManager.SetOrientation`/`ApplyOrientation` — takes effect immediately, no restart needed.
+**Portrait is the default** (`GameManager.CurrentOrientation`'s field initializer and
+`LoadOrientationPreference`'s fallback both default to Portrait — only an explicit saved
+"Landscape" switches it), matching `project.godot`'s pre-boot `window/handheld/orientation`.
+
+The two buttons use the same styled-`StyleBoxFlat` pattern as the HUD's own buttons rather than
+the bare default theme, sized up to 140×48 with `font_size = 17` so they read clearly as buttons
+rather than plain text — and critically, the *selected* one uses a distinct bright magenta-filled
+style (`StyleBoxFlat_orientation_selected`, applied via `theme_override_styles/pressed`) instead
+of the same subdued outline as the unselected one, so which orientation is currently active is
+obvious at a glance.
+
+- `project.godot` sets an explicit base viewport of **1152×648** (was previously Godot's implicit
+  default of the same size, now spelled out since code needs an exact reference to swap against)
+  with `window/stretch/mode="canvas_items"` + `aspect="expand"`. That combination scales UI, and
+  reveals extra world through the camera, relative to whichever size is currently set as the root
+  `Window`'s `ContentScaleSize` — landscape uses the base 1152×648, portrait swaps to 648×1152.
+  Swapping this reference size to match the chosen orientation, rather than leaving it fixed at
+  the landscape values, is what keeps both UI scale and how much of the arena is visible
+  consistent between the two orientations instead of "expand" distorting whichever one doesn't
+  match the base aspect.
+- `DisplayServer.ScreenSetOrientation` is also called (Landscape/Portrait, not a Sensor variant —
+  the player picks one explicitly, the device doesn't auto-rotate under them mid-run). Has no
+  visible effect on desktop; it's what actually rotates the physical screen on Android.
+- No bespoke portrait layout exists for any menu. Every screen (`HUD`, `Shop`, `PauseMenu`,
+  `UpgradePicker`, `RoundSummary`, `GameOverScreen`, `MainMenu`) is anchored by corner/edge/center
+  rather than absolute position, so swapping the base size reflows all of them into a narrower,
+  taller canvas without needing a second authored version of each scene. The widest fixed-pixel
+  panel (Shop, 480px) still leaves comfortable margin against the 648px portrait width.
+- `project.godot`'s `window/handheld/orientation="portrait"` is only the pre-boot/manifest
+  default for the very first launch before `GameManager._Ready` applies whatever was actually
+  saved — a returning player who picked Horizontal last time won't see a portrait flash beyond
+  that first frame.
+- `VirtualJoystick` is the one control that *does* get a bespoke per-orientation position, since
+  "anchored by corner" isn't enough on its own to answer "which corner": its `.tscn` anchors are
+  the Landscape layout (bottom-left, shifted right off the screen edge rather than flush against
+  it — the corner itself is an awkward thumb reach), and `ApplyOrientationLayout()` overrides
+  those anchors/offsets to bottom-center at `_Ready` when Portrait is active, where a one-handed
+  grip naturally sits in the middle. Read once at startup, not live-updated, since this scene only
+  exists during a run and orientation can't change without returning to the main menu first. Base
+  pad and knob were also bumped ~1.5× (140px box → 210px, `MaxRadius` 60 → 90) for an easier touch
+  target.
+- `HUD`'s Ultimate button/bar are bottom-**right**-anchored (`anchors_preset = 3`), not
+  bottom-center — mirroring the joystick's bottom-left placement so the two touch controls sit on
+  opposite thumbs instead of competing for the same hand. Positioned with a taller bottom margin
+  (`offset_bottom = -90`) than the joystick's (`-40`) so it sits visibly *above* the joystick's
+  vertical band rather than level with it, and sized up to 150×70 for a comfortable tap target.
+
+## Modal interstitials: telling Shop / Reward / Ultimate apart
+
+Three different screens (`Shop`, `UpgradePicker` in its two modes) used to share the exact same
+undecorated panel look, which made it easy to tap "Comprar" thinking it was a free level-up pick,
+or vice versa. Each now gets its own border colour, applied via a `StyleBoxFlat` on the panel's
+`theme_override_styles/panel` (and matching the title label's font colour):
+
+| Screen | Border colour | Why |
+|---|---|---|
+| `UpgradePicker` (level-up) | `Palette.RewardPanelBorder` (cyan, = `Accent`) | Free pick — ties to the HUD/player's own colour, reads as "regular game screen". |
+| `UpgradePicker` (post-boss Ultimate choice) | `Palette.UltimatePanelBorder` (gold) | A rare, one-off pick — deliberately outside the pink/cyan families so it stands out as a special moment. |
+| `Shop` | `Palette.ShopPanelBorder` (magenta) | Spending coins — the game's core accent colour, distinct from both pickers above. |
+
+`UpgradePicker.Open(choices, title, isUltimate)` picks between the reward/Ultimate style; `Shop`
+only ever needs its own. Both panels also switched from a fixed-offset rect to a `CenterContainer`
+wrapping a `PanelContainer` with only a fixed *width* (`custom_minimum_size.X`) — the previous
+fixed-height rect didn't grow with content, so a longer reward description or a third stacked item
+would silently overflow past the card's visible edge instead of the card growing to fit it.
+
+**Whole-card tap targets**: each Option/Item card stays a `PanelContainer` — an earlier attempt
+made the outer card node itself a `Button`, which broke completely, since `Button` isn't a
+`Container` and doesn't lay out or size arbitrary children the way `PanelContainer` does; every
+card's Label+inner-button just overlapped at (0,0) instead of stacking in the `VBoxContainer`.
+Instead, the card's `Label`/`HBoxContainer`/`VBoxContainer` children are `mouse_filter = Ignore`,
+and the `PanelContainer` itself listens on `GuiInput` — a tap anywhere on the card (description
+text, empty margin) reaches the panel's `GuiInput` and fires the same handler as the inner
+"Elegir"/"Comprar" button, while a tap landing precisely on that inner button is still claimed by
+its own default `mouse_filter = Stop` first and never double-fires. `Shop.OnBuyPressed` already
+re-validates resolved/useless/afford on every call, so it needs no extra guard; `UpgradePicker`'s
+`OnChoicePressed` doesn't re-validate, so `OnOptionGuiInput` checks a parallel `_useless[]` array
+before forwarding the tap.
+
+**`RoundSummary` no longer competes for the same screen real-estate as those modals.** Two
+separate bugs compounded here:
+
+1. It used to sit vertically centered and offset left — positioned to just clear a landscape-only
+   Shop, which broke the moment Portrait (a much narrower canvas) became the default and the two
+   boxes started overlapping outright, text interleaving with text. It's now pinned below the
+   HUD's own top-left stats panel instead — repositioned every frame off `TopBarPanel`'s live
+   size, same as `RoundTimerLabel` — so it starts out of the vertically-centered band any
+   interstitial modal appears in.
+2. Even after that, tall content (5+ stat lines, or a Shop with long wrapped reward descriptions)
+   could still make the two boxes' *heights* meet in the middle. Setting a `z_index` on
+   `RoundSummary`'s Control did **nothing** for this, because `RoundSummary`/`Shop`/`UpgradePicker`
+   each live on their own `CanvasLayer` (`RoundSummaryLayer`/`ShopLayer`/`UpgradeLayer` in
+   `Arena.tscn`) — `z_index` only orders siblings *within* the same layer; cross-layer stacking is
+   decided entirely by each `CanvasLayer`'s own `layer` number. `RoundSummaryLayer` was `layer =
+   17`, **above** `ShopLayer` (15) and `UpgradeLayer` (10) — the opposite of what was intended, so
+   it drew fully opaque on top of whichever modal was open. It's now `layer = 7` (below every
+   modal layer, above the base HUD/BossBanner layers), so a geometric overlap now means it renders
+   *behind* the modal's own `Dim` and gets genuinely dimmed instead of interleaving with it.
+
+## Round timer
+
+Moved out of the cramped top-left stat list (`font_size = 15`, easy to miss) into its own big
+`Label` (`font_size = 32`) pinned just **below** the stats panel, left-aligned with it —
+repositioned every frame off `TopBarPanel`'s live position/size in `HUD._Process` (same trick
+`CooldownIcons` already uses off the panel's right edge), since the panel's own height breathes
+too (e.g. the Shield row only appears once you own a Barrier). Arguably the most time-pressured
+number on screen deserved more than the smallest text in the corner. On the last
+`TimerPulseThreshold` (5) seconds, it turns `Palette.Warning` red and does a scale-punch
+(`PulseRoundTimer`, 1.5× → 1.0 with a `Back` ease) once per second — tracked via
+`_lastPulsedSecond` so it fires exactly once per second boundary rather than every frame the
+countdown happens to be under 5.

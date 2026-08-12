@@ -4,4 +4,12 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>ShooterLoop</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- android/build is the Gradle build template Godot installs/generates for Android export.
+         Its src/main/assets is a packaged copy of this same project (Scripts, Scenes, etc.) — the
+         SDK's default **/*.cs glob was picking those up as source too, so every class ended up
+         compiled twice (CS0102/CS0111 duplicate-definition errors across the whole codebase). -->
+    <Compile Remove="android/**/*.cs" />
+    <None Remove="android/**/*.cs" />
+  </ItemGroup>
 </Project>

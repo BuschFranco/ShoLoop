@@ -169,7 +169,7 @@ layer = 15
 [node name="Shop" parent="ShopLayer" instance=ExtResource("7")]
 
 [node name="RoundSummaryLayer" type="CanvasLayer" parent="."]
-layer = 17
+layer = 7
 
 [node name="RoundSummary" parent="RoundSummaryLayer" instance=ExtResource("20")]
 
