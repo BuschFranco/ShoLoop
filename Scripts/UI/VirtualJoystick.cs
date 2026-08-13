@@ -4,12 +4,6 @@ public partial class VirtualJoystick : Control
 {
     [Export] public float MaxRadius = 90f;
 
-    // Landscape keeps the .tscn's own bottom-left layout (shifted right off the screen edge a
-    // bit rather than flush against it — the corner itself is an awkward thumb reach). Portrait
-    // overrides to bottom-center below, where a one-handed grip naturally sits in the middle
-    // rather than off to one side.
-    private const float PortraitHalfWidth = 105f;
-    private const float MarginBottom = 40f;
     private const float BoxSize = 210f;
 
     private const int MouseTouchIndex = -100;
@@ -26,29 +20,20 @@ public partial class VirtualJoystick : Control
         _knob = GetNode<Polygon2D>("Knob");
         _knobCenter = _knob.Position;
 
-        ApplyOrientationLayout();
+        // Anchors reset to top-left so GlobalPosition in HandlePress can place the joystick
+        // freely anywhere on screen — the .tscn's own fixed-bottom layout is irrelevant now.
+        AnchorLeft = 0f;
+        AnchorTop = 0f;
+        AnchorRight = 0f;
+        AnchorBottom = 0f;
+
+        // Floating joystick: hidden until a press in the lower half of the screen places it.
+        Visible = false;
 
         // Read here rather than pushed from the options screen: this scene only exists during a run, and
         // the setting can't change mid-run without going back through the menu. Modulate propagates to
         // both Polygon2D children and multiplies their own alphas, so the base/knob contrast survives.
         Modulate = new Color(1f, 1f, 1f, GameManager.Instance?.JoystickOpacity ?? 1f);
-    }
-
-    // The .tscn's own anchors are the Landscape layout (bottom-left, shifted off the edge); this
-    // overrides them to bottom-center whenever Portrait is the active choice. Read once at
-    // startup — this scene is only ever alive during a run, and orientation can't change without
-    // going back through the main menu first, so there's no live-update case to handle.
-    private void ApplyOrientationLayout()
-    {
-        bool portrait = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
-        if (!portrait) return;
-
-        AnchorLeft = 0.5f;
-        AnchorRight = 0.5f;
-        OffsetLeft = -PortraitHalfWidth;
-        OffsetRight = PortraitHalfWidth;
-        OffsetTop = -(BoxSize + MarginBottom);
-        OffsetBottom = -MarginBottom;
     }
 
     public override void _Input(InputEvent @event)
@@ -80,16 +65,21 @@ public partial class VirtualJoystick : Control
             _touchIndex = -1;
             _knobOffset = Vector2.Zero;
             UpdateKnob();
+            Visible = false;
         }
     }
 
     private void HandlePress(int index, bool pressed, Vector2 position)
     {
-        if (pressed && _touchIndex == -1 && GetGlobalRect().HasPoint(position))
+        if (pressed && _touchIndex == -1 && IsEligiblePress(position))
         {
             _touchIndex = index;
             _origin = position;
             _knobOffset = Vector2.Zero;
+
+            // Center the joystick on the touch point.
+            GlobalPosition = position - new Vector2(BoxSize / 2f, BoxSize / 2f);
+            Visible = true;
             UpdateKnob();
         }
         else if (!pressed && index == _touchIndex)
@@ -97,7 +87,34 @@ public partial class VirtualJoystick : Control
             _touchIndex = -1;
             _knobOffset = Vector2.Zero;
             UpdateKnob();
+            Visible = false;
         }
+    }
+
+    // A press only becomes a joystick grip when it lands in the bottom half of the screen AND
+    // isn't on top of a UI control (the Ultimate button lives down there). GuiPick isn't exposed
+    // in the C# bindings, so this walks the tree instead: any visible Control with
+    // mouse_filter != Ignore under the finger (the joystick itself aside) wins the touch.
+    private bool IsEligiblePress(Vector2 position)
+    {
+        if (position.Y < GetViewportRect().Size.Y / 2f) return false;
+        return !HasInteractiveControlUnder(GetTree().Root, position);
+    }
+
+    private bool HasInteractiveControlUnder(Node root, Vector2 position)
+    {
+        foreach (Node child in root.GetChildren())
+        {
+            if (child is not Control control) continue;
+            if (control != this
+                && control.IsVisibleInTree()
+                && control.MouseFilter != Control.MouseFilterEnum.Ignore
+                && control.GetGlobalRect().HasPoint(position))
+                return true;
+
+            if (HasInteractiveControlUnder(control, position)) return true;
+        }
+        return false;
     }
 
     private void HandleDrag(int index, Vector2 position)
@@ -105,7 +122,20 @@ public partial class VirtualJoystick : Control
         if (index != _touchIndex) return;
 
         Vector2 delta = position - _origin;
-        _knobOffset = delta.LimitLength(MaxRadius);
+
+        // Drag-follow: once the finger outruns MaxRadius the whole joystick re-centers along
+        // with it (keeping the knob pinned to the rim) so the player can keep steering without
+        // lifting and re-tapping.
+        if (delta.Length() > MaxRadius)
+        {
+            Vector2 clamped = delta.LimitLength(MaxRadius);
+            Vector2 excess = delta - clamped;
+            _origin += excess;
+            GlobalPosition += excess;
+            delta = clamped;
+        }
+
+        _knobOffset = delta;
         UpdateKnob();
     }
 
