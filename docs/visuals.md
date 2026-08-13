@@ -103,11 +103,131 @@ All of it is `Tween`-driven; there are no `AnimationPlayer`s.
 | Level-up nova / ultimates | `Player` | Expanding, fading rings. |
 | Missile blast | `Missile.SpawnBlastVisual` | Parented to the Bullets container, since the missile frees itself the same frame. |
 | Score / damage popups | `Enemy` | Drift up and fade. |
-| Boss banner | `BossBanner` | Hold then fade. |
+| Boss banner | `BossBanner` | Hold then fade; hazard chevrons slide in alongside it. |
+| Danger alarm pulse | `DangerOverlay` | Looping two-leg `Modulate` ping-pong. See below. |
+| Arena tone shift | `DangerDirector` | 1.5s colour lerps on round change. See below. |
+| Boss arrival shake | `CameraRig.Shake` | Decaying random `Offset`, not a Tween — see below. |
 
 **Animations that touch a `Visual` child never touch the parent node's own `Scale`.** On enemies that
 property carries the Splitter's per-generation shrink (`SplitVisualScale`); on the player it would
 fight the arena clamp. Every scale tween in the project targets the child for that reason.
+
+## Reward card flare
+
+Offers in the shop and the level-up picker flash in **their own tier's colour** at three moments, all driven from [`RewardCard.cs`](../Scripts/UI/RewardCard.cs) via a `ColorRect` overlay child whose `Modulate` alpha is animated (the rect's own `Color` carries the tier hue). See [rewards.md](rewards.md#the-reward-card-rewardcard) for the card's information design.
+
+| Moment | Shape | Why |
+|---|---|---|
+| **Appear** | alpha 0 → 0.5 → 0, plus a `Back/Out` scale pop from 0.94, staggered `i × 0.08s` | The first thing you see on open is how good each option is, before reading a word. The stagger makes the three cascade instead of strobing on one frame. |
+| **Touch / hover** | alpha 0 → 0.26 → 0 over 0.3s | Acknowledges the input. Fires on `MouseEntered` *and* on press, because there is no hover on touch. |
+| **Confirm** | alpha 0 → 0.75 → 0 plus a 1.04× scale, `ConfirmFlareDuration` = 0.3s | The payoff for choosing. |
+
+Two implementation notes that are easy to get wrong:
+
+- **The pick/purchase applies immediately; only the modal's *exit* waits for the flare.** The shop deducts coins and applies the upgrade before flaring, then defers `CheckAutoAdvance`'s close by `ConfirmFlareDuration`. The picker is the reverse order for a specific reason: `ApplyUpgradeAndResume` **unpauses the tree**, so applying it first would resume gameplay underneath a modal still animating. Either way no gameplay state waits on an animation.
+- **Scale tweens need a centred `PivotOffset`**, or a card grows out of its top-left corner. `Size` isn't known until the parent container lays the card out, so the card tracks it via the `Resized` signal rather than setting it once in `_Ready`.
+
+Both modals set `ProcessMode.Always`, which is what lets these tweens run at all — the tree is paused the whole time a modal is up.
+
+## Danger escalation
+
+Everything the game does to communicate "this is getting dangerous" derives from one number:
+`DangerLevel.ForRound(round)`, a `RoundCurve(-0.1875, 0.0625, 0, 1)` that reads **0 through round 4**
+(the onboarding rounds stay visually clean), takes its first bite at round 5, and pins to **1.0 from
+round 20**. [`DangerLevel`](../Scripts/Util/DangerLevel.cs) is a stateless static class in the same mould
+as `DifficultyBalancer` — it owns every colour, threshold and duration below so no two consumers can
+drift apart, and it knows nothing about nodes.
+
+[`DangerDirector`](../Scripts/DangerDirector.cs) is the **only** subscriber to `GameManager.RoundChanged`
+for this feature, and resolves its targets by group (`backdrop`, `arena_bounds`, `obstacles`,
+`danger_overlay`, `camera_rig`) the way every other cross-tree lookup in the project works. One
+subscriber means one place that has to get the `_ExitTree` unsubscribe right — see the note in
+`HUD._ExitTree` for why that matters with a persistent autoload and scene-scoped nodes.
+
+| Round | Danger | What's on screen |
+|---|---|---|
+| 1–4 | 0.00 | Baseline. Nothing added. |
+| 5–8 | 0.06–0.25 | Backdrop, arena wall, grid and obstacles begin warming toward red. |
+| 9–14 | 0.31–0.63 | Alarm bars appear at the screen edges, pulsing ~0.67–0.83 Hz. |
+| 15–19 | 0.69–0.94 | Tint near maximum; alarm pulses faster and brighter. |
+| 20+ | 1.00 | Max tint, alarm at ~1.19 Hz, and the backdrop breathes on a 2.5s-per-leg loop. |
+
+### The 0.85 glow threshold cuts both ways here
+
+This is the first feature in the project deliberately tuned **against** `glow_hdr_threshold` in *both*
+directions, and it's the constraint that shaped the whole design:
+
+- **The backdrop must never bloom.** A glowing floor washes out everything drawn on it, so both ends of
+  its lerp (`#0b0614` → `#1c0713`) sit an order of magnitude below the threshold.
+- **The alarm bars must bloom** — that glow *is* their soft falloff, which is why they're a single flat
+  `ColorRect` per edge instead of a stack of translucent rects faking a gradient (which would band
+  visibly against a flat dark field, and never bloom anyway).
+
+That second point forced a non-obvious choice: **the pulse animates `Modulate` as a `Color`, not as
+alpha.** The threshold tests the *composited* pixel, so a bar at 0.30α over the dark backdrop composites
+to roughly 0.31 luminance and would never cross it at any point in its cycle. The bars are therefore
+drawn at full alpha, and the pulse scales their brightness via a neutral grey `Modulate` between a dim
+trough and a bright peak. The peak blooms, the trough doesn't, and that contrast is the effect.
+
+### Readability and safety bounds
+
+- **The tint's risk isn't the cyan player** (`#7dfdfe` survives any dark red) — it's `EnemyBullet
+  #ff3860` and `Warning #ff2e88` against a crimson floor. The danger backdrop keeps a violet undertone
+  rather than going to pure red specifically so there's blue left in the floor to separate them.
+- **`BoundsModulate` caps at `(1, 0.72, 0.80)`.** Push the green/blue channels lower and the arena
+  wall's own `#ff4fd8` lands on `EnemyBullet`'s hue, at which point the boundary starts reading as a
+  threat instead of as scenery. Its `A` is always left at 1.0 — `Modulate` multiplies, and the wall and
+  grid already carry their own 0.7 and 0.16 alphas that must not be scaled. Tinting `ArenaBounds` covers
+  the grid for free, since the grid lines are its children.
+- **Pulse rate is bounded at 0.56–1.19 Hz with a hard 0.40s floor per leg**, well inside WCAG 2.3.1's
+  three-flashes-per-second limit even allowing for bloom enlarging the perceived flashing area. The bars
+  cover ~1.7% of the screen.
+- **`DangerLevel.Reduced`** holds the alarm at its trough and halves camera shake. Nothing sets it yet —
+  there's no settings menu to hang a toggle off — but every consumer already honours it, so wiring one
+  later is a single line rather than a refactor.
+
+### Layering and the pause interaction
+
+`DangerOverlay` lives on its own `CanvasLayer` at **`layer = 2`**: above every world `Node2D` (layer 0),
+below the HUD (layer 5). Remember `z_index` does nothing across `CanvasLayer`s — only `layer` orders them.
+
+Its tweens **freeze when the tree pauses, and that's correct.** Every modal sits at layer 8 or above, so
+a bar frozen mid-pulse is completely hidden behind whatever is open. Deliberately *not*
+`ProcessMode.Always`: an alarm that kept strobing behind a shop screen the player is reading would look
+worse and be a photosensitivity liability.
+
+Two Godot sharp edges the implementation has to respect, both of which bit during development:
+
+- **Tweens are not auto-retired.** Godot leaves a prior tween on the same property running, so every
+  rebuild `Kill()`s the stored reference first. Without it, each round stacks another pulse on the same
+  `Modulate` and the alarm visibly jitters by the mid teens.
+- **`SetLoops()` replays the *whole* tween.** The max-danger heartbeat is therefore its own two-leg loop
+  rather than something chained onto the entry lerp — chaining it would replay that lerp every cycle and
+  stall each beat with a dead 1.5s hold.
+
+`DangerDirector` also applies the current level **synchronously in `_Ready`**, not just on the next
+`RoundChanged`: after a mid-run `ReloadCurrentScene()` the round number is already high, and without it
+the arena would come back wearing round-1 colours until the following round ticked over.
+
+### Boss arrival
+
+Three things land together when a Boss spawns, all on top of the existing banner:
+
+1. **A pre-arrival alarm burst** during the 3s countdown (`DangerOverlay.SetBossAlert`), forcing the bars
+   to full intensity regardless of round. This is also the only reason the round-5 Boss gets an alarm at
+   all — normal escalation hasn't reached `AlarmThreshold` that early.
+2. **Hazard chevrons** on the banner's **top edge only**: in portrait, a bottom row would land squarely on
+   the virtual joystick's touch area. They're children of `BossBanner`, so its existing 2s-hold + 0.6s
+   fade covers them for free.
+3. **Camera shake** — `CameraRig.Shake(14, 0.45s)`, which perturbs **`Offset`**, not `GlobalPosition`
+   (the follow overwrites that outright every physics frame), and which reads crisp precisely because
+   `Offset` is applied *after* Godot's position smoothing. It zeroes `Offset` on completion rather than
+   leaving it wherever the last frame put it: a leftover offset would survive the player's death and
+   leave the camera permanently mis-framed for the rest of the session.
+
+One non-obvious gotcha for anything new added here: `ColorRect` defaults to `MouseFilter = Stop`. These
+are full-width and full-height rects sitting exactly where the virtual joystick's touch area is, so every
+one of them sets `Ignore` explicitly — the default would silently eat movement input on mobile.
 
 ## Screen orientation (Horizontal / Vertical)
 

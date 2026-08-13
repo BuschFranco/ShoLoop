@@ -2,10 +2,10 @@ namespace ShooterLoop;
 
 public partial class HUD : Control
 {
-    private Label _livesLabel;
     private HeartIcon[] _heartIcons;
-    private const int MaxHeartIcons = 3;
-    private Label _shieldLabel;
+    private ShieldIcon[] _shieldIcons;
+    private Control _shieldRow;
+    private Label _statsLabel;
     private ProgressBar _xpBar;
     private Label _levelLabel;
     private Label _roundLabel;
@@ -26,20 +26,38 @@ public partial class HUD : Control
     private CooldownIcon _missileIcon;
     private CooldownIcon _shieldRegenIcon;
     private CooldownIcon _ultimateIcon;
+    private CooldownIcon _ondaIcon;
+    private CooldownIcon _vendavalIcon;
+    private Control _bossHealthBar;
+    private ProgressBar _bossHpBar;
+    private Enemy _currentBoss;
 
     public override void _Ready()
     {
         _roundLabel = GetNode<Label>("TopBarPanel/TopBar/RoundLabel");
         _roundTimerLabel = GetNode<Label>("RoundTimerLabel");
         _levelLabel = GetNode<Label>("TopBarPanel/TopBar/LevelLabel");
-        _livesLabel = GetNode<Label>("TopBarPanel/TopBar/LivesRow/LivesLabel");
+        // One icon per point of the real caps (MaxLivesCap 6, MaxShieldChargesCap 4), so neither row ever
+        // needs a text fallback. The old code fell back to "Vidas: 4/4" the moment a single Corazón was
+        // bought, because it only had three heart nodes.
         _heartIcons = new[]
         {
             GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart1"),
             GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart2"),
             GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart3"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart4"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart5"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart6"),
         };
-        _shieldLabel = GetNode<Label>("TopBarPanel/TopBar/ShieldLabel");
+        _shieldRow = GetNode<Control>("TopBarPanel/TopBar/ShieldRow");
+        _shieldIcons = new[]
+        {
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield1"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield2"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield3"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield4"),
+        };
+        _statsLabel = GetNode<Label>("TopBarPanel/TopBar/StatsLabel");
         _xpBar = GetNode<ProgressBar>("TopBarPanel/TopBar/XpBar");
         _coinsLabel = GetNode<Label>("TopBarPanel/TopBar/PointsLabel");
         _scoreLabel = GetNode<Label>("TopBarPanel/TopBar/ScoreLabel");
@@ -50,6 +68,10 @@ public partial class HUD : Control
         _missileIcon = GetNode<CooldownIcon>("CooldownIcons/MissileIcon");
         _shieldRegenIcon = GetNode<CooldownIcon>("CooldownIcons/ShieldRegenIcon");
         _ultimateIcon = GetNode<CooldownIcon>("CooldownIcons/UltimateIcon");
+        _ondaIcon = GetNode<CooldownIcon>("CooldownIcons/OndaIcon");
+        _vendavalIcon = GetNode<CooldownIcon>("CooldownIcons/VendavalIcon");
+        _bossHealthBar = GetNode<Control>("BossHealthBar");
+        _bossHpBar = GetNode<ProgressBar>("BossHealthBar/BossHpBar");
 
         _scoreDeltaTimer = new Timer();
         _scoreDeltaTimer.OneShot = true;
@@ -159,6 +181,8 @@ public partial class HUD : Control
 
         UpdateCooldownIcons();
         UpdateUltimateUi();
+        UpdateBossHealthBar();
+        UpdateStatsLabel();
 
         // The pre-round countdown gets its own big centered label rather than the small top-bar
         // one — at 72px in the middle of the screen it's actually noticeable, which the corner
@@ -234,26 +258,38 @@ public partial class HUD : Control
         _shieldRegenIcon.Visible = _player.ShieldRegenPerMinute > 0f;
         _shieldRegenIcon.CooldownFraction = _player.ShieldRegenCooldownFraction;
 
+        _ondaIcon.Visible = _player.OndaLevel > 0;
+        _ondaIcon.CooldownFraction = _player.OndaCooldownFraction;
+
+        _vendavalIcon.Visible = _player.VendavalLevel > 0;
+        _vendavalIcon.CooldownFraction = _player.VendavalCooldownFraction;
+
         bool hasUltimate = _player.EquippedUltimate != null;
         _ultimateIcon.Visible = hasUltimate;
         if (hasUltimate)
             _ultimateIcon.CooldownFraction = _player.UltimateCooldownRemaining / _player.UltimateCooldownDuration;
     }
 
-    // Up to MaxHeartIcons individual hearts, filled/unfilled to show current vs. lost lives —
-    // falls back to the old "Vidas: x/y" text once MaxLives grows past what reads cleanly as
-    // separate icons (Corazón Legendario can push it well past 3).
+    // Polled the same way _currentBoss/_topBarPanel are — no HP-changed signal exists on Enemy,
+    // and everything else in this file already reads live state per frame instead.
+    private void UpdateBossHealthBar()
+    {
+        if (_currentBoss == null || !IsInstanceValid(_currentBoss))
+            _currentBoss = GetTree().GetFirstNodeInGroup("boss") as Enemy;
+
+        bool bossAlive = _currentBoss != null && IsInstanceValid(_currentBoss);
+        _bossHealthBar.Visible = bossAlive;
+        if (!bossAlive) return;
+
+        _bossHpBar.MaxValue = _currentBoss.MaxHp;
+        _bossHpBar.Value = _currentBoss.CurrentHp;
+    }
+
+    // One heart per life slot, filled/unfilled to show current vs. lost. There are six nodes because
+    // MaxLivesCap is six — no text fallback any more, which is what the old three-icon version degraded
+    // to as soon as a single Corazón was bought.
     private void OnLivesChanged(int current, int max)
     {
-        bool showIcons = max <= MaxHeartIcons;
-        _livesLabel.Visible = !showIcons;
-        if (!showIcons)
-        {
-            _livesLabel.Text = $"Vidas: {current}/{max}";
-            foreach (var heart in _heartIcons) heart.Visible = false;
-            return;
-        }
-
         for (int i = 0; i < _heartIcons.Length; i++)
         {
             _heartIcons[i].Visible = i < max;
@@ -262,10 +298,29 @@ public partial class HUD : Control
         }
     }
 
+    // Mirrors the lives row exactly. The whole row hides when the player owns no Barrier, same as the
+    // old text line did — an empty row of four unfilled shields would suggest charges they can't have.
     private void OnShieldChanged(int current, int max)
     {
-        _shieldLabel.Visible = max > 0;
-        _shieldLabel.Text = $"Escudo: {current}/{max}";
+        _shieldRow.Visible = max > 0;
+        for (int i = 0; i < _shieldIcons.Length; i++)
+        {
+            _shieldIcons[i].Visible = i < max;
+            _shieldIcons[i].Filled = i < current;
+            _shieldIcons[i].QueueRedraw();
+        }
+    }
+
+    // Polled rather than pushed: none of these five have a change event. Damage/fire rate/crit/range only
+    // move inside Player.ApplyUpgrade, and EnemiesKilled is a plain field on GameManager — so this follows
+    // the same per-frame-read approach UpdateCooldownIcons and UpdateUltimateUi already use.
+    private void UpdateStatsLabel()
+    {
+        if (_player == null) return;
+
+        _statsLabel.Text =
+            $"DAÑO {_player.BulletDamage} · CAD {_player.FireRate:0.0}/s · CRIT {_player.CritChance:0}%\n" +
+            $"RANGO {_player.FireRange:0} · BAJAS {GameManager.Instance.EnemiesKilled}";
     }
 
     private void OnXpChanged(int xp, int xpToNext)

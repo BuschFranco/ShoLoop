@@ -10,10 +10,10 @@ collision_layer = 2
 collision_mask = 8
 script = ExtResource("1")
 MoveSpeed = 70.0
-MaxHp = 120
+MaxHp = 170
 XpReward = 6
 CoinsReward = 6
-ContactDamage = 20
+ContactDamage = 26
 Category = 2
 AvoidanceProbeDistance = 90.0
 

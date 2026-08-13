@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=28 format=3]
 
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="1"]
 [ext_resource type="Script" path="res://Scripts/Enemy/EnemySpawner.cs" id="2"]
@@ -20,6 +20,12 @@
 [ext_resource type="Script" path="res://Scripts/Util/CameraRig.cs" id="18"]
 [ext_resource type="Script" path="res://Scripts/ArenaBounds.cs" id="19"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/RoundSummary.tscn" id="20"]
+[ext_resource type="Script" path="res://Scripts/DangerDirector.cs" id="21"]
+[ext_resource type="Script" path="res://Scripts/UI/DangerOverlay.cs" id="22"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemon.tscn" id="23"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonBrute.tscn" id="24"]
+[ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonStalker.tscn" id="25"]
+[ext_resource type="Script" path="res://Scripts/RoundEventDirector.cs" id="26"]
 
 [sub_resource type="Environment" id="Environment_neon"]
 background_mode = 3
@@ -41,7 +47,7 @@ environment = SubResource("Environment_neon")
 [node name="BackdropLayer" type="CanvasLayer" parent="."]
 layer = -10
 
-[node name="Backdrop" type="ColorRect" parent="BackdropLayer"]
+[node name="Backdrop" type="ColorRect" parent="BackdropLayer" groups=["backdrop"]]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -130,6 +136,48 @@ collision_mask = 0
 script = ExtResource("17")
 Size = Vector2(240, 140)
 
+[node name="Obstacle11" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-1400, -800)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(200, 140)
+
+[node name="Obstacle12" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(1400, -820)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(180, 160)
+
+[node name="Obstacle13" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-1420, 760)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(220, 130)
+
+[node name="Obstacle14" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(1380, 700)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(160, 200)
+
+[node name="Obstacle15" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(1400, -80)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(140, 260)
+
+[node name="Obstacle16" type="StaticBody2D" parent="Obstacles"]
+position = Vector2(-1400, -40)
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("17")
+Size = Vector2(140, 240)
+
 [node name="EnemySpawner" type="Node2D" parent="."]
 script = ExtResource("2")
 EnemyScene = ExtResource("3")
@@ -140,8 +188,28 @@ ShooterScene = ExtResource("16")
 RareScene = ExtResource("12")
 HiddenScene = ExtResource("13")
 BossScene = ExtResource("14")
+DemonScene = ExtResource("23")
+DemonBruteScene = ExtResource("24")
+DemonStalkerScene = ExtResource("25")
 
 [node name="SpawnTimer" type="Timer" parent="EnemySpawner"]
+
+[node name="DangerDirector" type="Node" parent="."]
+script = ExtResource("21")
+
+[node name="RoundEventDirector" type="Node" parent="."]
+script = ExtResource("26")
+
+[node name="AlarmLayer" type="CanvasLayer" parent="."]
+layer = 2
+
+[node name="DangerOverlay" type="Control" parent="AlarmLayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("22")
 
 [node name="HUDLayer" type="CanvasLayer" parent="."]
 layer = 5

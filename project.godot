@@ -21,8 +21,6 @@ GameManager="*res://Scripts/Autoload/GameManager.cs"
 
 [display]
 
-window/size/viewport_width=1152
-window/size/viewport_height=648
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation="portrait"
@@ -30,6 +28,13 @@ window/handheld/orientation="portrait"
 [dotnet]
 
 project/assembly_name="ShooterLoop"
+
+[gui]
+
+; Applies to every Control in the game at once. Works because no node anywhere sets
+; theme_override_fonts/* — the existing theme_override_font_sizes entries only override size, not
+; family, so they all survive untouched.
+theme/custom_font="res://Assets/Fonts/RetroFont.tres"
 
 [input_devices]
 

@@ -27,11 +27,31 @@ public static class Palette
     public static readonly Color MissileBlast = new("ff6ec7", 0.5f);
     public static readonly Color LevelUpNova = new("ffa8f0", 0.5f);
     public static readonly Color UltimateNova = new("ff2fb9", 0.4f);
+    // Violet, distinct from Missile/Nova's pink-magenta family, for the Onda de Choque reward.
+    public static readonly Color OndaBlast = new("c65bff", 0.45f);
+    // Fierce orange-red, distinct from every other blast colour, for Vendaval's directional shove.
+    public static readonly Color VendavalBlast = new("ff4b2b", 0.5f);
 
     // --- Pickups ---
     // World drops from enemies, distinct from the reward-shop rewards of the same name.
     public static readonly Color HeartPickup = new("ff2e88");
     public static readonly Color ShieldPickupColor = new("4fa8ff");
+
+    // Matches ScorePopup/Accent's cyan — same reasoning as that pair: an XP gem should read as
+    // "feeds the same bar" at a glance, not as its own unrelated colour.
+    public static readonly Color XpPickup = new("7dfdfe");
+    // Warm gold, same family as CritBullet/UltimatePanelBorder — coins read as "valuable" without
+    // borrowing the pink used by everything else in the scheme.
+    public static readonly Color CoinPickup = new("ffe066");
+
+    // --- Boss HUD bar ---
+    // Gold, same family as CoinPickup/CritBullet/UltimatePanelBorder — reads as "rare/important"
+    // and deliberately doesn't reuse HealthBarFill's magenta, which stays "generic enemy HP" (the
+    // floating bar Special enemies still carry). Keeps the fixed boss bar visually distinct at a
+    // glance rather than just bigger.
+    public static readonly Color BossHealthBarFill = new("ffe066");
+    public static readonly Color BossHealthBarBg = new("1a0f2b", 0.85f);
+    public static readonly Color BossHealthBarBorder = new("ffe066", 0.9f);
 
     // --- Enemies ---
     public static readonly Color EnemyBullet = new("ff3860");

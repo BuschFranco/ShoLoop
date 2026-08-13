@@ -2,22 +2,6 @@
 
 [ext_resource type="Script" path="res://Scripts/UI/UpgradePicker.cs" id="1"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_reward_panel"]
-bg_color = Color(0.043, 0.024, 0.078, 0.92)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(0.4902, 0.9922, 0.9961, 0.85)
-corner_radius_top_left = 12
-corner_radius_top_right = 12
-corner_radius_bottom_right = 12
-corner_radius_bottom_left = 12
-content_margin_left = 16.0
-content_margin_top = 14.0
-content_margin_right = 16.0
-content_margin_bottom = 14.0
-
 [node name="UpgradePicker" type="Control"]
 layout_mode = 1
 anchors_preset = 15
@@ -40,75 +24,32 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 
 [node name="Panel" type="PanelContainer" parent="CenterContainer"]
-custom_minimum_size = Vector2(440, 0)
+custom_minimum_size = Vector2(460, 0)
 layout_mode = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_reward_panel")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="CenterContainer/Panel/VBoxContainer"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 18
 text = "¡SUBISTE DE NIVEL! Elige una mejora"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="Option1" type="PanelContainer" parent="CenterContainer/Panel/VBoxContainer"]
-custom_minimum_size = Vector2(0, 72)
+[node name="FreeHint" type="Label" parent="CenterContainer/Panel/VBoxContainer"]
 layout_mode = 2
-mouse_filter = 0
+theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+text = "Elección gratuita — no gastás monedas"
 
-[node name="Content" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer/Option1"]
+[node name="CardsContainer" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer"]
 layout_mode = 2
-mouse_filter = 2
-
-[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/Option1/Content"]
-layout_mode = 2
-mouse_filter = 2
-autowrap_mode = 2
-
-[node name="Button" type="Button" parent="CenterContainer/Panel/VBoxContainer/Option1/Content"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Elegir"
-
-[node name="Option2" type="PanelContainer" parent="CenterContainer/Panel/VBoxContainer"]
-custom_minimum_size = Vector2(0, 72)
-layout_mode = 2
-mouse_filter = 0
-
-[node name="Content" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer/Option2"]
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/Option2/Content"]
-layout_mode = 2
-mouse_filter = 2
-autowrap_mode = 2
-
-[node name="Button" type="Button" parent="CenterContainer/Panel/VBoxContainer/Option2/Content"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Elegir"
-
-[node name="Option3" type="PanelContainer" parent="CenterContainer/Panel/VBoxContainer"]
-custom_minimum_size = Vector2(0, 72)
-layout_mode = 2
-mouse_filter = 0
-
-[node name="Content" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer/Option3"]
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Label" type="Label" parent="CenterContainer/Panel/VBoxContainer/Option3/Content"]
-layout_mode = 2
-mouse_filter = 2
-autowrap_mode = 2
-
-[node name="Button" type="Button" parent="CenterContainer/Panel/VBoxContainer/Option3/Content"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Elegir"
+theme_override_constants/separation = 8

@@ -46,7 +46,10 @@ public partial class CooldownIcon : Control
             DrawPolygon(points, new[] { new Color(0f, 0f, 0f, 0.72f) });
         }
 
-        var font = ThemeDB.FallbackFont;
+        // GetThemeDefaultFont() rather than ThemeDB.FallbackFont: the latter always returns the engine's
+        // built-in font and ignores the project theme entirely, so these cooldown letters would have
+        // stayed in the old typeface while every Label in the game switched.
+        var font = GetThemeDefaultFont();
         int fontSize = 14;
         Vector2 textSize = font.GetStringSize(Label, HorizontalAlignment.Center, -1f, fontSize);
         DrawString(font, center - textSize / 2f + new Vector2(0f, textSize.Y * 0.35f), Label,

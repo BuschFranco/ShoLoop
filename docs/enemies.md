@@ -39,7 +39,7 @@ Non-projectile damage is unaffected by obstacles either way: the Laser, the leve
 
 ## Enemy categories
 
-Every enemy has an `EnemyCategory` (`Enemy.cs`): `Common`, `Rare`, `Special`, `Hidden`, `Boss`. Score/XP per kill is each enemy's own `XpReward` (round-scaled like everything else — see [difficulty-scaling.md](difficulty-scaling.md)), not a fixed table keyed by category — see [economy.md](economy.md#score-gamemanagerscore) for why Score and XP are synced 1:1. `Category` still matters for spawn-roll weighting (below), for triggering `SpecialEnemiesKilled` stat tracking on anything non-Common, and for ending a boss round on a `Boss` kill.
+Every enemy has an `EnemyCategory` (`Enemy.cs`): `Common`, `Rare`, `Special`, `Hidden`, `Boss`, `Demon`. Score/XP per kill is each enemy's own `XpReward` (round-scaled like everything else — see [difficulty-scaling.md](difficulty-scaling.md)), not a fixed table keyed by category — see [economy.md](economy.md#score-gamemanagerscore) for why Score and XP are synced 1:1. `Category` still matters for spawn-roll weighting (below), for triggering `SpecialEnemiesKilled` stat tracking on anything non-Common, and for ending a boss round on a `Boss` kill.
 
 ## Enemy types
 
@@ -47,26 +47,46 @@ Every enemy has an `EnemyCategory` (`Enemy.cs`): `Common`, `Rare`, `Special`, `H
 |---|---|---|---|---|---|---|---|
 | [EnemyGrunt.tscn](../Scenes/Enemy/EnemyGrunt.tscn) | filler | Common | 30 | 10 | 90 | 1 / 1 | pink triangle |
 | [EnemyRare.tscn](../Scenes/Enemy/EnemyRare.tscn) | mid-tier filler | Rare | 50 | 12 | 110 | 3 / 2 | blue diamond |
-| [EnemyTank.tscn](../Scenes/Enemy/EnemyTank.tscn) | slow bruiser | Special | 120 | 20 | 70 | 6 / 6 | bigger, orange |
-| [EnemySpeedy.tscn](../Scenes/Enemy/EnemySpeedy.tscn) | fast glass cannon | Special | 15 | 14 | 190 | 2 / 3 | small, green |
-| [EnemySplitter.tscn](../Scenes/Enemy/EnemySplitter.tscn) | splits on death | Special | 45 | 10 | 100 | 7 / 4 | teal, see below |
-| [EnemyShooter.tscn](../Scenes/Enemy/EnemyShooter.tscn) | slow ranged artillery | Special | 120 | 14 | 85 | 6 / 6 | purple pentagon, shoots (see below) |
+| [EnemyTank.tscn](../Scenes/Enemy/EnemyTank.tscn) | slow bruiser | Special | 170 | 26 | 70 | 6 / 6 | bigger, orange |
+| [EnemySpeedy.tscn](../Scenes/Enemy/EnemySpeedy.tscn) | fast glass cannon | Special | 24 | 18 | 205 | 2 / 3 | small, green |
+| [EnemySplitter.tscn](../Scenes/Enemy/EnemySplitter.tscn) | splits on death | Special | 65 | 14 | 100 | 7 / 4 | teal, see below |
+| [EnemyShooter.tscn](../Scenes/Enemy/EnemyShooter.tscn) | slow ranged artillery | Special | 160 | 18 | 85 | 6 / 6 | purple pentagon, shoots (see below) |
 | [EnemyHidden.tscn](../Scenes/Enemy/EnemyHidden.tscn) | rare and valuable | Hidden | 25 | 16 | 140 | 6 / 6 | pale silver star, flat 5% spawn chance, shoots |
-| [EnemyBoss.tscn](../Scenes/Enemy/EnemyBoss.tscn) | boss-round encounter | Boss | 2400 | 35 | 55 | 150 / 40 | large crimson hexagon, see [rounds.md](rounds.md#boss-rounds) |
+| [EnemyBoss.tscn](../Scenes/Enemy/EnemyBoss.tscn) | boss-round encounter | Boss | 2400 | 35 | 55 | 600 / 1500 | large crimson hexagon, see [rounds.md](rounds.md#boss-rounds) |
+| [EnemyDemon.tscn](../Scenes/Enemy/EnemyDemon.tscn) | late-game core | Demon | 200 | 30 | 150 | 9 / 8 | jagged crimson star |
+| [EnemyDemonBrute.tscn](../Scenes/Enemy/EnemyDemonBrute.tscn) | late-game heavy | Demon | 400 | 45 | 95 | 14 / 12 | large dark-crimson star |
+| [EnemyDemonStalker.tscn](../Scenes/Enemy/EnemyDemonStalker.tscn) | late-game ambusher | Demon | 130 | 28 | 210 | 10 / 9 | sharp pink shard, spawns ahead of you and lunges |
 
-All of these numbers are the **round-1 baseline**. The spawner multiplies them at spawn time — see [difficulty-scaling.md](difficulty-scaling.md). Boss's `XpReward` was bumped from an earlier 50 to 150 specifically to keep its Score/XP payout feeling like a real spike now that Score is synced to XP instead of the old flat +1000 category value (round 5 ≈ ×2 mult → ~300 Score/XP in one hit).
+All of these numbers are the **round-1 baseline**. The spawner multiplies them at spawn time — see [difficulty-scaling.md](difficulty-scaling.md). The Boss's payout is deliberately the largest single number in the game: at the round multiplier it lands around 1,440 XP / 3,600 coins on the first boss round and climbs to ~7,200 / 18,000 once the curve caps. It has to be worth a whole boss fight, and it's the one kill the round-end economy is built around.
 
-Grunts are always available. `EnemySpawner.ChooseEnemyScene()` rolls sequentially, rarest first: Hidden (flat 5%), else Special (uniformly among whichever of `TankScene` / `SpeedyScene` / `SplitterScene` are assigned, per the existing round-scaled chance), else Rare (round-scaled chance), else Grunt. These are independent rolls, not one normalized distribution, so Hidden's rate stays exactly 5% regardless of how the other chances are tuned.
+`EnemySpawner.ChooseEnemyScene()` rolls sequentially, rarest first: Hidden (flat 5%), else Special (per the round-scaled chance, picked from the weighted pool below), else Rare (round-scaled chance), else Grunt. These are independent rolls, not one normalized distribution, so Hidden's rate stays exactly 5% regardless of how the other chances are tuned.
 
-## Health bars (Boss/Special only)
+Grunts are always available **through round 17 only** — from round 18 on `CommonSuppressionCurve` promotes every would-be Grunt to a Special instead, so the Common tier stops appearing entirely. See [difficulty-scaling.md](difficulty-scaling.md#late-game-composition-shift-and-crowd-taper-rounds-1018) for that ramp and the crowd taper it's paired with.
 
-`Enemy._Ready()` only builds a health bar (`CreateHealthBar`) when `Category == Special || Category == Boss` — Common/Rare/Hidden enemies die fast enough that a bar would just be noise. Two stacked `Polygon2D` rectangles (dark background + red fill, both plain procedural geometry, no texture) sit above the enemy at `HealthBarOffset` ([Export], tuned per-scene to clear each enemy's own visual radius — e.g. `-18` for the small Speedy, `-52` for the big Boss); `UpdateHealthBar()` resizes the fill's polygon width proportionally to `CurrentHp / MaxHp` on every `TakeDamage` call. A Splitter's children inherit their parent's `HealthBarOffset` via `Split()` (along with `Category`) so they keep a health bar too.
+### Special enemy weights
+
+The Special branch is **weighted**, not a uniform pick among the four assigned scenes:
+
+| Scene | Weight | Share of the Special branch |
+|---|---|---|
+| `TankScene` | 40 | 40% |
+| `SpeedyScene` | 25 | 25% |
+| `ShooterScene` | 20 | 20% |
+| `SplitterScene` | 15 | 15% |
+
+It used to be uniform (25% each). Weighting became necessary once `CommonSuppressionCurve` pushed Specials from ~57% to ~82% of every spawn: at uniform odds that made Shooter ~20% of the *entire field*, and a screen full of ranged artillery reads as far more overwhelming than the same number of melee bodies. Splitter got the lowest weight for a different reason — each one becomes 15 bodies across its generations (see [Splitting](#splitting-enemysplitter)), re-inflating exactly the crowd count the paired taper is bringing down. Tank absorbs most of the shifted share: at 120 HP it's what keeps threat-per-body high while total count falls.
+
+`ChooseSpecialScene()` skips any unassigned scene when summing weights, so removing a scene from `Arena.tscn` redistributes its share proportionally rather than breaking the roll.
+
+## Health bars (Special only; Boss has its own fixed HUD bar — see below)
+
+`Enemy._Ready()` only builds a health bar (`CreateHealthBar`) when `Category == Special` — Common/Rare/Hidden enemies die fast enough that a bar would just be noise, and Boss gets a fixed bar on the HUD instead (see "Fixed boss health bar" below) rather than also carrying this floating one, so the two don't end up looking like duplicates of each other. Two stacked `Polygon2D` rectangles (dark background + red fill, both plain procedural geometry, no texture) sit above the enemy at `HealthBarOffset` ([Export], tuned per-scene to clear each enemy's own visual radius — e.g. `-18` for the small Speedy, `-52` for the big Boss); `UpdateHealthBar()` resizes the fill's polygon width proportionally to `CurrentHp / MaxHp` on every `TakeDamage` call. A Splitter's children inherit their parent's `HealthBarOffset` via `Split()` (along with `Category`) so they keep a health bar too.
 
 Every hit on **every** enemy — not just the ones with a health bar — spawns a floating `-10`-style number (`SpawnDamageNumber`, same drift-up-and-fade pattern as the score popup) showing the actual HP lost, clamped to whatever HP the enemy actually had left so an overkill hit shows the real remaining HP rather than the raw (possibly enormous) damage number. This used to be gated on the enemy having a health bar (i.e. Special/Boss only), which quietly meant a Common/Rare kill gave no per-hit feedback at all — worth calling out since it also used to get mistaken for a completely different popup, see the colour note below.
 
 **Colour is deliberately outside the pink family**: `Palette.DamageNumber` is a hot orange (`#ff7a1a`), and `Palette.ScorePopup` (the `+N` that shows on a kill) was moved onto `Player`'s own cyan. They used to both be bright pinks (`ff6b8a` vs `ffa8f0`) — different hues on paper, but once the arena's bloom washes out saturation, a `-5` over an enemy and a `+5` reward popup read as the same kind of event, and specifically as *the player* losing something rather than the enemy. See [visuals.md](visuals.md) for the rest of the palette.
 
-## World pickups (Heart / Shield drops)
+## World pickups (Heart / Shield / XP / Coin drops)
 
 `Enemy.TryDropPickup()` rolls two independent chances on **every** kill, split generations included (same rule Coins already follows) — see [`HeartPickup.cs`](../Scripts/Pickup/HeartPickup.cs) / [`ShieldPickup.cs`](../Scripts/Pickup/ShieldPickup.cs):
 
@@ -74,7 +94,15 @@ Every hit on **every** enemy — not just the ones with a health bar — spawns 
 - **1% (`ShieldDropChance`)**: spawns a `ShieldPickup`, but only rolled at all when `Player.MaxShieldCharges > 0` (i.e. the player has actually bought a Barrier) — otherwise it'd drop into the world with nothing to do. Walking into it calls `Player.AddShieldCharge()`, the same method the passive Regeneración timer uses.
 - **From round 11 on (`LateDropRound`), both chances drop to 0.15% (`LateDropChance`)** — by then the player has usually stacked enough Barrier/lives sources that the early rate would flood the field with pickups.
 - Both scenes are loaded once via `GD.Load<PackedScene>` (static fields on `Enemy`) rather than `[Export]`, so every enemy scene picks them up automatically without hand-wiring the reference into all eight enemy `.tscn` files.
-- Both pulse gently and auto-expire after 10s (fading out over the last second) if never collected, and are added to the `pickups` group so `GameManager.EndRound()` clears any still on the field — same "next round starts clean" rule already applied to enemies and their bullets.
+
+Two more drops roll on the same per-kill pass, both normally worth whatever that specific enemy's own reward was:
+
+- **2% (`XpPickupDropChance`)**: an `XpPickup` worth the enemy's `XpReward`, granting XP *and* Score (Score stays synced 1:1 with XP everywhere else, so a picked-up gem follows the same rule).
+- **2% (`CoinPickupDropChance`)**: a `CoinPickup` worth the enemy's `CoinsReward`.
+- **Rounds 1–2 boost both drop chances to 7% (`EarlyXpCoinDropChance`, gated by `EarlyDropRound = 3`).** Per-kill payout is at its floor there — `RewardMultCurve` is still ~1× — so at the flat rate the player reached the first shop with almost nothing to spend. This mirrors the late-round taper above, in the opposite direction. Heart/Shield are unaffected.
+- **Separately, rounds 1–4 give every Coin gem a flat value of 7 (`EarlyCoinPickupValue`, gated by `EarlyCoinValueRound = 5`)** instead of `CoinsReward`, which is still ~1 that early even with the chance boost above — a wider window than the drop-chance boost, and a value change rather than a chance change. Only Coin gems get this; XP gems still scale off `XpReward` throughout.
+
+All four pulse gently, magnetise toward the player inside `MagnetRadius`, and auto-expire after 10s (fading out over the last second) if never collected. They share `PickupBase` and the `pickups` group. **Unlike enemies and their bullets, they are *not* cleared at round end** — see [rounds.md](rounds.md) for why, and for the `RefreshLifetime()` call that gives a carried-over drop its full window back.
 
 ## Burn (Incendiario)
 
@@ -141,7 +169,7 @@ Generation math: 1 original → splits into 2 (gen 1) → each splits into 2 mor
 
 ## Special-enemy roll
 
-`EnemySpawner._specialChance` (a `RoundCurve`, see [difficulty-scaling.md](difficulty-scaling.md)) is rolled independently for every spawn attempt. On success, one of the assigned special scenes is picked uniformly at random; otherwise a plain Grunt spawns (after also failing the Hidden and Rare rolls — see "Enemy categories and score" above).
+`EnemySpawner._specialChance` (a `RoundCurve`, see [difficulty-scaling.md](difficulty-scaling.md)) is rolled independently for every spawn attempt. On success, `ChooseSpecialScene()` picks from the [weighted special pool](#special-enemy-weights); otherwise a plain Grunt spawns (after also failing the Hidden and Rare rolls, and — from round 10 on — the common-suppression roll that promotes Grunts to Specials, see "Enemy categories and score" above).
 
 ## Shooting enemies (`ShooterEnemy`)
 
@@ -159,4 +187,22 @@ The **Shooter** is a deliberately slow artillery piece (`MoveSpeed = 85`) with T
 
 ## The Boss
 
-`Boss.cs` is now just `public partial class Boss : ShooterEnemy { }` — all its old firing logic moved to `ShooterEnemy` when the Hidden/Shooter enemies needed the same behavior. The distinct type is kept so `EnemyBoss.tscn` has a boss-specific script to hang future boss-only mechanics on, and so `is Boss` checks remain possible; its exported names (`EnemyBulletScene`, `FireRate`) are inherited unchanged, so the scene file needed no edits. Its melee contact damage works exactly like any other enemy's, just at a much higher `ContactDamage`, and at 2400 base HP it's roughly 4× as tanky as every other enemy combined. It only ever appears in boss rounds — see [rounds.md](rounds.md#boss-rounds).
+`Boss : ShooterEnemy` keeps its ranged firing exactly as inherited (`EnemyBulletScene`/`FireRate` untouched, still ticking on its own `Timer` regardless of movement pattern below). Its melee contact damage works exactly like any other enemy's, just at a much higher `ContactDamage`, and at 2400 base HP it's roughly 4× as tanky as every other enemy combined. It only ever appears in boss rounds — see [rounds.md](rounds.md#boss-rounds).
+
+### Movement patterns (rolled once per boss, per run)
+
+`Boss._Ready()` rolls one `Pattern` — `Chase`, `Charge`, or `Lunge` — via its own `Random`, once, and commits to it for the boss's whole life. This is what makes two different boss rounds feel like different encounters instead of the same straight-line chaser every time:
+
+- **Chase** — the plain baseline: straight pursuit with obstacle avoidance, unchanged from every other enemy. Kept as a real possible outcome (not just a fallback) so Charge/Lunge read as *a* pattern rather than *the* pattern.
+- **Charge** — a telegraphed dash from range. `Idle` (normal chase, 1.5s) → `Windup` (freezes in place, tints its `Visual.Modulate` to `Palette.Warning` and pulses its scale for 0.6s — the tell) → `Execute` (locks onto the player's position at windup-end and lunges at 5× `MoveSpeed` for 0.5s, bypassing obstacle avoidance since a committed dash doesn't politely detour) → `Cooldown` (1.5s, back to plain chase) → loops. If the straight line ahead is blocked at windup-end, the dash is skipped entirely (drops straight to Cooldown) rather than clipping through a wall.
+- **Lunge** — a short, sharp burst that only fires once the boss has actually closed to near-melee range, rather than on a fixed delay like Charge. `Idle` isn't timer-driven for this pattern at all: every physics frame checks the live distance to the player, and the instant it drops inside `LungeTriggerRadius` (120px) the boss freezes into a 0.3s `Windup` telegraph, then bursts at 4× `MoveSpeed` for 0.3s in `Execute`, then sits in a 1.8s `Cooldown` before Idle starts checking distance again. It's the "catch up and land the hit" reaction a slow boss needs once it's already close, distinct from Charge's long-range opener. Replaced an earlier `Orbit` pattern (circle the player at a tangent) that turned out unreliable in practice.
+
+Both patterns fall back to the exact same `ComputeAvoidanceDirection(ChaseDirection())` call Chase uses during their own idle/cooldown sub-phases, so a boss spends a good chunk of its time looking like ordinary Chase regardless of which pattern it rolled. Knockback immunity (`ApplyKnockback` no-ops for `Category == Boss`, see above) is untouched by any of this.
+
+This required a small refactor in `Enemy.cs` to give `Boss` a seam to override movement from: `ComputeAvoidanceDirection`, `IsPathBlocked`, `TickBurn`, and the `Visual`/`PlayerNode`/`EnsurePlayer` accessors went from `private` to `protected`, and the tail of `_PhysicsProcess` (knockback decay + final velocity assignment + `MoveAndSlide()`) was extracted into `protected void FinishMovement(Vector2 moveDir, double delta)`. Every other enemy type still goes through the exact same code path via the now-3-line `Enemy._PhysicsProcess`, unchanged.
+
+A **teleport/blink** pattern was considered and deliberately left out: without an in-flight dodge window it doesn't fit this game's "deliberately dodgeable" telegraph philosophy, and it would need extra safety work (arena-bounds clamp + obstacle-overlap check on the landing spot) that Charge/Lunge don't. Worth adding later as a third `Phase`-driven case once a use for it comes up.
+
+## Fixed boss health bar (HUD)
+
+The Boss no longer carries the floating in-world health bar Special enemies get (see below) — it gets its own fixed bar pinned to the top-center of the HUD instead (`HUD.tscn`'s `BossHealthBar`), styled in gold (`Palette.BossHealthBarFill`) rather than the floating bar's magenta, and much thicker (22px vs. 4px) so it reads as a dedicated instrument, not a bigger version of the same sliver. `EnemySpawner.SpawnOne` adds the spawned Boss to a `"boss"` group; `HUD._Process` polls `GetTree().GetFirstNodeInGroup("boss")` every frame the same way it already polls for `_topBarPanel` sizing, shows the bar and syncs it to `CurrentHp`/`MaxHp` while a live boss reference exists, and hides it the instant that reference goes invalid (i.e. the boss died) — no HP-changed or death signal needed.

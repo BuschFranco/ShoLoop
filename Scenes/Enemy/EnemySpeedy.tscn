@@ -9,11 +9,11 @@ radius = 9.0
 collision_layer = 2
 collision_mask = 8
 script = ExtResource("1")
-MoveSpeed = 190.0
-MaxHp = 15
+MoveSpeed = 205.0
+MaxHp = 24
 XpReward = 2
 CoinsReward = 3
-ContactDamage = 14
+ContactDamage = 18
 Category = 2
 HealthBarOffset = -18.0
 

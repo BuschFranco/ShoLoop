@@ -1,0 +1,17 @@
+[gd_resource type="SystemFont" format=3]
+
+; The project's global font, wired up via project.godot's [gui] theme/custom_font.
+;
+; A SystemFont rather than a bundled .ttf on purpose: this project has no binary assets at all (every
+; visual is procedural), and a monospaced stack gives the "retro terminal" read immediately, on desktop
+; and on Android, without shipping a font file. Godot walks the list and takes the first family the OS
+; actually has, falling back to its own default if none match.
+;
+; To switch to a true pixel-art font later, replace this resource with a FontFile pointing at the .ttf —
+; nothing else needs to change, because no node in the project sets theme_override_fonts/*, only
+; font_size. Worth knowing when that happens: [display] stretch/mode is "canvas_items" with
+; aspect "expand", so scaling is non-integer and a pixel font will look slightly soft. Fixing that
+; properly means integer scaling or "viewport" mode, which changes how the whole game renders.
+
+[resource]
+font_names = PackedStringArray("Consolas", "DejaVu Sans Mono", "Courier New", "monospace")

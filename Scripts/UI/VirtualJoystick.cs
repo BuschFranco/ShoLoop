@@ -27,6 +27,11 @@ public partial class VirtualJoystick : Control
         _knobCenter = _knob.Position;
 
         ApplyOrientationLayout();
+
+        // Read here rather than pushed from the options screen: this scene only exists during a run, and
+        // the setting can't change mid-run without going back through the menu. Modulate propagates to
+        // both Polygon2D children and multiplies their own alphas, so the base/knob contrast survives.
+        Modulate = new Color(1f, 1f, 1f, GameManager.Instance?.JoystickOpacity ?? 1f);
     }
 
     // The .tscn's own anchors are the Landscape layout (bottom-left, shifted off the edge); this

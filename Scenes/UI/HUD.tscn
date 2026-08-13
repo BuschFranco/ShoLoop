@@ -1,9 +1,10 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://Scripts/UI/HUD.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/VirtualJoystick.tscn" id="2"]
 [ext_resource type="Script" path="res://Scripts/UI/CooldownIcon.cs" id="3"]
 [ext_resource type="Script" path="res://Scripts/UI/HeartIcon.cs" id="4"]
+[ext_resource type="Script" path="res://Scripts/UI/ShieldIcon.cs" id="5"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 bg_color = Color(0.043, 0.024, 0.078, 0.62)
@@ -73,6 +74,25 @@ border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
 border_color = Color(1, 0.1843, 0.7255, 0.8)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_boss_bar_bg"]
+bg_color = Color(0.102, 0.0588, 0.1686, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.878, 0.4, 0.9)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_boss_bar_fill"]
+bg_color = Color(1, 0.878, 0.4, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -162,25 +182,46 @@ layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="LivesLabel" type="Label" parent="TopBarPanel/TopBar/LivesRow"]
-visible = false
+[node name="Heart4" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 15
-theme_override_colors/font_color = Color(1, 0.3, 0.4, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 2
-text = "Vidas: 3/3"
+script = ExtResource("4")
 
-[node name="ShieldLabel" type="Label" parent="TopBarPanel/TopBar"]
+[node name="Heart5" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("4")
+
+[node name="Heart6" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("4")
+
+[node name="ShieldRow" type="HBoxContainer" parent="TopBarPanel/TopBar"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 15
-theme_override_colors/font_color = Color(0.4, 0.75, 1, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 2
-text = "Escudo: 0/0"
+theme_override_constants/separation = 4
+
+[node name="Shield1" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("5")
+
+[node name="Shield2" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("5")
+
+[node name="Shield3" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("5")
+
+[node name="Shield4" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("5")
 
 [node name="PointsLabel" type="Label" parent="TopBarPanel/TopBar"]
 layout_mode = 2
@@ -199,6 +240,16 @@ theme_override_colors/font_color = Color(0.9, 0.95, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 text = "Puntaje: 0"
+
+[node name="StatsLabel" type="Label" parent="TopBarPanel/TopBar"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.62, 0.68, 0.78, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+text = "DAÑO 10 · CAD 3.0/s · CRIT 0%
+RANGO 220 · BAJAS 0"
 
 [node name="CooldownIcons" type="HBoxContainer" parent="."]
 layout_mode = 1
@@ -241,6 +292,55 @@ mouse_filter = 2
 script = ExtResource("3")
 icon_color = Color(1, 0.878, 0.4, 1)
 label = "U"
+
+[node name="OndaIcon" type="Control" parent="CooldownIcons"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3")
+icon_color = Color(0.777, 0.357, 1, 1)
+label = "O"
+
+[node name="VendavalIcon" type="Control" parent="CooldownIcons"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3")
+icon_color = Color(1, 0.294, 0.169, 1)
+label = "V"
+
+[node name="BossHealthBar" type="VBoxContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -220.0
+offset_top = 45.0
+offset_right = 220.0
+offset_bottom = 95.0
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="BossNameLabel" type="Label" parent="BossHealthBar"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.878, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+horizontal_alignment = 1
+text = "JEFE"
+
+[node name="BossHpBar" type="ProgressBar" parent="BossHealthBar"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_boss_bar_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_boss_bar_fill")
+max_value = 100.0
+value = 100.0
+show_percentage = false
 
 [node name="RoundTimerLabel" type="Label" parent="."]
 layout_mode = 1

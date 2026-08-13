@@ -1,10 +1,9 @@
-[gd_scene load_steps=2 format=3 uid="uid://bs4lofmcqhb8f"]
+[gd_scene load_steps=6 format=3 uid="uid://bs4lofmcqhb8f"]
 
 [ext_resource type="Script" uid="uid://dxe0juxpbyi86" path="res://Scripts/UI/MainMenu.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/OptionsMenu.tscn" id="2"]
 
-[sub_resource type="ButtonGroup" id="ButtonGroup_orientation"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orientation_normal"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
 bg_color = Color(0.102, 0.0588, 0.1686, 0.75)
 border_width_left = 2
 border_width_top = 2
@@ -16,7 +15,7 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orientation_hover"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_hover"]
 bg_color = Color(0.102, 0.0588, 0.1686, 0.9)
 border_width_left = 2
 border_width_top = 2
@@ -28,17 +27,21 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orientation_selected"]
-bg_color = Color(1, 0.1843, 0.7255, 0.85)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(0.4902, 0.9922, 0.9961, 1)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
+bg_color = Color(0.043, 0.024, 0.078, 0.62)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.878, 0.4, 0.35)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 14.0
+content_margin_top = 10.0
+content_margin_right = 14.0
+content_margin_bottom = 10.0
 
 [node name="MainMenu" type="Control" unique_id=1317012618]
 layout_mode = 3
@@ -60,83 +63,90 @@ color = Color(0.05, 0.03, 0.09, 1)
 
 [node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1095507574]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -140.0
-offset_top = -110.0
-offset_right = 140.0
-offset_bottom = 110.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 alignment = 1
+theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="VBoxContainer" unique_id=2014748906]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.3, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 40
 text = "SHOOTERLOOP"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="VBoxContainer" unique_id=1344699159]
 layout_mode = 2
+theme_override_font_sizes/font_size = 14
 text = "Sobrevive en la arena"
 horizontal_alignment = 1
 
 [node name="HighScoreLabel" type="Label" parent="VBoxContainer" unique_id=1637789029]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.15, 1)
+theme_override_font_sizes/font_size = 16
 text = "Mejor puntaje: 0"
 horizontal_alignment = 1
 
-[node name="Spacer" type="Control" parent="VBoxContainer" unique_id=1643142421]
-custom_minimum_size = Vector2(0, 20)
-layout_mode = 2
-
-[node name="OrientationLabel" type="Label" parent="VBoxContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 13
-text = "Orientación"
-horizontal_alignment = 1
-
-[node name="OrientationRow" type="HBoxContainer" parent="VBoxContainer"]
+[node name="RecordsRow" type="HBoxContainer" parent="VBoxContainer"]
 layout_mode = 2
 alignment = 1
-theme_override_constants/separation = 8
 
-[node name="LandscapeButton" type="Button" parent="VBoxContainer/OrientationRow"]
-custom_minimum_size = Vector2(140, 48)
+[node name="RecordsPanel" type="PanelContainer" parent="VBoxContainer/RecordsRow"]
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
-theme_override_font_sizes/font_size = 17
+theme_override_styles/panel = SubResource("StyleBoxFlat_records_panel")
+
+[node name="RecordsBox" type="VBoxContainer" parent="VBoxContainer/RecordsRow/RecordsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="RecordsTitle" type="Label" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.878, 0.4, 1)
+theme_override_font_sizes/font_size = 14
+text = "RÉCORDS"
+horizontal_alignment = 1
+
+[node name="RecordsList" type="Label" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
+theme_override_font_sizes/font_size = 12
+text = "Todavía no hay récords"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="VBoxContainer" unique_id=1643142421]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+
+[node name="ButtonsRow" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 10
+
+[node name="StartButton" type="Button" parent="VBoxContainer/ButtonsRow" unique_id=748975174]
+custom_minimum_size = Vector2(150, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_orientation_normal")
-theme_override_styles/hover = SubResource("StyleBoxFlat_orientation_hover")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_orientation_selected")
-toggle_mode = true
-button_group = SubResource("ButtonGroup_orientation")
-text = "Horizontal"
-
-[node name="PortraitButton" type="Button" parent="VBoxContainer/OrientationRow"]
-custom_minimum_size = Vector2(140, 48)
-layout_mode = 2
-theme_override_font_sizes/font_size = 17
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_orientation_normal")
-theme_override_styles/hover = SubResource("StyleBoxFlat_orientation_hover")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_orientation_selected")
-toggle_mode = true
-button_pressed = true
-button_group = SubResource("ButtonGroup_orientation")
-text = "Vertical"
-
-[node name="Spacer2" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 16)
-layout_mode = 2
-
-[node name="StartButton" type="Button" parent="VBoxContainer" unique_id=748975174]
-layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 text = "Comenzar"
+
+[node name="OptionsButton" type="Button" parent="VBoxContainer/ButtonsRow"]
+custom_minimum_size = Vector2(150, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+text = "Opciones"
+
+[node name="OptionsMenu" parent="." instance=ExtResource("2")]

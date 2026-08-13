@@ -2,8 +2,12 @@ namespace ShooterLoop;
 
 public partial class EnemyBullet : Area2D
 {
-    [Export] public float Speed = 260f;
-    [Export] public float Lifetime = 4f;
+    [Export] public float Speed = 290f;
+
+    // Speed x Lifetime is the shot's effective range: 290 x 5.5 ~= 1600px, up from ~1040. Shooters are
+    // slow artillery, so a shot that dies before it can threaten anyone made them safe to simply
+    // outwalk.
+    [Export] public float Lifetime = 5.5f;
 
     public Vector2 Direction = Vector2.Right;
 

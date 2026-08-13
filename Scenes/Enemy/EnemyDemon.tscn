@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Enemy/Enemy.cs" id="1"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_demon"]
+radius = 18.0
+
+[node name="EnemyDemon" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 8
+script = ExtResource("1")
+MoveSpeed = 150.0
+MaxHp = 200
+XpReward = 9
+CoinsReward = 8
+ContactDamage = 30
+Category = 5
+HealthBarOffset = -28.0
+AvoidanceProbeDistance = 90.0
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.85, 0.11, 0.16, 1)
+polygon = PackedVector2Array(0, -18, 8, -7, 18, -10, 12, 3, 16, 16, 0, 10, -16, 16, -12, 3, -18, -10, -8, -7)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_demon")

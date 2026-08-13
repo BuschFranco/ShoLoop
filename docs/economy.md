@@ -48,7 +48,9 @@ surcharge = 1.1 ^ (times this UpgradeType has been bought in the shop this run)
 ```
 Every time you **buy** (not level-up-pick — level-ups are free) any tier of a given reward family (e.g. any Speed Boost, at any tier), that entire family gets 10% pricier next time it shows up in a shop, compounding. Tracked per `UpgradeType` in `GameManager._shopPurchaseCounts`, reset on `ResetRun()`.
 
-The shop UI shows the surcharge amount next to the price, e.g. `46 monedas (+6)` — the `+6` is how much extra you're paying purely from the repurchase surcharge (round inflation excluded from that number).
+The shop UI shows the surcharge as a suffix on the price, e.g. `46 (+6) 🪙` — the `+6` is how much extra you're paying purely from the repurchase surcharge. **The wealth multiplier itself is deliberately never surfaced**: it applies equally to all three offers, so showing it couldn't help anyone choose between them, and it would compete for attention with the number that does matter (what this costs versus what you have).
+
+Note the chain rounds **twice**, not once at the end — `RoundToInt(Cost × UpgradeCostMultiplier)` and then `RoundToInt(that × surcharge)`. So `finalCost` isn't exactly `RoundToInt(Cost × mult × surcharge)`; cheap items lose a little precision (base 8 at ×2.0 → 16, ×1.1 → 17.6 → 18).
 
 ### Buying and advancing
 

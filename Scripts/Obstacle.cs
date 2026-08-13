@@ -13,6 +13,10 @@ public partial class Obstacle : StaticBody2D
 
     public override void _Ready()
     {
+        // Tinted along with the arena wall by DangerDirector, so the map's furniture shifts tone with
+        // the floor instead of staying stubbornly purple in a red arena.
+        AddToGroup("obstacles");
+
         float hw = Size.X / 2f;
         float hh = Size.Y / 2f;
         var corners = new[]
