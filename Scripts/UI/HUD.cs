@@ -15,7 +15,7 @@ public partial class HUD : Control
     private Timer _scoreDeltaTimer;
     private int _lastScore = 0;
     private Button _ultimateButton;
-    private ProgressBar _ultimateBar;
+    private UltimateButtonIcon _ultimateButtonIcon;
     private Label _countdownLabel;
     private Player _player;
     private PanelContainer _topBarPanel;
@@ -103,9 +103,18 @@ public partial class HUD : Control
         }
 
         _ultimateButton = GetNode<Button>("UltimateButton");
-        _ultimateBar = GetNode<ProgressBar>("UltimateBar");
+        _ultimateButtonIcon = GetNode<UltimateButtonIcon>("UltimateButton/UltimateButtonIcon");
         _ultimateButton.Pressed += OnUltimatePressed;
         UpdateUltimateUi();
+
+        // GameManager's ApplyUltimateButtonOpacity targets this group (same pattern as the
+        // joystick) so the setting can be applied from the main menu's options screen too.
+        _ultimateButton.AddToGroup("ultimate_button");
+
+        // Read here rather than pushed from the options screen — like the joystick, this scene
+        // only exists during a run and the setting can't change mid-run. Modulate propagates to
+        // the icon child; it doesn't affect hit-testing, so 0% keeps the button functional.
+        _ultimateButton.Modulate = new Color(1f, 1f, 1f, GameManager.Instance?.UltimateButtonOpacity ?? 1f);
 
         var pauseButton = GetNode<Button>("PauseButton");
         pauseButton.Pressed += OnPausePressed;
@@ -150,17 +159,17 @@ public partial class HUD : Control
     {
         bool hasUltimate = _player != null && _player.EquippedUltimate != null;
         _ultimateButton.Visible = hasUltimate;
-        _ultimateBar.Visible = hasUltimate;
         if (!hasUltimate) return;
+
+        _ultimateButtonIcon.Kind = _player.EquippedUltimate.Value;
 
         float remaining = _player.UltimateCooldownRemaining;
         float duration = _player.UltimateCooldownDuration;
         bool ready = remaining <= 0f;
 
-        _ultimateBar.MaxValue = duration;
-        _ultimateBar.Value = duration - remaining;
+        _ultimateButtonIcon.CooldownFraction = duration > 0f ? Mathf.Clamp(remaining / duration, 0f, 1f) : 0f;
+        _ultimateButtonIcon.CooldownSeconds = ready ? 0f : remaining;
         _ultimateButton.Disabled = !ready;
-        _ultimateButton.Text = ready ? "¡ULTIMATE!" : $"{remaining:0.0}s";
     }
 
     public override void _Process(double delta)
