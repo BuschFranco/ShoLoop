@@ -8,7 +8,9 @@ public partial class HeartIcon : Control
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(18, 18);
+        // 18 was too small to read at a glance on a phone. HeartPoints scales off min(Size)/20, so this
+        // one number is the whole knob — the geometry follows.
+        CustomMinimumSize = new Vector2(26, 26);
     }
 
     public override void _Draw()

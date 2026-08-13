@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Enemy/DemonStalker.cs" id="1"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_stalker"]
+radius = 13.0
+
+[node name="EnemyDemonStalker" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 8
+script = ExtResource("1")
+MoveSpeed = 210.0
+MaxHp = 130
+XpReward = 10
+CoinsReward = 9
+ContactDamage = 28
+Category = 5
+HealthBarOffset = -22.0
+AvoidanceProbeDistance = 100.0
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(1, 0.25, 0.36, 1)
+polygon = PackedVector2Array(16, 0, 2, -8, 6, -15, -4, -9, -14, -13, -8, 0, -14, 13, -4, 9, 6, 15, 2, 8)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_stalker")

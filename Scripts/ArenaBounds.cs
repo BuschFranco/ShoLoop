@@ -10,6 +10,10 @@ public partial class ArenaBounds : Line2D
 {
     public override void _Ready()
     {
+        // Tinted by DangerDirector as rounds climb. The grid lines below are children, so they inherit
+        // this node's Modulate — one property shifts the whole map's tone.
+        AddToGroup("arena_bounds");
+
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
         if (player == null) return;
 

@@ -13,6 +13,7 @@ obj/
 
 # Local export outputs (Godot's Export dialog writes these to the project root) — large binaries
 # and a machine-specific preset config, neither belongs in source control.
+/build/
 /ShooterLoop.apk
 /ShooterLoop.exe
 /ShooterLoop.console.exe

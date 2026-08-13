@@ -35,10 +35,27 @@ public partial class GameManager : Node
     // they're really earning, regardless of how aggressively (or passively) they farm any given
     // round. Every WealthCostStep coins ever earned raises the multiplier by WealthCostPerStep,
     // same shape as the old round curve — just re-indexed onto wealth instead of round number.
-    private const float WealthCostBase = 2f;
-    private const float WealthCostPerStep = 1.4f;
+    // The Max used to be 60, which sounds like a generous ceiling and was in fact the bug: the old
+    // slope (1.4 per 40 coins = 0.035/coin) saturated it at just 1,657 lifetime coins — around round 4.
+    // From there on the whole wealth-indexed mechanism was inert and every price was a flat
+    // `baseCost x 60` forever, which is exactly how a player ends up holding 30,000 coins while
+    // Legendaries cost 2,700.
+    //
+    // The fix is a much gentler slope with a ceiling high enough never to bind in real play, so prices
+    // keep tracking wealth instead of flattening.
+    //
+    // The slope is the knob, and it is easy to overshoot: because prices scale with *lifetime* earnings,
+    // a Legendary's cost settles at a fixed fraction of everything you'll ever earn, no matter how long
+    // the run. The first attempt used 0.012/coin, which put that fraction at ~55% — two big purchases
+    // per run, total. At 0.005 it's ~23%, i.e. roughly four Legendaries or twenty-five Commons across a
+    // whole run, which is the intended shape for a three-offer shop.
+    //
+    // Worth knowing when retuning: boss gold feeds TotalCoinsEarned too, so raising the boss payout
+    // raises prices as a side effect. The two changes compound.
+    private const float WealthCostBase = 6f;
+    private const float WealthCostPerStep = 0.2f;    // 0.2 per 40 coins = 0.005/coin
     private const float WealthCostStep = 40f;
-    private const float WealthCostMax = 60f;
+    private const float WealthCostMax = 4000f;
 
     public int TotalCoinsEarned = 0;
 
@@ -96,6 +113,7 @@ public partial class GameManager : Node
         // then snaps to portrait.
         CurrentOrientation = LoadOrientationPreference();
         ApplyOrientation();
+        LoadSettings();
 
         _roundTimer = new Timer();
         _roundTimer.OneShot = true;
@@ -165,6 +183,10 @@ public partial class GameManager : Node
     // mutating each enemy's own MoveSpeed) so the Zona Lenta ultimate affects enemies spawned
     // mid-effect too, not just the ones that existed at the moment it was triggered.
     public float EnemySpeedMultiplier = 1f;
+
+    // Extra XP/coin payout from a round event (Frenesí doubles it). Applied per spawn in
+    // EnemySpawner.SpawnOne alongside RewardMultCurve, and reset by RoundEventDirector at round end.
+    public float EventRewardMultiplier = 1f;
     private Timer _slowTimer;
 
     public void ApplyTemporarySlow(float multiplier, float duration)
@@ -181,6 +203,22 @@ public partial class GameManager : Node
         _slowTimer.Start();
     }
 
+    // Was a flat 1.3x per level. The problem with a flat factor is that it loses badly to how income
+    // actually grows: RewardMultCurve alone adds 35% *per round*, and that compounds again with burst
+    // count, spawn rate and a progressively heavier enemy mix. By round 20 a player earns ~11,000 XP in
+    // a single round against a 1,486 level cost — roughly seven levels per round, which is what made
+    // late-game leveling feel free.
+    //
+    // A factor that itself grows per level fixes the shape rather than just shifting it: the early
+    // game is left almost exactly as it was (level 5 even gets slightly cheaper), and the curve only
+    // steepens from around level 12 — which is about where a player sits by round 11.
+    private const float XpGrowthBase = 1.30f;
+    private const float XpGrowthPerLevel = 0.02f;
+    private const float XpGrowthMax = 1.75f;
+
+    private float XpGrowthFactor() =>
+        Mathf.Min(XpGrowthBase + XpGrowthPerLevel * Level, XpGrowthMax);
+
     public void AddXp(int amount)
     {
         Xp += amount;
@@ -193,7 +231,7 @@ public partial class GameManager : Node
         {
             Xp -= XpToNextLevel;
             Level++;
-            XpToNextLevel = Mathf.RoundToInt(XpToNextLevel * 1.3f);
+            XpToNextLevel = Mathf.RoundToInt(XpToNextLevel * XpGrowthFactor());
             levelsGained++;
             OnLevelGained();
         }
@@ -302,10 +340,10 @@ public partial class GameManager : Node
         foreach (Node bullet in GetTree().GetNodesInGroup("enemy_bullets"))
             bullet.QueueFree();
 
-        // Same reasoning as above: a Heart/Shield drop still sitting on the field shouldn't carry
-        // over into the next round's clean board.
-        foreach (Node pickup in GetTree().GetNodesInGroup("pickups"))
-            pickup.QueueFree();
+        // Pickups deliberately survive the round boundary, unlike the two groups above. A drop that
+        // lands in the last seconds of a round was earned, and sweeping it here meant the kill that
+        // produced it was silently wasted. StartNextRound refreshes their lifetimes so they get a
+        // real window to be collected rather than expiring two seconds into the new round.
 
         // A Timer only freezes its remaining time while the tree is paused — it doesn't reset.
         // Without this, the spawner's own timer could have almost no time left by the time the
@@ -313,6 +351,10 @@ public partial class GameManager : Node
         // ignoring the round-start countdown below.
         var spawner = GetTree().GetFirstNodeInGroup("enemy_spawner") as EnemySpawner;
         spawner?.StopSpawning();
+
+        // Clears every hazard the round's event left on the field and resets its global multipliers, so
+        // nothing bleeds into the shop or the next round.
+        RoundEventDirectorNode?.EndActiveEvent();
 
         var shop = GetTree().GetFirstNodeInGroup("shop") as Shop;
         shop?.Open();
@@ -341,6 +383,12 @@ public partial class GameManager : Node
         player?.HealFullLives();
         player?.RefillShield();
 
+        // Pickups are no longer swept at round end (see EndRound), so anything left on the field gets
+        // its full lifetime back here — otherwise a drop from the last second of the previous round
+        // would expire almost immediately into this one.
+        foreach (Node node in GetTree().GetNodesInGroup("pickups"))
+            (node as PickupBase)?.RefreshLifetime();
+
         // Enemies don't start appearing immediately — a short "get ready" countdown plays first
         // (HUD shows it in place of the round timer/boss label), with the round's own timer/spawns
         // deferred until it elapses.
@@ -355,12 +403,28 @@ public partial class GameManager : Node
         _roundStartTimer.WaitTime = RoundStartDelay;
         _roundStartTimer.Start();
 
+        // The alarm goes off during the countdown, not when the boss lands — the point is to telegraph
+        // what's coming. This is also what gives the round-5 boss an alarm at all, since normal round
+        // escalation hasn't reached the alarm threshold that early.
+        DangerDirectorNode?.SetBossAlert(IsBossRound);
+
+        // Rolled now, applied after the countdown. Splitting it that way means the outcome is settled
+        // before the round begins while the announcement still gets the screen to itself.
+        RoundEventDirectorNode?.RollForRound(RoundNumber, IsBossRound);
+
         Resume();
     }
+
+    private DangerDirector DangerDirectorNode =>
+        GetTree().GetFirstNodeInGroup("danger_director") as DangerDirector;
+
+    private RoundEventDirector RoundEventDirectorNode =>
+        GetTree().GetFirstNodeInGroup("round_event_director") as RoundEventDirector;
 
     private void BeginRoundAfterCountdown()
     {
         var spawner = GetTree().GetFirstNodeInGroup("enemy_spawner") as EnemySpawner;
+        var director = DangerDirectorNode;
 
         if (IsBossRound)
         {
@@ -368,11 +432,27 @@ public partial class GameManager : Node
 
             var banner = GetTree().GetFirstNodeInGroup("boss_banner") as BossBanner;
             banner?.Announce(RoundNumber);
+
+            // The pre-boss burst hands back to the round's own danger level now that the boss is here.
+            director?.SetBossAlert(false);
+
+            if (GetTree().GetFirstNodeInGroup("camera_rig") is CameraRig camera)
+                camera.Shake(DangerLevel.ShakeStrength, DangerLevel.ShakeDuration);
         }
         else
         {
+            // Started before ConfigureForRound: Frenesí sets EventRewardMultiplier, and the spawner reads
+            // that when it evaluates its stat curves for this round.
+            RoundEventDirectorNode?.BeginActiveEvent();
+
             spawner?.ConfigureForRound(RoundNumber);
             _roundTimer.Start();
+
+            // Fired here rather than from RoundChanged so the callout doesn't share the screen with the
+            // countdown it would otherwise overlap. Only lands on the few non-boss rounds that mark an
+            // escalation step — see DangerLevel.ThreatCallout.
+            string callout = DangerLevel.ThreatCallout(RoundNumber);
+            if (callout != null) director?.AnnounceThreat(callout);
         }
     }
 
@@ -508,6 +588,97 @@ public partial class GameManager : Node
     {
         if (Score > LoadHighScore())
             SaveHighScore(Score);
+
+        AppendRecord(Score);
+    }
+
+    // --- Settings and records (ConfigFile) ---
+    //
+    // HighScore and Orientation above are one-value-per-file plain text, which was fine for a single int
+    // each. A slider value plus a dated top-ten list is structured data, so new persistence goes through
+    // ConfigFile rather than adding more one-line files.
+
+    private const string SettingsFilePath = "user://settings.cfg";
+    private const string SettingsSection = "settings";
+
+    // 0 = fully transparent, 1 = fully opaque. Applied as Modulate.A on the joystick's root Control,
+    // which propagates to both of its Polygon2D children and multiplies their own alphas (0.28 base /
+    // 0.85 knob), preserving the contrast between them. Note Modulate does not affect hit-testing, so
+    // the joystick keeps working even at 0 — which is the point of allowing 0 at all.
+    public float JoystickOpacity { get; private set; } = 1f;
+
+    public void SetJoystickOpacity(float opacity)
+    {
+        JoystickOpacity = Mathf.Clamp(opacity, 0f, 1f);
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);   // a missing file just means "defaults", not an error worth acting on
+        config.SetValue(SettingsSection, "joystick_opacity", JoystickOpacity);
+        config.Save(SettingsFilePath);
+
+        ApplyJoystickOpacity();
+    }
+
+    // Called on boot and whenever the slider moves. Safe to call with no joystick in the tree (the main
+    // menu has none) — it simply does nothing until a run starts and VirtualJoystick reads the value in
+    // its own _Ready.
+    public void ApplyJoystickOpacity()
+    {
+        if (GetTree().GetFirstNodeInGroup("virtual_joystick") is CanvasItem joystick)
+            joystick.Modulate = new Color(1f, 1f, 1f, JoystickOpacity);
+    }
+
+    private void LoadSettings()
+    {
+        var config = new ConfigFile();
+        if (config.Load(SettingsFilePath) != Error.Ok) return;
+        JoystickOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "joystick_opacity", 1f), 0f, 1f);
+    }
+
+    private const string RecordsFilePath = "user://records.cfg";
+    private const int MaxRecords = 10;
+
+    public readonly record struct ScoreRecord(int Score, string Date);
+
+    // Stored as "score|date" strings rather than nested dictionaries: ConfigFile round-trips a
+    // PackedStringArray cleanly and there's nothing here worth the extra parsing surface.
+    public static List<ScoreRecord> LoadRecords()
+    {
+        var records = new List<ScoreRecord>();
+
+        var config = new ConfigFile();
+        if (config.Load(RecordsFilePath) != Error.Ok) return records;
+
+        var raw = (string[])config.GetValue("records", "entries", System.Array.Empty<string>());
+        foreach (string line in raw)
+        {
+            string[] parts = line.Split('|');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out int score)) continue;
+            records.Add(new ScoreRecord(score, parts[1]));
+        }
+        return records;
+    }
+
+    private static void AppendRecord(int score)
+    {
+        var records = LoadRecords();
+
+        var now = Time.GetDatetimeDictFromSystem();
+        string date = $"{now["day"].AsInt32():D2}/{now["month"].AsInt32():D2}/{now["year"].AsInt32()} "
+                    + $"{now["hour"].AsInt32():D2}:{now["minute"].AsInt32():D2}";
+        records.Add(new ScoreRecord(score, date));
+
+        // Highest first, then keep only the top few — this is a leaderboard, not a full history, so an
+        // unbounded file would grow forever for no benefit.
+        records.Sort((a, b) => b.Score.CompareTo(a.Score));
+        if (records.Count > MaxRecords) records.RemoveRange(MaxRecords, records.Count - MaxRecords);
+
+        var lines = new string[records.Count];
+        for (int i = 0; i < records.Count; i++) lines[i] = $"{records[i].Score}|{records[i].Date}";
+
+        var config = new ConfigFile();
+        config.SetValue("records", "entries", lines);
+        config.Save(RecordsFilePath);
     }
 
     public void ResetRun()
@@ -530,6 +701,7 @@ public partial class GameManager : Node
         _roundTimer.Stop();
         _roundTimer.Start();
         EnemySpeedMultiplier = 1f;
+        EventRewardMultiplier = 1f;
         _slowTimer?.Stop();
         _roundStartTimer?.Stop();
         SnapshotRoundStart();

@@ -17,11 +17,12 @@ public enum UpgradeType
     CritChance,
     BulletKnockback,
     CoinBonus,
-    Revive,
     ShieldRegen,
     Missile,
     Burn,
-    XpBonus
+    XpBonus,
+    ShockwaveAura,
+    Vendaval
 }
 
 public enum RewardTier
@@ -38,6 +39,20 @@ public enum UltimateKind
     Nova,
     TimeSlow,
     Frenzy
+}
+
+public static class UltimateKindNames
+{
+    // The UI used to print the enum member directly, so the player read "TimeSlow" while the catalog
+    // that sold it to them called it "Zona Lenta". These are the catalog's own names, minus the
+    // "Ultimate: " prefix the shop rows carry.
+    public static string Display(UltimateKind kind) => kind switch
+    {
+        UltimateKind.Nova => "Pulso Nova",
+        UltimateKind.TimeSlow => "Zona Lenta",
+        UltimateKind.Frenzy => "Sobrecarga",
+        _ => kind.ToString(),
+    };
 }
 
 // Where a reward is allowed to show up. This replaced a pair of ad-hoc `includeHearts` /
@@ -98,6 +113,7 @@ public class UpgradeData
             new("Misil I", "Lanza un misil cada 4.5s que explota en área (30 daño, radio 70)", UpgradeType.Missile, RewardTier.Common, 1f, cost: 24),
             new("Incendiario I", "Tus balas queman: 6 daño/seg por 3s", UpgradeType.Burn, RewardTier.Common, 1f, cost: 20),
             new("Sabiduría I", "+20% de experiencia por enemigo", UpgradeType.XpBonus, RewardTier.Common, 20f, cost: 18),
+            new("Onda de Choque I", "Cada 6s liberás una explosión a tu alrededor (20 daño, radio 65)", UpgradeType.ShockwaveAura, RewardTier.Common, 1f, cost: 20),
         },
         [RewardTier.Rare] = new List<UpgradeData>
         {
@@ -115,6 +131,7 @@ public class UpgradeData
             new("Botín II", "+25% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Rare, 25f, cost: 24),
             new("Misil II", "Lanza un misil cada 3.8s que explota en área (50 daño, radio 85)", UpgradeType.Missile, RewardTier.Rare, 2f, cost: 38),
             new("Incendiario II", "Tus balas queman: 10 daño/seg por 3s", UpgradeType.Burn, RewardTier.Rare, 2f, cost: 32),
+            new("Onda de Choque II", "Cada 5s liberás una explosión a tu alrededor (35 daño, radio 78)", UpgradeType.ShockwaveAura, RewardTier.Rare, 2f, cost: 32),
         },
         [RewardTier.Epic] = new List<UpgradeData>
         {
@@ -133,12 +150,14 @@ public class UpgradeData
             new("Misil III", "Lanza un misil cada 3.2s que explota en área (75 daño, radio 100)", UpgradeType.Missile, RewardTier.Epic, 3f, cost: 54),
             new("Incendiario III", "Tus balas queman: 16 daño/seg por 3.5s", UpgradeType.Burn, RewardTier.Epic, 3f, cost: 46),
             new("Sabiduría II", "+50% de experiencia por enemigo", UpgradeType.XpBonus, RewardTier.Epic, 50f, cost: 44),
+            new("Onda de Choque III", "Cada 4s liberás una explosión a tu alrededor (55 daño, radio 92)", UpgradeType.ShockwaveAura, RewardTier.Epic, 3f, cost: 46),
 
             // --- Shop-exclusive from here ---
             new("Ultimate: Pulso Nova", "Daña fuerte a todos los enemigos cercanos de una vez", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Nova),
             new("Ultimate: Zona Lenta", "Ralentiza a todos los enemigos por varios segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.TimeSlow),
             new("Ultimate: Sobrecarga", "Duplica tu cadencia y daño por varios segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Frenzy),
             new("Regeneración", "Recuperás 1 carga de escudo cada 12s", UpgradeType.ShieldRegen, RewardTier.Epic, 5f, cost: 55, source: RewardSource.Shop),
+            new("Vendaval I", "Cada 4.5s liberás una ráfaga frente tuyo que daña y empuja a los enemigos (90 daño, alcance 260)", UpgradeType.Vendaval, RewardTier.Epic, 1f, cost: 75, source: RewardSource.Shop),
         },
         [RewardTier.Legendary] = new List<UpgradeData>
         {
@@ -156,6 +175,7 @@ public class UpgradeData
             new("Botín IV", "+60% de monedas por enemigo", UpgradeType.CoinBonus, RewardTier.Legendary, 60f, cost: 52),
             new("Misil IV", "Lanza un misil cada 2.6s que explota en área (110 daño, radio 120)", UpgradeType.Missile, RewardTier.Legendary, 4f, cost: 72),
             new("Incendiario IV", "Tus balas queman: 24 daño/seg por 4s", UpgradeType.Burn, RewardTier.Legendary, 4f, cost: 62),
+            new("Onda de Choque IV", "Cada 3.2s liberás una explosión a tu alrededor (80 daño, radio 105)", UpgradeType.ShockwaveAura, RewardTier.Legendary, 4f, cost: 62),
 
             // --- Shop-exclusive from here ---
             // A single Legendary Heart rather than one per tier: max lives is the most swingy stat
@@ -163,7 +183,7 @@ public class UpgradeData
             // something a cheap Common roll hands out repeatedly.
             new("Corazón", "+1 vida máxima y cura toda tu vida", UpgradeType.Heart, RewardTier.Legendary, 1f, cost: 60, source: RewardSource.Shop),
             new("Regeneración+", "Recuperás 1 carga de escudo cada 7.5s", UpgradeType.ShieldRegen, RewardTier.Legendary, 8f, cost: 75, source: RewardSource.Shop),
-            new("Segunda Oportunidad", "Al morir revivís una vez con la vida llena (máx. 2)", UpgradeType.Revive, RewardTier.Legendary, 1f, cost: 95, source: RewardSource.Shop),
+            new("Vendaval II", "Cada 3.6s liberás una ráfaga más ancha y fuerte frente tuyo (140 daño, alcance 320)", UpgradeType.Vendaval, RewardTier.Legendary, 2f, cost: 115, source: RewardSource.Shop),
         },
     };
 

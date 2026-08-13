@@ -30,8 +30,15 @@ public partial class Player : CharacterBody2D
     // outgrows the visible screen stops being a meaningful stat, since you can't see what you're
     // shooting at anyway. This is the number that actually binds.
     private const float MaxFireRange = 600f;
-    private const int MaxLivesCap = 10;
-    private const int MaxShieldChargesCap = 8;
+    // 6 rather than 10: the HUD now shows lives as a row of icons, and ten of them is more width than a
+    // portrait screen has to spare. Reaching 10 also meant buying the Legendary shop-only Corazón seven
+    // separate times, which no real run did.
+    private const int MaxLivesCap = 6;
+
+    // Was 8, which was unreachable dead code: Barrier tiers are worth 1/2/3/4 and apply as
+    // Max(current, value) rather than summing, so 4 was always the real ceiling. Now the constant says
+    // what the game actually does — which matters more than before, since the shield row is on screen.
+    private const int MaxShieldChargesCap = 4;
     public const int MaxExtraFiringLinesCap = 5;
     private const float SideShotSpacing = 14f;
 
@@ -40,7 +47,6 @@ public partial class Player : CharacterBody2D
     private const float MaxBulletKnockbackBonus = 400f;
     private const float MaxCoinBonusPercent = 150f;
     private const float MaxXpBonusPercent = 100f;
-    private const int MaxReviveCharges = 2;
 
     public int CurrentLives;
     public int MaxShieldCharges = 0;
@@ -50,13 +56,14 @@ public partial class Player : CharacterBody2D
     public int ExtraFiringLines = 0;
     public int LaserLevel = 0;
     public int MissileLevel = 0;
+    public int OndaLevel = 0;
+    public int VendavalLevel = 0;
     public int BurnLevel = 0;
     public int BulletPierce = 0;
     public float CritChance = 0f;            // percent, 0-60
     public float BulletKnockback = 0f;
     public float CoinBonusPercent = 0f;      // percent, 0-150
     public float XpBonusPercent = 0f;        // percent, 0-100
-    public int ReviveCharges = 0;
     public float ShieldRegenPerMinute = 0f;
     public bool HasExtraProjectile => _hasExtraProjectile;
     public bool HasOrbitShield => OrbitCount > 0;
@@ -71,12 +78,15 @@ public partial class Player : CharacterBody2D
     public UltimateKind? EquippedUltimate = null;
 
     // Time-based cooldown, not a Score-driven charge meter — usable immediately on first pickup
-    // (starts at 0, i.e. ready), then a flat wait after every use. The wait itself shrinks with
-    // RoundNumber: 10s at round 1 down to 3.5s by round 11, same RoundCurve shape every other
-    // round-indexed knob in the game uses (see difficulty-scaling.md).
+    // (starts at 0, i.e. ready), then a flat wait after every use.
+    //
+    // Deliberately FLAT at 10s now. It used to shrink with RoundNumber down to a 3.5s floor by round 11,
+    // and combined with the cooldown running *concurrently* with the effect (see TriggerUltimate) that
+    // gave an 80% uptime on a 2.8s slow/damage-doubling — an Ultimate that's up four fifths of the time
+    // stops being a panic button and just becomes the player's baseline state.
     public float UltimateCooldownRemaining { get; private set; } = 0f;
     public float UltimateCooldownDuration => UltimateCooldownCurve.Evaluate(GameManager.Instance?.RoundNumber ?? 1);
-    private static readonly RoundCurve UltimateCooldownCurve = new(10f, -0.65f, 3.5f, 10f);
+    private static readonly RoundCurve UltimateCooldownCurve = new(10f, 0f, 10f, 10f);
 
     public event Action<int, int> LivesChanged;
     public event Action<int, int> ShieldChanged;
@@ -102,6 +112,39 @@ public partial class Player : CharacterBody2D
         (2.6f, 110, 120f),
     };
 
+    // Level → (fire interval, damage, blast radius). Onda de Choque detonates in place around the
+    // player rather than traveling, so it needs no aim and hits everything adjacent for free —
+    // deliberately weaker per-tick than Missile and capped at a small radius (well under FireRange)
+    // to stay a close-range panic button, not a second Missile.
+    // Radii were originally 45/55/65/75, deliberately kept well under Missile's on the grounds that Onda
+    // costs nothing to aim. In play that made it useless against exactly the threat it should answer: a
+    // Speedy at 205 base speed covers ~315 px/s by round 10, so a 45px ring caught it only after it had
+    // already closed to contact range and landed its hit. These are ~45% wider — still short enough to be
+    // a close-range panic button rather than a second Missile, but wide enough to catch a rusher on the
+    // way in.
+    //
+    // What makes the extra reach actually pay off is TriggerOnda holding the cooldown at 0 while nothing
+    // is in range: the pulse is always armed and waiting, so a wider ring means it fires *earlier* on the
+    // approach rather than just covering more ground at the same moment.
+    private static readonly (float Interval, int Damage, float Radius)[] OndaTiers =
+    {
+        (6.0f, 20, 65f),
+        (5.0f, 35, 78f),
+        (4.0f, 55, 92f),
+        (3.2f, 80, 105f),
+    };
+
+    // Level → (fire interval, damage, range, half-angle in degrees, knockback force). Vendaval is
+    // shop-exclusive and only ever offered at Epic/Legendary (see UpgradeData), so it only needs 2
+    // tiers. A directional cone in front of the player (not a full ring like Onda de Choque) that
+    // hits hard AND shoves survivors out of the cone — the "clears you a path" effect the reward
+    // is built around, so the knockback matters as much as the damage.
+    private static readonly (float Interval, int Damage, float Range, float HalfAngleDegrees, float Knockback)[] VendavalTiers =
+    {
+        (4.5f, 90, 260f, 32f, 380f),
+        (3.6f, 140, 320f, 36f, 460f),
+    };
+
     // Level → (damage per second, duration). Incendiario is a modifier applied by every source of
     // player damage — basic shots, the Laser, Orbit Blades, and Missiles all read these two
     // properties rather than each keeping their own copy of the tier lookup.
@@ -124,6 +167,10 @@ public partial class Player : CharacterBody2D
     private Polygon2D _shieldAura;
     private bool _hasExtraProjectile = false;
     private float _invulnTimer = 0f;
+    // True for the invuln window opened by a hit a shield charge absorbed — blinks the shield aura
+    // instead of the ship itself, so a hit that cost you a charge doesn't read identically to one
+    // that cost you a life.
+    private bool _blinkShieldInstead = false;
     private const float InvulnDuration = 2f;
     private float _blinkTimer = 0f;
     private const float BlinkInterval = 0.1f;
@@ -169,6 +216,8 @@ public partial class Player : CharacterBody2D
     // right after an empty tick had to wait out a whole extra interval before actually firing.
     public float LaserCooldownFraction { get; private set; }
     public float MissileCooldownFraction { get; private set; }
+    public float OndaCooldownFraction { get; private set; }
+    public float VendavalCooldownFraction { get; private set; }
 
     public float ShieldRegenCooldownFraction =>
         _shieldRegenTimer == null || _shieldRegenTimer.IsStopped() || _shieldRegenTimer.WaitTime <= 0f
@@ -287,6 +336,25 @@ public partial class Player : CharacterBody2D
                 TryFireMissile();
         }
 
+        // Onda de Choque/Vendaval are always centered on/in front of the player, so unlike
+        // Laser/Missile there's no "nothing in range" case to bail on — they simply always fire
+        // once the cooldown clears.
+        if (OndaLevel > 0)
+        {
+            if (OndaCooldownFraction > 0f)
+                OndaCooldownFraction = Mathf.Max(0f, OndaCooldownFraction - (float)delta / OndaTiers[OndaLevel - 1].Interval);
+            if (OndaCooldownFraction <= 0f)
+                TriggerOnda();
+        }
+
+        if (VendavalLevel > 0)
+        {
+            if (VendavalCooldownFraction > 0f)
+                VendavalCooldownFraction = Mathf.Max(0f, VendavalCooldownFraction - (float)delta / VendavalTiers[VendavalLevel - 1].Interval);
+            if (VendavalCooldownFraction <= 0f)
+                TriggerVendaval();
+        }
+
         if (UltimateCooldownRemaining > 0f)
             UltimateCooldownRemaining = Mathf.Max(0f, UltimateCooldownRemaining - (float)delta);
 
@@ -304,9 +372,18 @@ public partial class Player : CharacterBody2D
         {
             _invulnTimer -= (float)delta;
             _blinkTimer += (float)delta;
-            _visual.Visible = ((int)(_blinkTimer / BlinkInterval)) % 2 == 0;
+            bool blinkOn = ((int)(_blinkTimer / BlinkInterval)) % 2 == 0;
+
+            if (_blinkShieldInstead)
+                _shieldAura.Visible = blinkOn && CurrentShieldCharges > 0;
+            else
+                _visual.Visible = blinkOn;
+
             if (_invulnTimer <= 0f)
+            {
                 _visual.Visible = true;
+                _shieldAura.Visible = CurrentShieldCharges > 0;
+            }
         }
     }
 
@@ -364,9 +441,11 @@ public partial class Player : CharacterBody2D
         {
             CurrentShieldCharges--;
             RaiseShieldChanged();
+            _blinkShieldInstead = true;
         }
         else
         {
+            _blinkShieldInstead = false;
             LoseLife();
         }
 
@@ -384,18 +463,6 @@ public partial class Player : CharacterBody2D
     public void LoseLife()
     {
         CurrentLives--;
-
-        // Segunda Oportunidad (shop-only): spend a charge to come back at full lives instead of
-        // ending the run. Checked before NotifyPlayerDied so the game-over screen never appears.
-        if (CurrentLives <= 0 && ReviveCharges > 0)
-        {
-            ReviveCharges--;
-            CurrentLives = MaxLives;
-            CurrentShieldCharges = MaxShieldCharges;
-            RaiseShieldChanged();
-            TriggerLevelUpBurst();   // reuse the nova as a "you got a second wind" clear + visual
-        }
-
         LivesChanged?.Invoke(CurrentLives, MaxLives);
 
         if (CurrentLives <= 0)
@@ -652,11 +719,78 @@ public partial class Player : CharacterBody2D
 
         float orbitDps = OrbitCount * OrbitBladeDamage * OrbitHitsPerSecondEstimate * critMult;
 
+        float ondaDps = 0f;
+        if (OndaLevel > 0)
+        {
+            var (interval, damage, _) = OndaTiers[OndaLevel - 1];
+            ondaDps = damage / interval * critMult;
+        }
+
+        float vendavalDps = 0f;
+        if (VendavalLevel > 0)
+        {
+            var (interval, damage, _, _, _) = VendavalTiers[VendavalLevel - 1];
+            vendavalDps = damage / interval * critMult;
+        }
+
+        // Ultimates bypass every stat term above entirely — Nova/Zona Lenta have no persistent
+        // stat to read, and even Sobrecarga's temporary FireRate/BulletDamage doubling would only
+        // get caught here if this happened to be sampled mid-buff. Modeled explicitly instead, as
+        // an average over one full cycle — this is what makes a build that leans entirely on spamming
+        // its Ultimate read as the load-bearing power source it actually is, instead of silently
+        // reading as "doing nothing" and dodging the adaptive difficulty correction altogether (see
+        // docs/difficulty-scaling.md — this was a real exploit, not hypothetical).
+        float ultimateDps = 0f;
+        if (EquippedUltimate != null)
+        {
+            // A full cycle is now effect-then-cooldown, not cooldown-with-effect-inside, so the
+            // denominator has to be the sum. Dividing by the cooldown alone (as this did while the two
+            // overlapped) would over-report uptime and hand the player a difficulty penalty they
+            // haven't earned.
+            float active = GetUltimateActiveDuration(EquippedUltimate.Value);
+            float cooldown = Mathf.Max(UltimateCooldownDuration, 0.1f);
+            float cycle = active + cooldown;
+            float uptimeFraction = Mathf.Clamp(active / cycle, 0f, 1f);
+
+            ultimateDps = EquippedUltimate.Value switch
+            {
+                // A flat burst every cycle — genuine average DPS, no approximation needed.
+                UltimateKind.Nova => UltimateNovaDamage / cycle,
+
+                // No direct damage number to convert — models "enemies can't catch you" as extra
+                // effective throughput roughly on par with the player's whole raw kit, since a
+                // permanent slow is close to permanent safety. Same "order of magnitude, not exact
+                // combat simulation" approximation this whole method already leans on.
+                UltimateKind.TimeSlow => baselineDps * uptimeFraction,
+
+                // Already doubles gunDps live; averaged over the cycle so a snapshot taken between
+                // uses doesn't read Sobrecarga as contributing nothing.
+                UltimateKind.Frenzy => gunDps * uptimeFraction,
+
+                _ => 0f,
+            };
+        }
+
         // The companion re-derives its own output from the player's live stats, so it's a flat
         // percentage bonus on top of everything rather than its own independent term.
-        float total = (gunDps + laserDps + missileDps + burnDps + orbitDps) * (1f + CompanionStatPercent);
+        float total = (gunDps + laserDps + missileDps + burnDps + orbitDps + ondaDps + vendavalDps) * (1f + CompanionStatPercent) + ultimateDps;
         return total / baselineDps;
     }
+
+    // Nominal duration for the two time-based Ultimates before the anti-permanent-uptime cap in
+    // GetUltimateEffectDuration() below.
+    private const float UltimateEffectDurationBase = 6f;
+
+    // Once UltimateCooldownDuration floors out at 3.5s (round 11+), a flat 6s effect would overlap
+    // itself and grant up to 100% uptime — enemies permanently slowed to 30% speed, or gun damage
+    // permanently doubled, forever, rather than an occasional panic button. Capping the live
+    // duration to a fraction of the CURRENT cooldown guarantees a real downtime window no matter
+    // how short the cooldown gets, while leaving early rounds (where the cooldown is already long
+    // enough that this never binds) completely unaffected.
+    private const float UltimateUptimeCap = 0.8f;
+
+    private float GetUltimateEffectDuration() =>
+        Mathf.Min(UltimateEffectDurationBase, UltimateCooldownDuration * UltimateUptimeCap);
 
     // Mirrors OrbitShield.Damage's default. Kept in sync manually rather than read off a live
     // blade so the power estimate still works before any blade has been instantiated.
@@ -672,15 +806,24 @@ public partial class Player : CharacterBody2D
                 TriggerUltimateNova();
                 break;
             case UltimateKind.TimeSlow:
-                GameManager.Instance?.ApplyTemporarySlow(0.3f, 6f);
+                GameManager.Instance?.ApplyTemporarySlow(0.3f, GetUltimateEffectDuration());
                 break;
             case UltimateKind.Frenzy:
                 TriggerUltimateFrenzy();
                 break;
         }
 
-        UltimateCooldownRemaining = UltimateCooldownDuration;
+        // The cooldown starts counting only once the effect has finished, rather than running
+        // concurrently with it the way it used to. Modelled by simply adding the active duration on
+        // top — no extra state or callback needed, and the HUD's readout stays honest because it shows
+        // the whole remaining lock either way. Nova is instantaneous, so it gets the bare cooldown.
+        UltimateCooldownRemaining = GetUltimateActiveDuration(EquippedUltimate.Value) + UltimateCooldownDuration;
     }
+
+    // Nova detonates on the frame it's triggered; the other two run for a while. Only the timed ones
+    // push their cooldown back.
+    private float GetUltimateActiveDuration(UltimateKind kind) =>
+        kind == UltimateKind.Nova ? 0f : GetUltimateEffectDuration();
 
     private const float UltimateNovaRadius = 500f;
     private const int UltimateNovaDamage = 500;
@@ -717,6 +860,114 @@ public partial class Player : CharacterBody2D
         tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
     }
 
+    // Onda de Choque: the periodic small AoE reward. Same enemies-in-radius loop as
+    // TriggerUltimateNova above, just centered on the player continuously rather than on demand.
+    private void TriggerOnda()
+    {
+        var (_, damage, radius) = OndaTiers[OndaLevel - 1];
+
+        var targets = new List<Enemy>();
+        foreach (var n in GetTree().GetNodesInGroup("enemies"))
+        {
+            if (n is not Enemy enemy || !IsInstanceValid(enemy)) continue;
+            if (GlobalPosition.DistanceTo(enemy.GlobalPosition) <= radius) targets.Add(enemy);
+        }
+
+        // Nothing in range yet — leave the cooldown at 0 rather than spending it on an empty pop,
+        // so it fires the instant an enemy actually wanders into radius instead of on a fixed
+        // schedule that can whiff entirely. Same "stays at 0, retried next frame" idea as
+        // TryFireMissile's own no-target bail above.
+        if (targets.Count == 0) return;
+
+        OndaCooldownFraction = 1f;
+        int dmg = ApplyCrit(damage, out bool isCrit);
+
+        foreach (var enemy in targets)
+        {
+            if (CurrentBurnDps > 0f) enemy.ApplyBurn(CurrentBurnDps, CurrentBurnDuration);
+            enemy.TakeDamage(dmg);
+        }
+
+        SpawnOndaVisual(radius, isCrit);
+    }
+
+    private void SpawnOndaVisual(float radius, bool isCrit)
+    {
+        var visual = new Polygon2D();
+        var points = new Vector2[24];
+        for (int i = 0; i < points.Length; i++)
+        {
+            float angle = i / (float)points.Length * Mathf.Tau;
+            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+        }
+        visual.Polygon = points;
+        visual.Color = isCrit ? Palette.CritBullet : Palette.OndaBlast;
+        visual.Scale = Vector2.Zero;
+        AddChild(visual);
+
+        var tween = CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(visual, "scale", Vector2.One, 0.25f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(visual, "modulate:a", 0f, 0.4f);
+        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
+    }
+
+    // Vendaval: shop-exclusive Epic/Legendary reward. A directional cone in front of the player
+    // (facing direction, same angle the player's own triangle sprite is already turned to — see
+    // UpdateFacing) that hits hard and shoves survivors out of the cone, clearing a path rather
+    // than just clearing HP.
+    private void TriggerVendaval()
+    {
+        VendavalCooldownFraction = 1f;
+        var (_, damage, range, halfAngleDegrees, knockback) = VendavalTiers[VendavalLevel - 1];
+        int dmg = ApplyCrit(damage, out bool isCrit);
+
+        Vector2 facing = Vector2.Right.Rotated(_visual.Rotation);
+        float halfAngleRad = Mathf.DegToRad(halfAngleDegrees);
+
+        foreach (var n in GetTree().GetNodesInGroup("enemies"))
+        {
+            if (n is not Enemy enemy || !IsInstanceValid(enemy)) continue;
+
+            Vector2 toEnemy = enemy.GlobalPosition - GlobalPosition;
+            float dist = toEnemy.Length();
+            if (dist > range || dist <= 0f) continue;
+            if (Mathf.Abs(facing.AngleTo(toEnemy)) > halfAngleRad) continue;
+
+            if (CurrentBurnDps > 0f) enemy.ApplyBurn(CurrentBurnDps, CurrentBurnDuration);
+            enemy.TakeDamage(dmg);
+            enemy.ApplyKnockback(toEnemy / dist * knockback);
+        }
+
+        SpawnVendavalVisual(range, halfAngleDegrees, facing, isCrit);
+    }
+
+    private void SpawnVendavalVisual(float range, float halfAngleDegrees, Vector2 facing, bool isCrit)
+    {
+        const int segments = 14;
+        var points = new Vector2[segments + 2];
+        points[0] = Vector2.Zero;
+
+        float halfAngleRad = Mathf.DegToRad(halfAngleDegrees);
+        float startAngle = facing.Angle() - halfAngleRad;
+        float endAngle = facing.Angle() + halfAngleRad;
+        for (int i = 0; i <= segments; i++)
+        {
+            float angle = Mathf.Lerp(startAngle, endAngle, i / (float)segments);
+            points[i + 1] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * range;
+        }
+
+        var visual = new Polygon2D();
+        visual.Polygon = points;
+        visual.Color = isCrit ? Palette.CritBullet : Palette.VendavalBlast;
+        AddChild(visual);
+
+        var tween = CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(visual, "modulate:a", 0f, 0.3f);
+        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
+    }
+
 
     private void TriggerUltimateFrenzy()
     {
@@ -734,7 +985,7 @@ public partial class Player : CharacterBody2D
                 _fireCooldown.WaitTime = 1f / FireRate;
             };
         }
-        _frenzyTimer.WaitTime = 6f;
+        _frenzyTimer.WaitTime = GetUltimateEffectDuration();
         _frenzyTimer.Start();
     }
 
@@ -885,6 +1136,12 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Missile:
                 MissileLevel = Mathf.Max(MissileLevel, (int)upgrade.Value);
                 break;
+            case UpgradeType.ShockwaveAura:
+                OndaLevel = Mathf.Max(OndaLevel, (int)upgrade.Value);
+                break;
+            case UpgradeType.Vendaval:
+                VendavalLevel = Mathf.Max(VendavalLevel, (int)upgrade.Value);
+                break;
             case UpgradeType.Burn:
                 BurnLevel = Mathf.Max(BurnLevel, (int)upgrade.Value);
                 break;
@@ -913,9 +1170,6 @@ public partial class Player : CharacterBody2D
                 BulletKnockback = Mathf.Min(ApplyTieredStack(upgrade), MaxBulletKnockbackBonus);
                 break;
 
-            case UpgradeType.Revive:
-                ReviveCharges = Mathf.Min(ReviveCharges + (int)upgrade.Value, MaxReviveCharges);
-                break;
             case UpgradeType.ShieldRegen:
                 ShieldRegenPerMinute = Mathf.Max(ShieldRegenPerMinute, upgrade.Value);
                 EnsureShieldRegenTimer();
@@ -982,6 +1236,10 @@ public partial class Player : CharacterBody2D
             }
             case UpgradeType.SideShot:
                 return ExtraFiringLines < MaxExtraFiringLinesCap;
+            // Was missing entirely, which meant Twin Shot always read as "improves nothing" and so
+            // could never be flagged as the best offer even when unowned.
+            case UpgradeType.ExtraProjectile:
+                return !_hasExtraProjectile;
             case UpgradeType.OrbitShield:
                 return (int)upgrade.Value > OrbitCount;
             case UpgradeType.Companion:
@@ -990,6 +1248,10 @@ public partial class Player : CharacterBody2D
                 return (int)upgrade.Value > LaserLevel;
             case UpgradeType.Missile:
                 return (int)upgrade.Value > MissileLevel;
+            case UpgradeType.ShockwaveAura:
+                return (int)upgrade.Value > OndaLevel;
+            case UpgradeType.Vendaval:
+                return (int)upgrade.Value > VendavalLevel;
             case UpgradeType.Burn:
                 return (int)upgrade.Value > BurnLevel;
             case UpgradeType.Ultimate:
@@ -1004,8 +1266,6 @@ public partial class Player : CharacterBody2D
                 return XpBonusPercent < MaxXpBonusPercent;
             case UpgradeType.BulletKnockback:
                 return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletKnockbackBonus) > BulletKnockback;
-            case UpgradeType.Revive:
-                return ReviveCharges < MaxReviveCharges;
             case UpgradeType.ShieldRegen:
                 return upgrade.Value > ShieldRegenPerMinute;
             default:
@@ -1036,13 +1296,14 @@ public partial class Player : CharacterBody2D
             case UpgradeType.HitShield:
             case UpgradeType.Laser:
             case UpgradeType.Missile:
+            case UpgradeType.ShockwaveAura:
+            case UpgradeType.Vendaval:
             case UpgradeType.Burn:
             case UpgradeType.Ultimate:
             case UpgradeType.Pierce:
             case UpgradeType.CritChance:
             case UpgradeType.CoinBonus:
             case UpgradeType.XpBonus:
-            case UpgradeType.Revive:
             case UpgradeType.ShieldRegen:
                 return !IsUpgradeOverCurrent(upgrade);
             case UpgradeType.FireRange:
@@ -1051,6 +1312,10 @@ public partial class Player : CharacterBody2D
                 return BulletDamage - _baseBulletDamage >= MaxBulletDamageBonus;
             case UpgradeType.FireRate:
                 return FireRate >= MaxFireRate;
+            // Same hard-cap rule as the three above; it was absent, so a maxed-out Knockback offer
+            // stayed enabled and could be bought for nothing.
+            case UpgradeType.BulletKnockback:
+                return BulletKnockback >= MaxBulletKnockbackBonus;
             default:
                 return false;
         }
@@ -1073,7 +1338,7 @@ public partial class Player : CharacterBody2D
             case UpgradeType.CritChance:
             case UpgradeType.CoinBonus:
             case UpgradeType.XpBonus:
-            case UpgradeType.Revive:
+            case UpgradeType.BulletKnockback:
                 return "Al tope";
             default:
                 return "Adquirido";
@@ -1145,13 +1410,23 @@ public partial class Player : CharacterBody2D
                 return MissileLevel > 0
                     ? $"Tenés: Misil Nv{MissileLevel} cada {MissileTiers[MissileLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés misiles todavía";
+            case UpgradeType.ShockwaveAura:
+                return OndaLevel > 0
+                    ? $"Tenés: Onda de Choque Nv{OndaLevel} cada {OndaTiers[OndaLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés Onda de Choque todavía";
+            case UpgradeType.Vendaval:
+                return VendavalLevel > 0
+                    ? $"Tenés: Vendaval Nv{VendavalLevel} cada {VendavalTiers[VendavalLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés Vendaval todavía";
             case UpgradeType.Burn:
                 return BurnLevel > 0
                     ? $"Tenés: Incendiario Nv{BurnLevel} ({BurnTiers[BurnLevel - 1].Dps:0}/seg) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés quemadura todavía";
             case UpgradeType.Ultimate:
             {
-                string current = EquippedUltimate == null ? "ninguna" : EquippedUltimate.Value.ToString();
+                string current = EquippedUltimate == null
+                    ? "ninguna"
+                    : UltimateKindNames.Display(EquippedUltimate.Value);
                 return $"Ultimate equipada: {current} — {(helps ? "la reemplaza" : "ya es esta")}";
             }
             case UpgradeType.Pierce:
@@ -1164,8 +1439,6 @@ public partial class Player : CharacterBody2D
                 return $"Tenés: +{XpBonusPercent:0}% experiencia (tope {MaxXpBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
             case UpgradeType.BulletKnockback:
                 return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
-            case UpgradeType.Revive:
-                return $"Tenés: {ReviveCharges} revividas (tope {MaxReviveCharges}) — {(helps ? "se suma" : "ya estás en el tope")}";
             case UpgradeType.ShieldRegen:
                 return ShieldRegenPerMinute > 0f
                     ? $"Tenés: 1 carga cada {60f / ShieldRegenPerMinute:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"

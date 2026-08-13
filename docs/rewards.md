@@ -53,7 +53,6 @@ Every catalog entry declares a `RewardSource`, a `[Flags]` enum:
 | Ultimate ×3 | Epic | 80💰 | equips one of the 3 Ultimates |
 | Regeneración | Epic | 55💰 | +1 shield charge every 12s |
 | Regeneración+ | Legendary | 75💰 | +1 shield charge every 7.5s |
-| Segunda Oportunidad | Legendary | 95💰 | revive once at full life on death (max 2) |
 
 This replaced a pair of ad-hoc `includeHearts` / `includeUltimates` bools threaded through the catalog builder. That approach needed a new flag per exclusive and encoded the rule at the *call site* rather than on the reward itself — with five exclusives it stops scaling. A per-entry `Source` keeps the rule next to the thing it describes, and makes "which pool is this in?" answerable by reading one field.
 
@@ -69,7 +68,7 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Rapid Fire | `FireRate` | +0.5/s (8💰) | +1/s (16💰) | +1.8/s (28💰) | +3/s (45💰) | 12/s total |
 | Sharper Rounds | `BulletDamage` | +3 (8💰) | +5 (16💰) | +9 (28💰) | +15 (45💰) | +200 bonus |
 | Orbit Blade | `OrbitShield` | 1 blade (20💰) | 2 blades (32💰) | 3 blades (46💰) | 4 blades (60💰) | 4 blades, 100px radius, 16 dmg every 0.4s each + knockback |
-| Barrier | `HitShield` | 1 charge (14💰) | 2 charges (24💰) | 3 charges (36💰) | 4 charges (48💰) | 8 charges |
+| Barrier | `HitShield` | 1 charge (14💰) | 2 charges (24💰) | 3 charges (36💰) | 4 charges (48💰) | 4 charges |
 | Drone | `Companion` | 30% stats (12💰) | 35% stats (22💰) | 45% stats (34💰) | 50% stats (50💰) | 50% stats |
 | Side Shot | `SideShot` | — | +1 line (22💰) | — | +2 lines (55💰) | 5 lines |
 | Laser | `Laser` | Nv1: 4.0s/12dmg, máx. 5 blancos (20💰) | Nv2: 3.2s/20dmg (34💰) | Nv3: 2.5s/31dmg (50💰) | Nv4: 1.8s/50dmg (65💰) | Nv4 |
@@ -80,11 +79,12 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Coin Bonus | `CoinBonus` | +15% (14💰) | +25% (24💰) | +40% (36💰) | +60% (52💰) | +150% |
 | Missile | `Missile` | 4.5s / 30 dmg / r70 (24💰) | 3.8s / 50 / r85 (38💰) | 3.2s / 75 / r100 (54💰) | 2.6s / 110 / r120 (72💰) | Nv4 |
 | Burn | `Burn` | 6/s for 3s (20💰) | 10/s for 3s (32💰) | 16/s for 3.5s (46💰) | 24/s for 4s (62💰) | Nv4 |
+| Onda de Choque | `ShockwaveAura` | 6.0s / 20 dmg / r65 (20💰) | 5.0s / 35 / r78 (32💰) | 4.0s / 55 / r92 (46💰) | 3.2s / 80 / r105 (62💰) | Nv4 |
 | XP Bonus | `XpBonus` | +20% (18💰) | — | +50% (44💰) | — | +100% |
-| Heart *(shop)* | `Heart` | — | — | — | +1 max life & full heal (60💰) | 10 lives |
+| Heart *(shop)* | `Heart` | — | — | — | +1 max life & full heal (60💰) | 6 lives |
 | Ultimate *(shop)* | `Ultimate` | — | — | one of 3 kinds (80💰) | — | see [Ultimates](#ultimates) |
 | Shield Regen *(shop)* | `ShieldRegen` | — | — | 1/12s (55💰) | 1/7.5s (75💰) | best tier taken |
-| Revive *(shop)* | `Revive` | — | — | — | +1 charge (95💰) | 2 charges |
+| Vendaval *(shop)* | `Vendaval` | — | — | 4.5s / 90 dmg / r260, knockback 380 (75💰) | 3.6s / 140 / r320, knockback 460 (115💰) | Nv2 |
 
 See [player.md](player.md) for what each `UpgradeType` actually does mechanically. Every hard cap below is a named constant in [Player.cs](../Scripts/Player/Player.cs) — that's the one file to touch to retune any of them.
 
@@ -135,11 +135,15 @@ CurrentLives = MaxLives;                            // always a full heal
 
 It's disabled only when you're at `MaxLivesCap` **and** already on full lives — until then it always does something, either raising the ceiling or undoing damage.
 
-### Take-the-best-ever: Orbit Blade, Drone (Companion), Laser
+### Take-the-best-ever: Orbit Blade, Drone (Companion), Laser, Missile, Burn, Onda de Choque, Vendaval
 
-`OrbitCount = Max(OrbitCount, upgrade.Value)` and `CompanionStatPercent = Max(CompanionStatPercent, upgrade.Value / 100)`. Each tier's number is already an absolute target (e.g. "4 blades", "50% of your stats"), not a delta — so re-picking a lower-or-equal tier than what you already have is a genuine no-op. The [shop](economy.md) proactively hides ("Owned") any offer that would be a no-op, so you never spend your one purchase-per-round on it by accident.
+`OrbitCount = Max(OrbitCount, upgrade.Value)` and `CompanionStatPercent = Max(CompanionStatPercent, upgrade.Value / 100)`. Each tier's number is already an absolute target (e.g. "4 blades", "50% of your stats"), not a delta — so re-picking a lower-or-equal tier than what you already have is a genuine no-op. The [shop](economy.md) disables any offer that would be a no-op, so you never spend coins on it by accident.
 
-`Laser`, `Missile`, and `Burn` all work the same way — `Level = Max(Level, upgrade.Value)` against a per-tier lookup table (`LaserTiers` / `MissileTiers` / `BurnTiers`), since every tier is strictly better than the last so there's nothing to sum. Details of the first two in [player.md](player.md#missile-misil); burn's enemy-side state is in [enemies.md](enemies.md#burn-incendiario).
+`Laser`, `Missile`, `Burn`, `ShockwaveAura` (Onda de Choque), and `Vendaval` all work the same way — `Level = Max(Level, upgrade.Value)` against a per-tier lookup table (`LaserTiers` / `MissileTiers` / `BurnTiers` / `OndaTiers` / `VendavalTiers`), since every tier is strictly better than the last so there's nothing to sum. Details of the first two in [player.md](player.md#missile-misil); burn's enemy-side state is in [enemies.md](enemies.md#burn-incendiario).
+
+**Onda de Choque** fires in place around the player on the same "poll a cooldown fraction every physics frame" pattern as Laser/Missile (no repeating `Timer`, so there's no icon-flicker on an empty retry) — except it never has an empty retry to begin with, since it's centered on the player rather than needing a target in range, so it simply always fires the instant its cooldown clears. Deliberately weaker per-tick and much shorter-ranged than Missile (radius tops out at 75 vs. Missile's 120) since it costs nothing to aim.
+
+**Vendaval** is shop-exclusive and only ever offered at Epic/Legendary (2 tiers, not 4) — it's meant to be a rarer, more decisive purchase than the Common-through-Legendary rewards. It fires a damaging cone in front of the player, aimed at whatever direction the player's ship is currently facing (`Visual.Rotation`, the same value `UpdateFacing` already drives — including its "holds last facing while stationary" behavior, so the cone still has a direction even if you're standing still), and additionally calls `Enemy.ApplyKnockback` on every enemy it hits, shoving them radially out and away from the player. That knockback is the point of the reward: enough burst damage plus a strong forward-and-out shove that it visibly "clears a path" through a crowd, rather than being read as just another damage source.
 
 `Laser` specifically: `LaserLevel = Max(LaserLevel, upgrade.Value)` (`upgrade.Value` is the tier level, 1–4), and `Player.EnsureLaserTimer()` re-reads `LaserLevel` from a fixed `LaserTiers` lookup array to set the firing `Timer`'s interval, per-tick damage, and max targets per zap. Every tier is a strictly-better version of the same ability (faster + harder-hitting), so there's nothing to sum — same "take the best" shape as Orbit Blade/Drone. Tier 1 additionally caps a single zap at 5 enemies (the closest 5 in range); tiers 2–4 hit everyone in range uncapped.
 
@@ -161,7 +165,6 @@ Crit and Pierce also feed `Player.GetOffensivePower()` as real damage multiplier
 ### The new shop items
 
 - **Regeneración / Regeneración+** — take-the-best-ever, stored as *charges per minute* (5 / 8) so "higher is better" stays uniform with every other take-best reward; the timer interval is derived as `60 / rate`. Regen only tops up toward `MaxShieldCharges` and no-ops if you own no Barrier, so it complements Barrier rather than replacing it.
-- **Segunda Oportunidad** — additive up to 2 charges. `Player.LoseLife` spends a charge *before* calling `NotifyPlayerDied`, restoring full lives and shield, so the game-over screen never appears. It reuses the level-up nova for the screen-clear and visual, which also buys breathing room at the moment you'd otherwise have died.
 
 ### One-time toggle: Twin Shot
 
@@ -185,6 +188,38 @@ Three practical, distinct abilities — no tiers, each a single fixed pickup in 
 
 **Triggering**: the HUD's Ultimate button (hidden until you own one, disabled while on cooldown, showing a `{remaining:0.0}s` countdown in place of its normal label) calls `Player.TriggerUltimate()`, which no-ops unless both an Ultimate is equipped and `UltimateCooldownRemaining <= 0`, then sets the cooldown back to `UltimateCooldownDuration` after running the effect. Zona Lenta's revert and Sobrecarga's revert both run on their own one-shot `Timer`s (`GameManager.ApplyTemporarySlow` / `Player`'s `_frenzyTimer`); Sobrecarga's revert specifically calls `RecomputeFireRateAndDamage()` (re-derives from base + tier-bucket totals) rather than restoring a stale pre-buff snapshot, so it's correct even if you pick a permanent Fire Rate/Damage upgrade mid-buff.
 
+## The reward card (`RewardCard`)
+
+Both modals — the shop and the level-up/Ultimate picker — render their offers with one shared component, [`RewardCard.cs`](../Scripts/UI/RewardCard.cs) + [`RewardCard.tscn`](../Scenes/UI/RewardCard.tscn). Before it, each offer was a **single multi-line `Label`** holding `[Tier] Name (cost monedas)\nDescription\nStackInfo`, with the tier's colour applied to that whole label's `font_color`. Three consequences, all of which the card exists to fix:
+
+- No hierarchy — tier, name, price and benefit shared one font size and one colour.
+- The price and description were tinted mint/sky/violet/gold by tier instead of reading clearly.
+- Non-highlighted offers had **no border and no background** (the default `PanelContainer` panel), which is why three offers read as one run-on block rather than three cards.
+
+Each piece of information now owns a node, and the tier colour is confined to the border and the tier chip so everything else keeps full contrast:
+
+| Element | Source | Notes |
+|---|---|---|
+| Border + faint fill | `RewardTierRoller.GetTierColor(Tier)` | One cached `StyleBoxFlat` per tier. This is what makes a card look like a card. |
+| Tier chip | `GetTierName(Tier)`, uppercased | Text **and** colour, so the palette doesn't have to be memorised. |
+| `★ MEJOR` badge | `Player.GetHighlightFlags(offers)` | Slow breathing pulse. Took over the "best offer" job from the border, which now belongs to the tier — one signal per channel instead of two fighting over one property. |
+| Name | `UpgradeData.Name` | 17px, near-white. |
+| "What you gain" | `UpgradeData.Description` | The catalog descriptions are already exactly this sentence. |
+| "What you have" | `Player.GetStackInfoText(data)` | 11px, dimmed. Hidden when the method returns `null`. |
+| `MEJORA` / `NO SUMA` chip | `Player.IsUpgradeOverCurrent(data)` | The signal players were missing most, and it needs no new maths. |
+| Price | shop's `GetCost(i)`, or `GRATIS` | Gold (`Palette.CoinPickup`, matching the in-world coin) when affordable, `Palette.Warning` when not. |
+| Action button | `verb`, or `Player.GetUnavailableLabel(data)`, or `Faltan N` | See below. |
+
+**On "what you gain" being the catalog string rather than a computed number.** There is no cheap way to show `+N`: `Player.PreviewTieredBonus` is private and returns the *winning bucket total*, not the delta, and `UpgradeData.Value`'s unit is type-dependent and undocumented on the field (raw stat delta / count / percent-as-0-100 / tier index / charges-per-minute). A generic formatter would need a per-type unit table. `Description` already *is* the gain sentence, and the qualitative chip covers the case the static description can't: that tier bucketing or a cap means this particular pick would actually do nothing.
+
+**Unavailable and unaffordable are different states, and now look different.** An offer the player can't use is disabled *and* the whole card dims to 55% alpha so it stops competing for attention. An offer they merely can't afford says **`Faltan N`** on the button — a greyed button says you can't, but not why or how close you are, which was the old behaviour's whole problem.
+
+**Free vs. paid stays deliberately loud.** `Configure(..., cost: null, ...)` swaps the price for a `GRATIS` chip, and the picker carries a "Elección gratuita — no gastás monedas" subtitle. That's on top of the per-modal border colours whose [palette comment](../Scripts/Util/Palette.cs) records the original reason: players were tapping "Comprar" thinking a pick was free.
+
+**Cards are instantiated per open**, not three fixed slots in the scene. `PickRandomTiered` can legitimately return fewer than 3 offers when the pool runs dry, and the old fixed slots left the leftovers on screen as empty cards.
+
+Tier-coloured flare fires at three moments — see [visuals.md](visuals.md#reward-card-flare).
+
 ## Unbuyable offers, and which one glows
 
 Two separate per-offer questions, both answered on [Player.cs](../Scripts/Player/Player.cs) so the shop and the level-up picker can't drift apart:
@@ -193,7 +228,7 @@ Two separate per-offer questions, both answered on [Player.cs](../Scripts/Player
 
 True when taking this exact offer right now would change literally nothing. The offer **stays visible** — only its button is disabled, labelled by `GetUnavailableLabel(upgrade)` ("Adquirido" for a one-off you already own, "Al tope" for a stat that's simply maxed).
 
-Covers the take-the-best/consumable families (Orbit Blade, Drone, Side Shot, Heart, Barrier, Laser, Ultimate, Twin Shot) via `!IsUpgradeOverCurrent`, **plus** the tiered-stacking stats once they hit their hard cap:
+Covers the take-the-best/consumable families (Orbit Blade, Drone, Side Shot, Heart, Barrier, Laser, Missile, Burn, Onda de Choque, Vendaval, Ultimate, Twin Shot) via `!IsUpgradeOverCurrent`, **plus** the tiered-stacking stats once they hit their hard cap:
 ```csharp
 case UpgradeType.FireRange:    return FireRange >= MaxFireRange;
 case UpgradeType.BulletDamage: return BulletDamage - _baseBulletDamage >= MaxBulletDamageBonus;
@@ -216,4 +251,4 @@ So in the reported case both tier 2 and tier 3 still "beat current", but tier 3 
 
 ## The shop's extra layers
 
-On top of everything above, the shop applies its own [pricing rules](economy.md) — round-based inflation and a per-`UpgradeType` repurchase surcharge — and only allows one purchase per round visit. None of that affects level-up picks, which are always free.
+On top of everything above, the shop applies its own [pricing rules](economy.md) — wealth-based inflation and a per-`UpgradeType` repurchase surcharge. **All three offers can be bought in one visit**; the surcharge is what keeps repeatedly buying the same reward family from staying cheap, not a purchase cap. (Two earlier spots in this file claimed a one-purchase-per-round limit, which never matched the code.) None of the pricing affects level-up picks, which are always free.

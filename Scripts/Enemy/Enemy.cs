@@ -1,6 +1,8 @@
 namespace ShooterLoop;
 
-public enum EnemyCategory { Common, Rare, Special, Hidden, Boss }
+// Demon is appended rather than inserted: every enemy .tscn stores Category as an integer, so
+// renumbering the existing members would silently reclassify all of them.
+public enum EnemyCategory { Common, Rare, Special, Hidden, Boss, Demon }
 
 public partial class Enemy : CharacterBody2D
 {
@@ -85,7 +87,7 @@ public partial class Enemy : CharacterBody2D
         _burnRemaining = Mathf.Max(_burnRemaining, duration);
     }
 
-    private void TickBurn(float delta)
+    protected void TickBurn(float delta)
     {
         if (_burnRemaining <= 0f)
         {
@@ -123,22 +125,68 @@ public partial class Enemy : CharacterBody2D
     // splitting enemy can spawn more copies of itself without the scene referencing itself.
     public PackedScene SelfScene;
 
+    // False for boss-round chaff past its rewarded quota: the enemy is still a full threat and still has
+    // to be dealt with, it just pays nothing — no XP, no Score, no coins, and no XP/coin drops. Hearts
+    // are the sole exception (see TryDropPickup), which turns the endless chaff from an XP farm into a
+    // sustain source for a long boss fight.
+    public bool GrantsRewards = true;
+
     private Node2D _player;
     private readonly Random _rng = new();
+
+    // Read-only view of the same player reference _PhysicsProcess re-fetches every frame, plus the
+    // re-fetch itself as a guard a subclass can call from its own overridden _PhysicsProcess (Boss
+    // does, since it replaces this method's body entirely rather than calling base).
+    protected Node2D PlayerNode => _player;
+
+    protected bool EnsurePlayer()
+    {
+        if (_player == null || !IsInstanceValid(_player))
+            _player = GetTree().GetFirstNodeInGroup("player") as Node2D;
+        return _player != null;
+    }
 
     // World drops, rolled independently on every kill. Loaded once via GD.Load rather than an
     // [Export] field so every enemy scene picks these up automatically, without hand-wiring the
     // reference into all eight enemy .tscn files.
     private static readonly PackedScene HeartPickupScene = GD.Load<PackedScene>("res://Scenes/Pickup/HeartPickup.tscn");
     private static readonly PackedScene ShieldPickupScene = GD.Load<PackedScene>("res://Scenes/Pickup/ShieldPickup.tscn");
+    private static readonly PackedScene XpPickupScene = GD.Load<PackedScene>("res://Scenes/Pickup/XpPickup.tscn");
+    private static readonly PackedScene CoinPickupScene = GD.Load<PackedScene>("res://Scenes/Pickup/CoinPickup.tscn");
     private const float HeartDropChance = 0.01f;
     private const float ShieldDropChance = 0.01f;
+
+    // Flat, not scaled down in late rounds like Heart/Shield above — these are a bonus on top of
+    // the XP/Coins an enemy already grants on death, not a survival tool that needs rationing.
+    private const float XpPickupDropChance = 0.02f;
+    private const float CoinPickupDropChance = 0.02f;
+
+    // Rounds 1-2 get a boosted rate instead: per-kill payout is at its lowest there (RewardMultCurve
+    // is still ~1x), so at the flat rate the player reaches the first shop with almost nothing to
+    // spend. Mirrors the late-round taper below, in the opposite direction.
+    private const int EarlyDropRound = 3;   // exclusive — rounds 1 and 2 get the boost
+    private const float EarlyXpCoinDropChance = 0.07f;
+
+    // Separate, longer window than the drop-chance boost above: a coin gem is worth a flat 3 through
+    // round 4, not just CoinsReward (which is still ~1 that early since RewardMultCurve barely moves).
+    // Purely a per-gem value bump — the roll chance for whether one drops at all is unaffected.
+    private const int EarlyCoinValueRound = 5;   // exclusive — rounds 1-4 get the flat value
+    private const int EarlyCoinPickupValue = 3;
+
+    // Shields stop dropping entirely this late. By then a run either has a Barrier stack that makes
+    // them redundant or has no Barrier at all (in which case the drop was already suppressed), and the
+    // late game is meant to stop handing out defensive freebies.
+    private const int NoShieldDropRound = 21;
 
     // From round 11 on, both drops fall to a quarter of their early-game rate — by then the
     // player has usually accumulated enough Barrier/lives sources that the early rate would flood
     // the field with pickups.
     private const int LateDropRound = 11;
     private const float LateDropChance = 0.0015f;
+
+    // Deliberately far higher than any other drop rate: it's the only thing unrewarded boss-round chaff
+    // gives, and it exists so a long boss fight is winnable by attrition rather than a slow loss.
+    private const float UnrewardedHeartDropChance = 0.07f;
     private Polygon2D _healthBarFill;
     private const float HealthBarWidth = 30f;
     private const float HealthBarHeight = 4f;
@@ -146,6 +194,11 @@ public partial class Enemy : CharacterBody2D
     // Hit-reaction state. The flash restores this exact colour rather than assuming one, since
     // every enemy scene picks its own.
     private Polygon2D _visual;
+
+    // Read-only access for a subclass's own telegraph tweens (e.g. Boss's charge windup), which
+    // must animate Modulate rather than Color — Color is owned by the hit-flash tween above and
+    // the two would fight over it if a subclass also drove Color.
+    protected Polygon2D Visual => _visual;
     private Color _visualBaseColor = Colors.White;
     private Tween _hitTween;
     private const float HitFlashDuration = 0.14f;
@@ -162,7 +215,10 @@ public partial class Enemy : CharacterBody2D
 
         _chaseAngleOffset = Mathf.DegToRad((float)(_rng.NextDouble() * 2.0 - 1.0) * MaxChaseAngleOffset);
 
-        if (Category == EnemyCategory.Special || Category == EnemyCategory.Boss)
+        // Boss gets its own fixed bar on the HUD instead (see HUD.cs) — carrying this floating
+        // sliver too would undercut the point of that bar being visually distinct. Demons are tanky
+        // enough to need the same read Specials get.
+        if (Category == EnemyCategory.Special || Category == EnemyCategory.Demon)
             CreateHealthBar();
 
         PlaySpawnAnimation();
@@ -241,24 +297,68 @@ public partial class Enemy : CharacterBody2D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (_player == null || !IsInstanceValid(_player))
-        {
-            _player = GetTree().GetFirstNodeInGroup("player") as Node2D;
-            if (_player == null) return;
-        }
+        if (!EnsurePlayer()) return;
 
         // Ticked before movement so a burn kill skips the rest of this frame's steering work —
         // TakeDamage can QueueFree us from in here.
         TickBurn((float)delta);
         if (CurrentHp <= 0) return;
 
-        float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
-        Vector2 chaseDir = (_player.GlobalPosition - GlobalPosition).Normalized().Rotated(_chaseAngleOffset);
+        TickStragglerReposition((float)delta);
 
-        // Steer around obstacles rather than into them. MoveAndSlide alone isn't enough: it only
-        // slides when the velocity has a tangential component, so an enemy meeting a wall face
-        // head-on resolves to ~zero slide and just grinds against it forever.
-        Vector2 moveDir = ComputeAvoidanceDirection(chaseDir);
+        FinishMovement(ComputeMoveDirection(delta), delta);
+    }
+
+    // Steer around obstacles rather than into them. MoveAndSlide alone isn't enough: it only slides when
+    // the velocity has a tangential component, so an enemy meeting a wall face head-on resolves to ~zero
+    // slide and just grinds against it forever.
+    //
+    // Virtual so a subclass can substitute its own steering (DemonStalker's lunge) without
+    // re-implementing _PhysicsProcess and its burn/straggler guards. Boss predates this and overrides
+    // _PhysicsProcess wholesale instead, which is why it doesn't get the straggler check — a boss
+    // teleporting would be wrong anyway.
+    protected virtual Vector2 ComputeMoveDirection(double delta) =>
+        ComputeAvoidanceDirection(ChaseDirection());
+
+    // Enemies that fall hopelessly behind used to trail the player forever, which turned the game into
+    // an endless retreat: you could simply outrun the pack and never fight. Instead of deleting them (and
+    // handing out free breathing room) they're moved back into the player's path, keeping every scrap of
+    // their state — only GlobalPosition changes, so HP, burn, split generation and round scaling all
+    // survive exactly as they were.
+    //
+    // 1100px is chosen to be well outside the camera: at 0.85 zoom the visible half-diagonal is ~780px,
+    // so the relocation is never witnessed. Checked on an accumulator rather than every frame because a
+    // group lookup plus a distance test per enemy per frame is real cost in a 60-enemy crowd.
+    private const float StragglerDistance = 1100f;
+    private const float StragglerCheckInterval = 0.5f;
+    private float _stragglerAccumulator;
+
+    private void TickStragglerReposition(float delta)
+    {
+        _stragglerAccumulator += delta;
+        if (_stragglerAccumulator < StragglerCheckInterval) return;
+        _stragglerAccumulator = 0f;
+
+        float limitSq = StragglerDistance * StragglerDistance;
+        if (GlobalPosition.DistanceSquaredTo(_player.GlobalPosition) < limitSq) return;
+
+        if (GetTree().GetFirstNodeInGroup("enemy_spawner") is EnemySpawner spawner)
+            GlobalPosition = spawner.PickInterceptPosition();
+    }
+
+    // Direction toward the player, plus this instance's persistent heading offset. Exposed so a
+    // subclass (Boss) can fall back to normal chasing during its idle/cooldown sub-phases without
+    // duplicating the offset/normalize logic.
+    protected Vector2 ChaseDirection() =>
+        (_player.GlobalPosition - GlobalPosition).Normalized().Rotated(_chaseAngleOffset);
+
+    // Tail end of the movement step shared by every enemy: separation from neighbours, knockback
+    // decay, and the final velocity assignment. Split out of _PhysicsProcess so Boss can override
+    // the whole method (to swap in a dash/orbit direction for moveDir) while still funneling
+    // through the exact same knockback/separation handling as everyone else.
+    protected void FinishMovement(Vector2 moveDir, double delta)
+    {
+        float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
         Vector2 separation = ComputeSeparation();
 
         _knockbackVelocity = _knockbackVelocity.MoveToward(Vector2.Zero, KnockbackDecay * (float)delta);
@@ -271,7 +371,7 @@ public partial class Enemy : CharacterBody2D
 
     // Straight at the player when the way is clear; otherwise the smallest detour that isn't
     // blocked, committed to one side so the path around reads as deliberate.
-    private Vector2 ComputeAvoidanceDirection(Vector2 desired)
+    protected Vector2 ComputeAvoidanceDirection(Vector2 desired)
     {
         if (!IsPathBlocked(desired))
         {
@@ -305,11 +405,17 @@ public partial class Enemy : CharacterBody2D
         return _rng.NextDouble() < 0.5 ? -1 : 1;
     }
 
-    private bool IsPathBlocked(Vector2 direction)
+    protected bool IsPathBlocked(Vector2 direction) => IsPathBlocked(direction, AvoidanceProbeDistance);
+
+    // The explicit-distance overload exists for Boss's dashes, which travel much further than
+    // AvoidanceProbeDistance. Probing only the steering distance would clear a dash that then plows
+    // straight through an obstacle in its second half — and raising AvoidanceProbeDistance instead
+    // would make the boss's ordinary movement start swerving around walls from far too far away.
+    protected bool IsPathBlocked(Vector2 direction, float distance)
     {
         var query = PhysicsRayQueryParameters2D.Create(
             GlobalPosition,
-            GlobalPosition + direction.Normalized() * AvoidanceProbeDistance,
+            GlobalPosition + direction.Normalized() * distance,
             ObstacleCollisionMask);
 
         return GetWorld2D().DirectSpaceState.IntersectRay(query).Count > 0;
@@ -371,8 +477,11 @@ public partial class Enemy : CharacterBody2D
             // Killing a split that spawns more copies doesn't finish anything yet — only the
             // final generation (the one that doesn't split further) grants XP. Score is synced to
             // XP so it's withheld the same way; Coins still pay out on every kill along the way.
-            int xpToGive = willSplit ? 0 : XpReward;
-            GameManager.Instance?.RegisterKill(xpToGive, CoinsReward, Category);
+            // Unrewarded chaff still counts as a kill (it happened, and the HUD's total should say so) —
+            // it just contributes no XP, Score or coins.
+            int xpToGive = willSplit || !GrantsRewards ? 0 : XpReward;
+            int coinsToGive = GrantsRewards ? CoinsReward : 0;
+            GameManager.Instance?.RegisterKill(xpToGive, coinsToGive, Category);
 
             // Score is synced 1:1 with XP now, so a mid-chain Splitter kill (xpToGive == 0 until
             // the final generation) correctly shows no popup either — only the terminal kill does.
@@ -440,9 +549,32 @@ public partial class Enemy : CharacterBody2D
         var parent = GetParent();
         if (parent == null) return;
 
-        bool isLateRound = (GameManager.Instance?.RoundNumber ?? 1) >= LateDropRound;
+        int round = GameManager.Instance?.RoundNumber ?? 1;
+
+        // Unrewarded chaff drops hearts and nothing else. The rate is its own constant rather than the
+        // normal one because the late-round taper below cuts hearts to 0.15%, and boss rounds are all
+        // late — at that rate "only hearts" would have meant "nothing at all" in practice. This is what
+        // makes a drawn-out boss fight survivable instead of just attritional.
+        if (!GrantsRewards)
+        {
+            if (HeartPickupScene != null && _rng.NextDouble() < UnrewardedHeartDropChance)
+            {
+                var heartOnly = HeartPickupScene.Instantiate<Node2D>();
+                parent.AddChild(heartOnly);
+                heartOnly.GlobalPosition = GlobalPosition;
+            }
+            return;
+        }
+
+        bool isLateRound = round >= LateDropRound;
         float heartChance = isLateRound ? LateDropChance : HeartDropChance;
-        float shieldChance = isLateRound ? LateDropChance : ShieldDropChance;
+        float shieldChance = round >= NoShieldDropRound
+            ? 0f
+            : (isLateRound ? LateDropChance : ShieldDropChance);
+
+        bool isEarlyRound = round < EarlyDropRound;
+        float xpChance = isEarlyRound ? EarlyXpCoinDropChance : XpPickupDropChance;
+        float coinChance = isEarlyRound ? EarlyXpCoinDropChance : CoinPickupDropChance;
 
         if (HeartPickupScene != null && _rng.NextDouble() < heartChance)
         {
@@ -460,6 +592,22 @@ public partial class Enemy : CharacterBody2D
             var shield = ShieldPickupScene.Instantiate<Node2D>();
             parent.AddChild(shield);
             shield.GlobalPosition = GlobalPosition;
+        }
+
+        if (XpPickupScene != null && _rng.NextDouble() < xpChance)
+        {
+            var xp = XpPickupScene.Instantiate<XpPickup>();
+            xp.XpAmount = Mathf.Max(1, XpReward);
+            parent.AddChild(xp);
+            xp.GlobalPosition = GlobalPosition;
+        }
+
+        if (CoinPickupScene != null && _rng.NextDouble() < coinChance)
+        {
+            var coin = CoinPickupScene.Instantiate<CoinPickup>();
+            coin.CoinAmount = round < EarlyCoinValueRound ? EarlyCoinPickupValue : Mathf.Max(1, CoinsReward);
+            parent.AddChild(coin);
+            coin.GlobalPosition = GlobalPosition;
         }
     }
 
@@ -482,6 +630,7 @@ public partial class Enemy : CharacterBody2D
             child.SplitHpScale = SplitHpScale;
             child.SplitVisualScale = SplitVisualScale;
             child.Category = Category;
+            child.GrantsRewards = GrantsRewards;   // an unrewarded parent can't launder XP through its children
             child.HealthBarOffset = HealthBarOffset;
             child.AvoidanceProbeDistance = AvoidanceProbeDistance;
 
