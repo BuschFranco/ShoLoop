@@ -158,8 +158,8 @@ public partial class EnemySpawner : Node2D
         _forcedSpawnScene = null;
         _maxConcurrentEnemies = Mathf.RoundToInt(NormalConcurrentCap(round));
 
-        // Normal rounds are bounded by their own 60-second timer, so they need no cumulative budget.
-        _bossRoundSpawnsLeft = int.MaxValue;
+        // Normal rounds are bounded by their own 60-second timer, so payout is never gated there.
+        _bossRoundRewardedLeft = int.MaxValue;
 
         EvaluateStatCurves(round);
 
@@ -202,10 +202,15 @@ public partial class EnemySpawner : Node2D
     // A boss round has NO time limit — it ends only when the boss dies. The concurrent cap alone
     // therefore bounds nothing over time: every chaff kill immediately frees a slot, so at round 20's
     // steady rate (~12/s against a cap of 24) a two-minute boss fight could spawn well over a thousand
-    // Grunts. Stalling the boss was free, unlimited XP. This is a cumulative budget for the whole
-    // round, which is the only kind of limit that actually closes that.
-    private const int BossRoundTotalSpawnBudget = 30;
-    private int _bossRoundSpawnsLeft = int.MaxValue;
+    // Grunts. Stalling the boss was free, unlimited XP.
+    //
+    // Rather than capping the count outright (which left the arena eerily empty once the budget ran dry),
+    // spawning continues forever and only the *payout* is capped: past this quota the chaff arrives with
+    // GrantsRewards = false, so it's still a real obstacle but pays nothing except the occasional heart.
+    // Stalling the boss now costs time and gains nothing, which closes the exploit without making the
+    // fight less busy.
+    private const int BossRoundRewardedSpawns = 20;
+    private int _bossRoundRewardedLeft = int.MaxValue;
 
     public void ConfigureForBossRound(int round)
     {
@@ -223,7 +228,7 @@ public partial class EnemySpawner : Node2D
         // +1 for the boss's own slot: it joins the "enemies" group too, and OnSpawnTimeout counts that
         // group against this cap, so without the allowance the boss would eat one Grunt's worth of it.
         _maxConcurrentEnemies = Mathf.RoundToInt(NormalConcurrentCap(round) * BossRoundCrowdMult) + 1;
-        _bossRoundSpawnsLeft = BossRoundTotalSpawnBudget;
+        _bossRoundRewardedLeft = BossRoundRewardedSpawns;
 
         EvaluateStatCurves(round);
 
@@ -252,17 +257,12 @@ public partial class EnemySpawner : Node2D
         {
             if (aliveEnemies >= _maxConcurrentEnemies) return;
 
-            // Decremented here rather than inside SpawnOne so the boss's own spawn — which goes
-            // through SpawnOne directly from ConfigureForBossRound — doesn't eat a unit of the chaff
-            // budget. Once exhausted the timer is stopped outright instead of ticking for nothing.
-            if (_bossRoundSpawnsLeft <= 0)
-            {
-                StopSpawning();
-                return;
-            }
-            _bossRoundSpawnsLeft--;
+            // Counted here rather than inside SpawnOne so the boss's own spawn — which goes through
+            // SpawnOne directly from ConfigureForBossRound — never eats a unit of the chaff quota.
+            bool rewarded = _bossRoundRewardedLeft > 0;
+            if (rewarded) _bossRoundRewardedLeft--;
 
-            SpawnOne(_forcedSpawnScene ?? ChooseEnemyScene());
+            SpawnOne(_forcedSpawnScene ?? ChooseEnemyScene(), rewarded);
             aliveEnemies++;
         }
     }
@@ -330,7 +330,7 @@ public partial class EnemySpawner : Node2D
         return Mathf.Abs(position.X) <= extents.X && Mathf.Abs(position.Y) <= extents.Y;
     }
 
-    private void SpawnOne(PackedScene scene)
+    private void SpawnOne(PackedScene scene, bool grantsRewards = true)
     {
         if (scene == null || _player == null) return;
 
@@ -346,6 +346,7 @@ public partial class EnemySpawner : Node2D
         enemy.XpReward = Mathf.RoundToInt(enemy.XpReward * _rewardMult);
         enemy.CoinsReward = Mathf.RoundToInt(enemy.CoinsReward * _rewardMult);
         enemy.GlobalPosition = spawnPos;
+        enemy.GrantsRewards = grantsRewards;
 
         // Lets the HUD's fixed boss health bar find the live boss instance by polling the group,
         // the same way everything else here discovers the player/enemies — no signal needed.

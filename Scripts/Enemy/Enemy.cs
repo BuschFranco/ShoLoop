@@ -125,6 +125,12 @@ public partial class Enemy : CharacterBody2D
     // splitting enemy can spawn more copies of itself without the scene referencing itself.
     public PackedScene SelfScene;
 
+    // False for boss-round chaff past its rewarded quota: the enemy is still a full threat and still has
+    // to be dealt with, it just pays nothing — no XP, no Score, no coins, and no XP/coin drops. Hearts
+    // are the sole exception (see TryDropPickup), which turns the endless chaff from an XP farm into a
+    // sustain source for a long boss fight.
+    public bool GrantsRewards = true;
+
     private Node2D _player;
     private readonly Random _rng = new();
 
@@ -177,6 +183,10 @@ public partial class Enemy : CharacterBody2D
     // the field with pickups.
     private const int LateDropRound = 11;
     private const float LateDropChance = 0.0015f;
+
+    // Deliberately far higher than any other drop rate: it's the only thing unrewarded boss-round chaff
+    // gives, and it exists so a long boss fight is winnable by attrition rather than a slow loss.
+    private const float UnrewardedHeartDropChance = 0.07f;
     private Polygon2D _healthBarFill;
     private const float HealthBarWidth = 30f;
     private const float HealthBarHeight = 4f;
@@ -467,8 +477,11 @@ public partial class Enemy : CharacterBody2D
             // Killing a split that spawns more copies doesn't finish anything yet — only the
             // final generation (the one that doesn't split further) grants XP. Score is synced to
             // XP so it's withheld the same way; Coins still pay out on every kill along the way.
-            int xpToGive = willSplit ? 0 : XpReward;
-            GameManager.Instance?.RegisterKill(xpToGive, CoinsReward, Category);
+            // Unrewarded chaff still counts as a kill (it happened, and the HUD's total should say so) —
+            // it just contributes no XP, Score or coins.
+            int xpToGive = willSplit || !GrantsRewards ? 0 : XpReward;
+            int coinsToGive = GrantsRewards ? CoinsReward : 0;
+            GameManager.Instance?.RegisterKill(xpToGive, coinsToGive, Category);
 
             // Score is synced 1:1 with XP now, so a mid-chain Splitter kill (xpToGive == 0 until
             // the final generation) correctly shows no popup either — only the terminal kill does.
@@ -537,6 +550,22 @@ public partial class Enemy : CharacterBody2D
         if (parent == null) return;
 
         int round = GameManager.Instance?.RoundNumber ?? 1;
+
+        // Unrewarded chaff drops hearts and nothing else. The rate is its own constant rather than the
+        // normal one because the late-round taper below cuts hearts to 0.15%, and boss rounds are all
+        // late — at that rate "only hearts" would have meant "nothing at all" in practice. This is what
+        // makes a drawn-out boss fight survivable instead of just attritional.
+        if (!GrantsRewards)
+        {
+            if (HeartPickupScene != null && _rng.NextDouble() < UnrewardedHeartDropChance)
+            {
+                var heartOnly = HeartPickupScene.Instantiate<Node2D>();
+                parent.AddChild(heartOnly);
+                heartOnly.GlobalPosition = GlobalPosition;
+            }
+            return;
+        }
+
         bool isLateRound = round >= LateDropRound;
         float heartChance = isLateRound ? LateDropChance : HeartDropChance;
         float shieldChance = round >= NoShieldDropRound
@@ -601,6 +630,7 @@ public partial class Enemy : CharacterBody2D
             child.SplitHpScale = SplitHpScale;
             child.SplitVisualScale = SplitVisualScale;
             child.Category = Category;
+            child.GrantsRewards = GrantsRewards;   // an unrewarded parent can't launder XP through its children
             child.HealthBarOffset = HealthBarOffset;
             child.AvoidanceProbeDistance = AvoidanceProbeDistance;
 

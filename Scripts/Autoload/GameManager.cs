@@ -42,11 +42,18 @@ public partial class GameManager : Node
     // Legendaries cost 2,700.
     //
     // The fix is a much gentler slope with a ceiling high enough never to bind in real play, so prices
-    // keep tracking wealth instead of flattening. The slope is what to tune: too steep and prices
-    // outrun the wallet entirely (they scale with lifetime earnings, so a slope that's too high makes
-    // everything permanently unaffordable no matter how long you play).
+    // keep tracking wealth instead of flattening.
+    //
+    // The slope is the knob, and it is easy to overshoot: because prices scale with *lifetime* earnings,
+    // a Legendary's cost settles at a fixed fraction of everything you'll ever earn, no matter how long
+    // the run. The first attempt used 0.012/coin, which put that fraction at ~55% — two big purchases
+    // per run, total. At 0.005 it's ~23%, i.e. roughly four Legendaries or twenty-five Commons across a
+    // whole run, which is the intended shape for a three-offer shop.
+    //
+    // Worth knowing when retuning: boss gold feeds TotalCoinsEarned too, so raising the boss payout
+    // raises prices as a side effect. The two changes compound.
     private const float WealthCostBase = 6f;
-    private const float WealthCostPerStep = 0.48f;   // 0.48 per 40 coins = 0.012/coin
+    private const float WealthCostPerStep = 0.2f;    // 0.2 per 40 coins = 0.005/coin
     private const float WealthCostStep = 40f;
     private const float WealthCostMax = 4000f;
 
