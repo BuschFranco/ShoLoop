@@ -5,9 +5,9 @@
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
 content_margin_left = 14.0
-content_margin_top = 10.0
+content_margin_top = 6.0
 content_margin_right = 14.0
-content_margin_bottom = 10.0
+content_margin_bottom = 6.0
 bg_color = Color(0.043, 0.024, 0.078, 0.62)
 border_width_left = 2
 border_width_top = 2
@@ -118,7 +118,7 @@ text = "RÉCORDS"
 horizontal_alignment = 1
 
 [node name="RecordsList" type="RichTextLabel" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox" unique_id=2088581069]
-custom_minimum_size = Vector2(0, 120)
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 bbcode_enabled = true
 fit_content = true
