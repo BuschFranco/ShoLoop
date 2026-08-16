@@ -118,8 +118,10 @@ text = "RÉCORDS"
 horizontal_alignment = 1
 
 [node name="RecordsList" type="RichTextLabel" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox" unique_id=2088581069]
+custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 bbcode_enabled = true
+fit_content = true
 theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
