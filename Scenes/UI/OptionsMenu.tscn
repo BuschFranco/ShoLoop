@@ -103,6 +103,26 @@ theme_override_font_sizes/font_size = 11
 text = "En 0% el joystick es invisible pero sigue funcionando."
 autowrap_mode = 2
 
+[node name="UltimateButtonLabel" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Opacidad del botón Ultimate: 100%"
+
+[node name="UltimateButtonSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+min_value = 0.0
+max_value = 100.0
+step = 5.0
+value = 100.0
+
+[node name="UltimateButtonHint" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 11
+text = "En 0% el botón es invisible pero sigue funcionando."
+autowrap_mode = 2
+
 [node name="Sep" type="Control" parent="CenterContainer/Panel/Box"]
 custom_minimum_size = Vector2(0, 8)
 layout_mode = 2

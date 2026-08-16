@@ -1,10 +1,11 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://Scripts/UI/HUD.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/VirtualJoystick.tscn" id="2"]
 [ext_resource type="Script" path="res://Scripts/UI/CooldownIcon.cs" id="3"]
 [ext_resource type="Script" path="res://Scripts/UI/HeartIcon.cs" id="4"]
 [ext_resource type="Script" path="res://Scripts/UI/ShieldIcon.cs" id="5"]
+[ext_resource type="Script" path="res://Scripts/UI/UltimateButtonIcon.cs" id="6"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
 bg_color = Color(0.043, 0.024, 0.078, 0.62)
@@ -109,6 +110,54 @@ corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_circle_normal"]
+bg_color = Color(0.102, 0.0588, 0.1686, 0.75)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.878, 0.4, 0.4)
+corner_radius_top_left = 60
+corner_radius_top_right = 60
+corner_radius_bottom_right = 60
+corner_radius_bottom_left = 60
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_circle_hover"]
+bg_color = Color(0.102, 0.0588, 0.1686, 0.9)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.878, 0.4, 0.8)
+corner_radius_top_left = 60
+corner_radius_top_right = 60
+corner_radius_bottom_right = 60
+corner_radius_bottom_left = 60
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_circle_pressed"]
+bg_color = Color(0.043, 0.024, 0.078, 0.9)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.878, 0.4, 1)
+corner_radius_top_left = 60
+corner_radius_top_right = 60
+corner_radius_bottom_right = 60
+corner_radius_bottom_left = 60
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_circle_disabled"]
+bg_color = Color(0.102, 0.0588, 0.1686, 0.4)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 1, 1, 0.15)
+corner_radius_top_left = 60
+corner_radius_top_right = 60
+corner_radius_bottom_right = 60
+corner_radius_bottom_left = 60
 
 [node name="HUD" type="Control"]
 layout_mode = 1
@@ -380,43 +429,30 @@ horizontal_alignment = 1
 vertical_alignment = 1
 text = "5"
 
-[node name="UltimateBar" type="ProgressBar" parent="."]
-visible = false
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -170.0
-offset_top = -182.0
-offset_right = -20.0
-offset_bottom = -166.0
-mouse_filter = 2
-theme_override_styles/background = SubResource("StyleBoxFlat_bar_bg")
-theme_override_styles/fill = SubResource("StyleBoxFlat_bar_fill_ultimate")
-show_percentage = false
-
 [node name="UltimateButton" type="Button" parent="."]
 visible = false
 layout_mode = 1
-anchors_preset = 3
 anchor_left = 1.0
-anchor_top = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -144.0
+offset_top = -60.0
+offset_right = -24.0
+offset_bottom = 60.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_circle_normal")
+theme_override_styles/hover = SubResource("StyleBoxFlat_circle_hover")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_circle_pressed")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_circle_disabled")
+text = ""
+
+[node name="UltimateButtonIcon" type="Control" parent="UltimateButton"]
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -170.0
-offset_top = -160.0
-offset_right = -20.0
-offset_bottom = -90.0
-theme_override_font_sizes/font_size = 17
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_button_normal")
-theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_button_pressed")
-theme_override_styles/disabled = SubResource("StyleBoxFlat_button_disabled")
-text = "Ultimate"
+mouse_filter = 2
+script = ExtResource("6")
 
 [node name="PauseButton" type="Button" parent="."]
 layout_mode = 1

@@ -617,11 +617,36 @@ public partial class GameManager : Node
             joystick.Modulate = new Color(1f, 1f, 1f, JoystickOpacity);
     }
 
+    // Same shape as JoystickOpacity above, for the circular Ultimate button (HUD.tscn). Applied as
+    // Modulate on the button, which propagates to the icon child; Modulate doesn't affect
+    // hit-testing, so at 0% the button is invisible but still fully tappable — the same rule the
+    // joystick already follows.
+    public float UltimateButtonOpacity { get; private set; } = 1f;
+
+    public void SetUltimateButtonOpacity(float opacity)
+    {
+        UltimateButtonOpacity = Mathf.Clamp(opacity, 0f, 1f);
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, "ultimate_button_opacity", UltimateButtonOpacity);
+        config.Save(SettingsFilePath);
+
+        ApplyUltimateButtonOpacity();
+    }
+
+    public void ApplyUltimateButtonOpacity()
+    {
+        if (GetTree().GetFirstNodeInGroup("ultimate_button") is CanvasItem button)
+            button.Modulate = new Color(1f, 1f, 1f, UltimateButtonOpacity);
+    }
+
     private void LoadSettings()
     {
         var config = new ConfigFile();
         if (config.Load(SettingsFilePath) != Error.Ok) return;
         JoystickOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "joystick_opacity", 1f), 0f, 1f);
+        UltimateButtonOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "ultimate_button_opacity", 1f), 0f, 1f);
     }
 
     private const string RecordsFilePath = "user://records.cfg";
