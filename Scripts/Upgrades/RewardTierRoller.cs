@@ -7,14 +7,14 @@ public static class RewardTierRoller
     private static readonly RoundCurve Epic = new(7f, 1.4f, 5f, 35f);
     private static readonly RoundCurve Legendary = new(1f, 1.3f, 0f, 25f);
 
-    public static Dictionary<RewardTier, float> GetWeights(int round)
+    public static Dictionary<RewardTier, float> GetWeights(int round, float fortuneBonus = 0f)
     {
         var raw = new Dictionary<RewardTier, float>
         {
             [RewardTier.Common] = Common.Evaluate(round),
-            [RewardTier.Rare] = Rare.Evaluate(round),
-            [RewardTier.Epic] = Epic.Evaluate(round),
-            [RewardTier.Legendary] = Legendary.Evaluate(round),
+            [RewardTier.Rare] = Rare.Evaluate(round) + fortuneBonus,
+            [RewardTier.Epic] = Epic.Evaluate(round) + fortuneBonus,
+            [RewardTier.Legendary] = Legendary.Evaluate(round) + fortuneBonus,
         };
 
         float sum = 0f;

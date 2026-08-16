@@ -28,30 +28,9 @@ public partial class GameManager : Node
     private static readonly Vector2I LandscapeBaseSize = new(1152, 648);
     private static readonly Vector2I PortraitBaseSize = new(648, 1152);
 
-    // Coin income compounds faster than RoundNumber (more enemies AND a higher per-kill payout
-    // each round — see EnemySpawner's BurstCountCurve/RewardMultCurve), so a round-indexed price
-    // curve always loses the race and the shop stops being a real spending decision. Tying prices
-    // to the player's actual lifetime coin income instead keeps the pressure matched to how much
-    // they're really earning, regardless of how aggressively (or passively) they farm any given
-    // round. Every WealthCostStep coins ever earned raises the multiplier by WealthCostPerStep,
-    // same shape as the old round curve — just re-indexed onto wealth instead of round number.
-    // The Max used to be 60, which sounds like a generous ceiling and was in fact the bug: the old
-    // slope (1.4 per 40 coins = 0.035/coin) saturated it at just 1,657 lifetime coins — around round 4.
-    // From there on the whole wealth-indexed mechanism was inert and every price was a flat
-    // `baseCost x 60` forever, which is exactly how a player ends up holding 30,000 coins while
-    // Legendaries cost 2,700.
-    //
-    // The fix is a much gentler slope with a ceiling high enough never to bind in real play, so prices
-    // keep tracking wealth instead of flattening.
-    //
-    // The slope is the knob, and it is easy to overshoot: because prices scale with *lifetime* earnings,
-    // a Legendary's cost settles at a fixed fraction of everything you'll ever earn, no matter how long
-    // the run. The first attempt used 0.012/coin, which put that fraction at ~55% — two big purchases
-    // per run, total. At 0.005 it's ~23%, i.e. roughly four Legendaries or twenty-five Commons across a
-    // whole run, which is the intended shape for a three-offer shop.
-    //
-    // Worth knowing when retuning: boss gold feeds TotalCoinsEarned too, so raising the boss payout
-    // raises prices as a side effect. The two changes compound.
+    // Prices track the player's *current* coin balance, not lifetime earnings. Spending in the shop
+    // lowers prices on the next refresh; hoarding raises them. Same linear formula as before — just
+    // re-indexed from TotalCoinsEarned to Coins so the shop reacts to actual purchasing power.
     private const float WealthCostBase = 6f;
     private const float WealthCostPerStep = 0.2f;    // 0.2 per 40 coins = 0.005/coin
     private const float WealthCostStep = 40f;
@@ -59,8 +38,18 @@ public partial class GameManager : Node
 
     public int TotalCoinsEarned = 0;
 
-    public float UpgradeCostMultiplier =>
-        Mathf.Clamp(WealthCostBase + (TotalCoinsEarned / WealthCostStep) * WealthCostPerStep, WealthCostBase, WealthCostMax);
+    public float UpgradeCostMultiplier
+    {
+        get
+        {
+            float mult = WealthCostBase + (Coins / WealthCostStep) * WealthCostPerStep;
+            if (GameManager.Instance?.RoundNumber == 1) mult *= 0.5f;
+            // Escalado por ronda: +4% por ronda para que rondas altas mantengan presión
+            float round = GameManager.Instance?.RoundNumber ?? 1;
+            float roundMult = 1f + (round - 1) * 0.04f;
+            return Mathf.Clamp(mult * roundMult, WealthCostBase, WealthCostMax);
+        }
+    }
 
     private readonly Dictionary<UpgradeType, int> _shopPurchaseCounts = new();
 
@@ -271,7 +260,7 @@ public partial class GameManager : Node
         if (_pendingLevelUps > 0)
         {
             _pickerIsUltimateChoice = false;
-            picker.Open(UpgradeData.PickRandomTiered(3, RoundNumber, RewardSource.LevelUp, isUseless: player != null ? player.IsRewardUseless : null));
+            picker.Open(UpgradeData.PickRandomTiered(3, RoundNumber, RewardSource.LevelUp, isUseless: player != null ? player.IsRewardUseless : null, fortuneBonus: player?.FortuneBonus ?? 0f));
             Pause();
             return;
         }

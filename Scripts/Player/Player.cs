@@ -23,13 +23,13 @@ public partial class Player : CharacterBody2D
     // Hard ceilings for every freely-stacking reward, so repeated purchases can keep helping
     // without any single stat spiraling unboundedly over a long run.
     private const float MaxBulletDamageBonus = 200f;
-    private const float MaxFireRangeBonus = 500f;
+    private const float MaxFireRangeBonus = 230f;
 
     // Absolute ceiling on FireRange, separate from the bonus cap above. Without it the only limit
     // was "base + 500", which isn't a stated ceiling so much as a side effect — and a range that
     // outgrows the visible screen stops being a meaningful stat, since you can't see what you're
     // shooting at anyway. This is the number that actually binds.
-    private const float MaxFireRange = 600f;
+    private const float MaxFireRange = 450f;
     // 6 rather than 10: the HUD now shows lives as a row of icons, and ten of them is more width than a
     // portrait screen has to spare. Reaching 10 also meant buying the Legendary shop-only Corazón seven
     // separate times, which no real run did.
@@ -65,6 +65,11 @@ public partial class Player : CharacterBody2D
     public float CoinBonusPercent = 0f;      // percent, 0-150
     public float XpBonusPercent = 0f;        // percent, 0-100
     public float ShieldRegenPerMinute = 0f;
+    public float DodgeChance = 0f;           // percent, 0-25
+    public float FortuneBonus = 0f;          // percent added to Rare/Epic/Legendary odds
+    public int RicochetCount = 0;            // number of additional bounces
+    public float ThornsDamage = 0f;          // damage dealt to enemies on hit
+    private float _thornsCooldown;
     public bool HasExtraProjectile => _hasExtraProjectile;
     public bool HasOrbitShield => OrbitCount > 0;
 
@@ -385,6 +390,9 @@ public partial class Player : CharacterBody2D
                 _shieldAura.Visible = CurrentShieldCharges > 0;
             }
         }
+
+        if (_thornsCooldown > 0f)
+            _thornsCooldown -= (float)delta;
     }
 
     // Turns the triangle to face the direction the player is actually moving in — it used to be
@@ -436,6 +444,30 @@ public partial class Player : CharacterBody2D
     public void TakeHit(Vector2? sourcePosition = null)
     {
         if (_invulnTimer > 0f) return;
+
+        // Dodge: chance to avoid the hit entirely
+        if (DodgeChance > 0f && _dodgeRng.NextDouble() < DodgeChance / 100f)
+        {
+            _invulnTimer = InvulnDuration * 0.5f; // shorter invuln on dodge
+            return;
+        }
+
+        // Thorns: damage enemies when hit
+        if (ThornsDamage > 0f && _thornsCooldown <= 0f)
+        {
+            _thornsCooldown = 8f;
+            var enemies = GetTree().GetNodesInGroup("enemies");
+            int hit = 0;
+            foreach (var node in enemies)
+            {
+                if (node is Enemy e && !e.IsQueuedForDeletion())
+                {
+                    e.TakeDamage(ThornsDamage);
+                    hit++;
+                    if (hit >= 15) break;
+                }
+            }
+        }
 
         if (CurrentShieldCharges > 0)
         {
@@ -1055,6 +1087,7 @@ public partial class Player : CharacterBody2D
     }
 
     private readonly Random _critRng = new();
+    private readonly Random _dodgeRng = new();
     private const float CritMultiplier = 2f;
 
     // Rolled per hit, not per volley/tick — same reasoning as burn being applied per hit rather
@@ -1076,6 +1109,7 @@ public partial class Player : CharacterBody2D
         bullet.Speed = BulletSpeed;
         bullet.Pierce = BulletPierce;
         bullet.Knockback = BulletKnockback;
+        bullet.Ricochet = RicochetCount;
 
         bullet.BurnDps = CurrentBurnDps;
         bullet.BurnDuration = CurrentBurnDuration;
@@ -1174,6 +1208,18 @@ public partial class Player : CharacterBody2D
                 ShieldRegenPerMinute = Mathf.Max(ShieldRegenPerMinute, upgrade.Value);
                 EnsureShieldRegenTimer();
                 break;
+            case UpgradeType.Dodge:
+                DodgeChance = Mathf.Min(DodgeChance + upgrade.Value, 25f);
+                break;
+            case UpgradeType.Fortune:
+                FortuneBonus = Mathf.Min(FortuneBonus + upgrade.Value, 25f);
+                break;
+            case UpgradeType.Ricochet:
+                RicochetCount = Mathf.Max(RicochetCount, (int)upgrade.Value);
+                break;
+            case UpgradeType.Thorns:
+                ThornsDamage = Mathf.Max(ThornsDamage, upgrade.Value);
+                break;
         }
     }
 
@@ -1268,6 +1314,14 @@ public partial class Player : CharacterBody2D
                 return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletKnockbackBonus) > BulletKnockback;
             case UpgradeType.ShieldRegen:
                 return upgrade.Value > ShieldRegenPerMinute;
+            case UpgradeType.Dodge:
+                return upgrade.Value > DodgeChance;
+            case UpgradeType.Fortune:
+                return upgrade.Value > FortuneBonus;
+            case UpgradeType.Ricochet:
+                return (int)upgrade.Value > RicochetCount;
+            case UpgradeType.Thorns:
+                return upgrade.Value > ThornsDamage;
             default:
                 return false;
         }
@@ -1305,6 +1359,10 @@ public partial class Player : CharacterBody2D
             case UpgradeType.CoinBonus:
             case UpgradeType.XpBonus:
             case UpgradeType.ShieldRegen:
+            case UpgradeType.Dodge:
+            case UpgradeType.Fortune:
+            case UpgradeType.Ricochet:
+            case UpgradeType.Thorns:
                 return !IsUpgradeOverCurrent(upgrade);
             case UpgradeType.FireRange:
                 return FireRange >= MaxFireRange;
@@ -1339,6 +1397,9 @@ public partial class Player : CharacterBody2D
             case UpgradeType.CoinBonus:
             case UpgradeType.XpBonus:
             case UpgradeType.BulletKnockback:
+            case UpgradeType.Dodge:
+            case UpgradeType.Fortune:
+            case UpgradeType.Ricochet:
                 return "Al tope";
             default:
                 return "Adquirido";
@@ -1443,6 +1504,16 @@ public partial class Player : CharacterBody2D
                 return ShieldRegenPerMinute > 0f
                     ? $"Tenés: 1 carga cada {60f / ShieldRegenPerMinute:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés regeneración de escudo todavía";
+            case UpgradeType.Dodge:
+                return $"Tenés: {DodgeChance:0}% esquiva (tope 25%) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.Fortune:
+                return $"Tenés: +{FortuneBonus:0}% fortuna (tope 25%) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.Ricochet:
+                return $"Tenés: {RicochetCount} rebotes (tope 4) — {(helps ? "se suma" : "ya estás en el tope")}";
+            case UpgradeType.Thorns:
+                return ThornsDamage > 0f
+                    ? $"Tenés: {ThornsDamage:0} daño de escudo voltáico — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés escudo voltáico todavía";
             default:
                 return null;
         }

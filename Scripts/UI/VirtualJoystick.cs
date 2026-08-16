@@ -20,6 +20,10 @@ public partial class VirtualJoystick : Control
     private Vector2 _origin;
     private Vector2 _knobOffset = Vector2.Zero;
 
+    // Touches landing inside this rect are ignored — used to prevent the joystick from appearing
+    // on top of the Ultimate button when the player taps it.
+    public Rect2 ExclusiveRect { get; set; }
+
     public override void _Ready()
     {
         AddToGroup("virtual_joystick");
@@ -85,7 +89,7 @@ public partial class VirtualJoystick : Control
 
     private void HandlePress(int index, bool pressed, Vector2 position)
     {
-        if (pressed && _touchIndex == -1 && GetGlobalRect().HasPoint(position))
+        if (pressed && _touchIndex == -1 && GetGlobalRect().HasPoint(position) && !ExclusiveRect.HasPoint(position))
         {
             _touchIndex = index;
             _origin = position;

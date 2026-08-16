@@ -71,15 +71,15 @@ public partial class EnemySpawner : Node2D
     // later round along with it. Explicit per-round multipliers instead, tapering to 1x by round 3
     // where the normal curves take over untouched.
     //
-    //                                            round 1  round 2
-    private static readonly float[] EarlyRoundIntervalMult = { 1.60f, 1.25f };   // slower spawn ticks
-    private static readonly float[] EarlyRoundConcurrentMult = { 0.40f, 0.60f }; // fewer alive at once (25 -> 10, 29 -> 17)
-    private static readonly float[] EarlyRoundSpeedMult = { 0.80f, 0.80f };      // enemies at 80% speed
+    //                                            round 1  round 2  round 3
+    private static readonly float[] EarlyRoundIntervalMult = { 1.60f, 1.25f, 1.10f };   // slower spawn ticks
+    private static readonly float[] EarlyRoundConcurrentMult = { 0.40f, 0.60f, 0.80f }; // fewer alive at once (25 -> 10, 29 -> 17, 33 -> 26)
+    private static readonly float[] EarlyRoundSpeedMult = { 0.80f, 0.80f, 0.90f };      // enemies at reduced speed
 
     // Round 1 is nothing but Grunts: at 0 the Hidden/Special/Rare rolls all fail and ChooseEnemyScene
     // falls through to EnemyScene. The opening round is the player's first look at the game and used to
     // throw ~13.5% Rare, 5% Hidden and 5% Specials at them before they'd learned what a Grunt does.
-    private static readonly float[] EarlyRoundVarietyMult = { 0f, 1f };
+    private static readonly float[] EarlyRoundVarietyMult = { 0f, 1f, 1f };
 
     private static float EarlyRoundMult(float[] table, int round)
     {
@@ -91,7 +91,7 @@ public partial class EnemySpawner : Node2D
     private static readonly RoundCurve DmgMultCurve = new(1f, 0.22f, 1f, 10f);
     private static readonly RoundCurve SpeedMultCurve = new(1f, 0.06f, 1f, 2.2f);
     // PerRound raised from 0.25 to 0.35 to compensate the late-game crowd taper above. Coins largely
-    // self-correct (GameManager.UpgradeCostMultiplier indexes on TotalCoinsEarned, not on round, so
+    // self-correct (GameManager.UpgradeCostMultiplier indexes on current Coins, not on round, so
     // less income also means cheaper prices) but XP has no such damper — with ~46% fewer bodies by
     // round 18, the old rate would have cut XP income ~32%, directly slowing the level-ups that are
     // the game's only free-reward source. This brings the net change to roughly -10%.

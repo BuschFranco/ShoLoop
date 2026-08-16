@@ -20,7 +20,11 @@ public partial class Bullet : Area2D
     public float BurnDps = 0f;
     public float BurnDuration = 0f;
 
+    // Ricochet: number of additional bounces to nearby enemies (Rebote reward).
+    public int Ricochet = 0;
+
     private float _timeAlive = 0f;
+    private readonly HashSet<ulong> _hitEnemies = new();
 
     public override void _Ready()
     {
@@ -40,6 +44,8 @@ public partial class Bullet : Area2D
     {
         if (body is Enemy enemy)
         {
+            _hitEnemies.Add(enemy.GetInstanceId());
+
             if (Knockback > 0f)
                 enemy.ApplyKnockback(Direction * Knockback);
 
@@ -47,6 +53,19 @@ public partial class Bullet : Area2D
                 enemy.ApplyBurn(BurnDps, BurnDuration);
 
             enemy.TakeDamage(Damage);
+
+            // Ricochet: redirect to nearest unhit enemy
+            if (Ricochet > 0)
+            {
+                Enemy nearest = FindNearestUnhitEnemy();
+                if (nearest != null)
+                {
+                    Ricochet--;
+                    Direction = (nearest.GlobalPosition - GlobalPosition).Normalized();
+                    Rotation = Direction.Angle();
+                    return;
+                }
+            }
 
             // Area2D raises BodyEntered once per body, so a piercing bullet can't re-hit the same
             // enemy on its way through — no need to track who's already been hit.
@@ -60,5 +79,25 @@ public partial class Bullet : Area2D
         // The collision mask only lets enemies (layer 2) and obstacles (layer 8) through, so
         // anything that isn't an Enemy is a wall. Walls stop even a fully-pierced bullet.
         QueueFree();
+    }
+
+    private Enemy FindNearestUnhitEnemy()
+    {
+        Enemy nearest = null;
+        float bestDist = 300f; // max ricochet search range
+        var enemies = GetTree().GetNodesInGroup("enemies");
+        foreach (var node in enemies)
+        {
+            if (node is Enemy e && !e.IsQueuedForDeletion() && !_hitEnemies.Contains(e.GetInstanceId()))
+            {
+                float dist = GlobalPosition.DistanceTo(e.GlobalPosition);
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    nearest = e;
+                }
+            }
+        }
+        return nearest;
     }
 }

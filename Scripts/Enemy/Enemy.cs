@@ -167,9 +167,13 @@ public partial class Enemy : CharacterBody2D
     private const int EarlyDropRound = 3;   // exclusive — rounds 1 and 2 get the boost
     private const float EarlyXpCoinDropChance = 0.07f;
 
-    // Separate, longer window than the drop-chance boost above: a coin gem is worth a flat 3 through
-    // round 4, not just CoinsReward (which is still ~1 that early since RewardMultCurve barely moves).
-    // Purely a per-gem value bump — the roll chance for whether one drops at all is unaffected.
+    // Round 1 gets a higher per-gem value (7 instead of 3) so the player starts with more buying
+    // power. Rounds 2-4 keep the original flat value of 3 via EarlyCoinPickupValue below.
+    private const int Round1CoinValueRound = 2;   // exclusive — only round 1
+    private const int Round1CoinPickupValue = 7;
+
+    // Rounds 1-4 get a flat coin value instead of the enemy's CoinsReward (which is still ~1 that
+    // early since RewardMultCurve barely moves). Purely a per-gem value bump.
     private const int EarlyCoinValueRound = 5;   // exclusive — rounds 1-4 get the flat value
     private const int EarlyCoinPickupValue = 3;
 
@@ -356,6 +360,26 @@ public partial class Enemy : CharacterBody2D
     // decay, and the final velocity assignment. Split out of _PhysicsProcess so Boss can override
     // the whole method (to swap in a dash/orbit direction for moveDir) while still funneling
     // through the exact same knockback/separation handling as everyone else.
+    // No enemy may out-run the player in a *sustained* chase. A pursuer that is strictly faster and
+    // homes in a straight line doesn't make contact likely, it makes it certain: no input avoids it.
+    // That was the real state of things from round 8 on — Speedy's 205 base crosses the player's 290
+    // as soon as SpeedMultCurve passes 1.41 — and Frenesí's ×1.5 dragged the crossing down to round 3,
+    // so every Frenesí round shipped an enemy that could not be dodged, only out-damaged.
+    //
+    // Three details carry the fix:
+    //   - It's a fraction of the player's *current* MoveSpeed, not a constant, so buying Move Speed
+    //     widens the gap instead of leaving a stale hardcoded number behind.
+    //   - It's applied *after* speedMult, which is the whole point: Frenesí can still speed up anything
+    //     below the cap (a round-21 Grunt goes 198 -> 261) but can no longer lift anything past it.
+    //     A Zona Lenta slow still lands, because Min() keeps whichever value is lower.
+    //   - It caps the chase speed, NOT the final Velocity. moveDir arrives with its length encoding a
+    //     committed dash (Boss's charge, DasherEnemy's burst), and that burst is deliberately the one
+    //     thing allowed past the cap — briefly, and only after a telegraph. Clamping Velocity instead
+    //     would silently neuter every dash in the game.
+    //
+    // Enemies whose base speed stays under the cap are untouched: the Boss at 55 base peaks at 121.
+    private const float MaxChaseSpeedFraction = 0.9f;
+
     protected void FinishMovement(Vector2 moveDir, double delta)
     {
         float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
@@ -363,9 +387,13 @@ public partial class Enemy : CharacterBody2D
 
         _knockbackVelocity = _knockbackVelocity.MoveToward(Vector2.Zero, KnockbackDecay * (float)delta);
 
+        float chaseSpeed = MoveSpeed * speedMult;
+        if (_player is Player player)
+            chaseSpeed = Mathf.Min(chaseSpeed, player.MoveSpeed * MaxChaseSpeedFraction);
+
         // Knockback sits outside the speedMult so a Zona Lenta ultimate doesn't also weaken the
         // shove — it's an impulse from the player's weapon, not part of the enemy's own movement.
-        Velocity = (moveDir * MoveSpeed + separation) * speedMult + _knockbackVelocity;
+        Velocity = moveDir * chaseSpeed + separation * speedMult + _knockbackVelocity;
         MoveAndSlide();
     }
 
@@ -605,7 +633,12 @@ public partial class Enemy : CharacterBody2D
         if (CoinPickupScene != null && _rng.NextDouble() < coinChance)
         {
             var coin = CoinPickupScene.Instantiate<CoinPickup>();
-            coin.CoinAmount = round < EarlyCoinValueRound ? EarlyCoinPickupValue : Mathf.Max(1, CoinsReward);
+            if (round < Round1CoinValueRound)
+                coin.CoinAmount = Round1CoinPickupValue;
+            else if (round < EarlyCoinValueRound)
+                coin.CoinAmount = EarlyCoinPickupValue;
+            else
+                coin.CoinAmount = Mathf.Max(1, CoinsReward);
             parent.AddChild(coin);
             coin.GlobalPosition = GlobalPosition;
         }

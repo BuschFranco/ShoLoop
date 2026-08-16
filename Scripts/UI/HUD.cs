@@ -107,6 +107,10 @@ public partial class HUD : Control
         _ultimateButton.Pressed += OnUltimatePressed;
         UpdateUltimateUi();
 
+        // Exclude the Ultimate button area from the virtual joystick so tapping it doesn't spawn
+        // the joystick on top. Deferred because the joystick may not be in the tree yet.
+        CallDeferred(MethodName.SetUltimateExclusionZone);
+
         var pauseButton = GetNode<Button>("PauseButton");
         pauseButton.Pressed += OnPausePressed;
 
@@ -135,6 +139,12 @@ public partial class HUD : Control
     private void OnPausePressed()
     {
         GameManager.Instance.OpenPauseMenu();
+    }
+
+    private void SetUltimateExclusionZone()
+    {
+        if (GetTree().GetFirstNodeInGroup("virtual_joystick") is VirtualJoystick joystick)
+            joystick.ExclusiveRect = _ultimateButton.GetGlobalRect();
     }
 
     private void OnUltimatePressed()
