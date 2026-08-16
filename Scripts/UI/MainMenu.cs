@@ -14,6 +14,9 @@ public partial class MainMenu : Control
         var options = GetNode<OptionsMenu>("OptionsMenu");
         GetNode<Button>("VBoxContainer/ButtonsRow/OptionsButton").Pressed += options.Open;
 
+        var builds = GetNode<BuildsMenu>("BuildsMenu");
+        GetNode<Button>("VBoxContainer/ButtonsRow/BuildsButton").Pressed += builds.Open;
+
         PopulateRecords();
     }
 

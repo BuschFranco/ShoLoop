@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dxe0juxpbyi86" path="res://Scripts/UI/MainMenu.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/OptionsMenu.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/BuildsMenu.tscn" id="3"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
 content_margin_left = 14.0
@@ -158,6 +159,20 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 text = "Opciones"
 
+[node name="BuildsButton" type="Button" parent="VBoxContainer/ButtonsRow" unique_id=1835502870]
+custom_minimum_size = Vector2(150, 52)
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+text = "Construcciones"
+
 [node name="OptionsMenu" parent="." unique_id=1831938219 instance=ExtResource("2")]
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BuildsMenu" parent="." unique_id=1831938220 instance=ExtResource("3")]
 grow_horizontal = 2
 grow_vertical = 2

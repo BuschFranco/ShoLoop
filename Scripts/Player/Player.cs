@@ -68,7 +68,7 @@ public partial class Player : CharacterBody2D
     public float DodgeChance = 0f;           // percent, 0-25
     public float FortuneBonus = 0f;          // percent added to Rare/Epic/Legendary odds
     public int RicochetCount = 0;            // number of additional bounces
-    public enum BuildClass { None, Gunner, Tank, Assassin, Explorer, Zealot, Armored }
+    public enum BuildClass { None, Gunner, Tank, Assassin, Explorer, Pyromaniac, Armored }
 
     // Build class system: grants passive bonuses based on stat thresholds.
     private BuildClass _currentClass = BuildClass.None;
@@ -171,7 +171,7 @@ public partial class Player : CharacterBody2D
     // Level → (damage per second, duration). Incendiario is a modifier applied by every source of
     // player damage — basic shots, the Laser, Orbit Blades, and Missiles all read these two
     // properties rather than each keeping their own copy of the tier lookup.
-    public float CurrentBurnDps => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Dps : 0f;
+    public float CurrentBurnDps => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Dps * GetClassBurnMultiplier() : 0f;
     public float CurrentBurnDuration => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Duration : 0f;
 
     private static readonly (float Dps, float Duration)[] BurnTiers =
@@ -525,6 +525,14 @@ public partial class Player : CharacterBody2D
         }
         else
         {
+            // Tank class passive: 20% chance to shrug off the hit without losing a life.
+            if (_currentClass == BuildClass.Tank && _dodgeRng.NextDouble() < 0.2)
+            {
+                _blinkShieldInstead = false;
+                _invulnTimer = InvulnDuration;
+                _blinkTimer = 0f;
+                return;
+            }
             _blinkShieldInstead = false;
             LoseLife();
         }
@@ -583,14 +591,14 @@ public partial class Player : CharacterBody2D
 
         if (FireRate >= 5f)
             newClass = BuildClass.Gunner;
-        if (MaxLives >= 5 || MaxShieldCharges >= 3)
+        if (MaxLives >= 4 && MaxShieldCharges >= 3)
             newClass = BuildClass.Tank;
-        if (CritChance >= 20f)
+        if (CritChance >= 20f && BulletDamage >= 20)
             newClass = BuildClass.Assassin;
         if (FireRange >= 350f)
             newClass = BuildClass.Explorer;
-        if (EquippedUltimate != null)
-            newClass = BuildClass.Zealot;
+        if (BurnLevel >= 3)
+            newClass = BuildClass.Pyromaniac;
         if (OrbitCount > 0 && MaxShieldCharges >= 3)
             newClass = BuildClass.Armored;
 
@@ -935,8 +943,7 @@ public partial class Player : CharacterBody2D
         // concurrently with it the way it used to. Modelled by simply adding the active duration on
         // top — no extra state or callback needed, and the HUD's readout stays honest because it shows
         // the whole remaining lock either way. Nova is instantaneous, so it gets the bare cooldown.
-        // Class bonus: Zealot gets -20% ultimate cooldown.
-        UltimateCooldownRemaining = GetUltimateActiveDuration(EquippedUltimate.Value) + UltimateCooldownDuration * GetClassUltimateCooldownMultiplier();
+        UltimateCooldownRemaining = GetUltimateActiveDuration(EquippedUltimate.Value) + UltimateCooldownDuration;
     }
 
     // Nova detonates on the frame it's triggered; the other two run for a while. Only the timed ones
@@ -1201,10 +1208,10 @@ public partial class Player : CharacterBody2D
         return _currentClass == BuildClass.Explorer ? 1.2f : 1f;
     }
 
-    // Class passive: Zealot gets -20% ultimate cooldown.
-    public float GetClassUltimateCooldownMultiplier()
+    // Class passive: Pyromaniac gets +50% burn DPS.
+    public float GetClassBurnMultiplier()
     {
-        return _currentClass == BuildClass.Zealot ? 0.8f : 1f;
+        return _currentClass == BuildClass.Pyromaniac ? 1.5f : 1f;
     }
 
     private void FireInDirection(Vector2 dir, Vector2 positionOffset = default)

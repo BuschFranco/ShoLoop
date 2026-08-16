@@ -1,0 +1,105 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://Scripts/UI/BuildsMenu.cs" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.043, 0.024, 0.078, 0.96)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.4902, 0.9922, 0.9961, 0.85)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 18.0
+content_margin_top = 16.0
+content_margin_right = 18.0
+content_margin_bottom = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
+bg_color = Color(0.102, 0.0588, 0.1686, 0.75)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.4902, 0.9922, 0.9961, 0.4)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="BuildsMenu" type="Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+visible = false
+script = ExtResource("1")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.02, 0.08, 0.8)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="CenterContainer"]
+custom_minimum_size = Vector2(440, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Box" type="VBoxContainer" parent="CenterContainer/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 22
+text = "CONSTRUCCIONES"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 11
+text = "Armá una build y activá su bonus automáticamente"
+horizontal_alignment = 1
+
+[node name="Sep" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+
+[node name="BuildsList" type="RichTextLabel" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/normal_font_size = 14
+text = ""
+horizontal_alignment = 0
+
+[node name="Sep2" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+
+[node name="CloseButton" type="Button" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+text = "Volver"

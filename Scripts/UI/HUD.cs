@@ -302,7 +302,7 @@ public partial class HUD : Control
                 Player.BuildClass.Tank => "TANQUE",
                 Player.BuildClass.Assassin => "ASESINO",
                 Player.BuildClass.Explorer => "EXPLORADOR",
-                Player.BuildClass.Zealot => "FANÁTICO",
+                Player.BuildClass.Pyromaniac => "PIRÓMANO",
                 Player.BuildClass.Armored => "ACORAZADO",
                 _ => ""
             };
@@ -315,7 +315,7 @@ public partial class HUD : Control
                 Player.BuildClass.Tank => new Color(0.4f, 0.7f, 1f),
                 Player.BuildClass.Assassin => new Color(0.9f, 0.2f, 0.9f),
                 Player.BuildClass.Explorer => new Color(0.3f, 1f, 0.5f),
-                Player.BuildClass.Zealot => new Color(1f, 0.9f, 0.3f),
+                Player.BuildClass.Pyromaniac => new Color(1f, 0.4f, 0.1f),
                 Player.BuildClass.Armored => new Color(0.7f, 0.7f, 0.8f),
                 _ => Colors.White
             };
