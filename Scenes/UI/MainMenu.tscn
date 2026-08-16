@@ -13,7 +13,7 @@ border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(1, 0.878, 0.4, 0.35)
+border_color = Color(1, 0.878, 0.4, 0.6)
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
@@ -89,7 +89,9 @@ horizontal_alignment = 1
 [node name="HighScoreLabel" type="Label" parent="VBoxContainer" unique_id=1637789029]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.15, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 24
 text = "Mejor puntaje: 0"
 horizontal_alignment = 1
 
@@ -109,14 +111,18 @@ theme_override_constants/separation = 4
 [node name="RecordsTitle" type="Label" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox" unique_id=1817242706]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.878, 0.4, 1)
-theme_override_font_sizes/font_size = 14
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 16
 text = "RÉCORDS"
 horizontal_alignment = 1
 
 [node name="RecordsList" type="Label" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox" unique_id=2088581069]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.8, 0.84, 0.9, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 14
 text = "Todavía no hay récords"
 horizontal_alignment = 1
 

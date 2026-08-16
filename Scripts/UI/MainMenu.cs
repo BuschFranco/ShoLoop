@@ -33,7 +33,7 @@ public partial class MainMenu : Control
 
         var lines = new string[records.Count];
         for (int i = 0; i < records.Count; i++)
-            lines[i] = $"{i + 1}.  {records[i].Score}  —  {records[i].Date}";
+            lines[i] = $"{i + 1}.   {records[i].Score:N0}   {records[i].Date}";
 
         list.Text = string.Join("\n", lines);
     }
