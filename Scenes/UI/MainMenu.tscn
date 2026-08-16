@@ -117,12 +117,13 @@ theme_override_font_sizes/font_size = 16
 text = "RÉCORDS"
 horizontal_alignment = 1
 
-[node name="RecordsList" type="Label" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox" unique_id=2088581069]
+[node name="RecordsList" type="RichTextLabel" parent="VBoxContainer/RecordsRow/RecordsPanel/RecordsBox" unique_id=2088581069]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+bbcode_enabled = true
+theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/normal_font_size = 14
 text = "Todavía no hay récords"
 horizontal_alignment = 1
 

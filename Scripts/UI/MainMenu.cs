@@ -22,7 +22,7 @@ public partial class MainMenu : Control
     // container full of children would be more machinery than the content justifies.
     private void PopulateRecords()
     {
-        var list = GetNode<Label>("VBoxContainer/RecordsRow/RecordsPanel/RecordsBox/RecordsList");
+        var list = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/RecordsPanel/RecordsBox/RecordsList");
         var records = GameManager.LoadRecords();
 
         if (records.Count == 0)
@@ -31,9 +31,15 @@ public partial class MainMenu : Control
             return;
         }
 
+        // Colors: position in gold, score in cyan, date in dim gold
         var lines = new string[records.Count];
         for (int i = 0; i < records.Count; i++)
-            lines[i] = $"{i + 1}.   {records[i].Score:N0}   {records[i].Date}";
+        {
+            string pos = $"{i + 1}.";
+            string score = records[i].Score.ToString("N0");
+            string date = records[i].Date;
+            lines[i] = $"[color=#ffe066]{pos,-4}[/color][color=#7dfdfe]{score,10}[/color]   [color=#b8a040]{date}[/color]";
+        }
 
         list.Text = string.Join("\n", lines);
     }

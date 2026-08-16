@@ -462,7 +462,7 @@ public partial class Player : CharacterBody2D
             {
                 if (node is Enemy e && !e.IsQueuedForDeletion())
                 {
-                    e.TakeDamage(ThornsDamage);
+                    e.TakeDamage(Mathf.RoundToInt(ThornsDamage));
                     hit++;
                     if (hit >= 15) break;
                 }
