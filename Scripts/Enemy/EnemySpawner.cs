@@ -19,9 +19,9 @@ public partial class EnemySpawner : Node2D
 
     // All difficulty knobs are percentage curves off round 1 baseline: Evaluate(round) = Base + (round-1)*PerRound, clamped [Min, Max].
     // Tune these to change pacing without touching per-enemy nominal stats anywhere else.
-    private static readonly RoundCurve SpawnIntervalCurve = new(0.6f, -0.035f, 0.12f, 0.6f);   // seconds between spawn ticks (lower = faster)
-    private static readonly RoundCurve BurstCountCurve = new(1f, 0.35f, 1f, 8f);                // enemies spawned per tick
-    private static readonly RoundCurve MaxConcurrentCurve = new(25f, 4f, 25f, 200f);           // cap on enemies alive at once
+    private static readonly RoundCurve SpawnIntervalCurve = new(0.6f, -0.025f, 0.12f, 0.6f);   // seconds between spawn ticks (lower = faster)
+    private static readonly RoundCurve BurstCountCurve = new(1f, 0.28f, 1f, 8f);                // enemies spawned per tick
+    private static readonly RoundCurve MaxConcurrentCurve = new(25f, 3f, 25f, 160f);           // cap on enemies alive at once
 
     // Late-game crowd TAPER on top of MaxConcurrentCurve: flat 1.0x through round 10, then a linear
     // ramp DOWN to 0.66x by round 18, held from there. The odd-looking Base of 1.3825 is what makes
@@ -87,9 +87,11 @@ public partial class EnemySpawner : Node2D
         return index >= 0 && index < table.Length ? table[index] : 1f;
     }
 
-    private static readonly RoundCurve HpMultCurve = new(1f, 0.25f, 1f, 10f);
-    private static readonly RoundCurve DmgMultCurve = new(1f, 0.22f, 1f, 10f);
-    private static readonly RoundCurve SpeedMultCurve = new(1f, 0.06f, 1f, 2.2f);
+    // HP/damage ramp slower so the mid-game doesn't spike: +18% HP and +16% damage per round
+    // (was +25%/+22%), topping out at ×8 instead of ×10. Same shape, gentler climb.
+    private static readonly RoundCurve HpMultCurve = new(1f, 0.18f, 1f, 8f);
+    private static readonly RoundCurve DmgMultCurve = new(1f, 0.16f, 1f, 8f);
+    private static readonly RoundCurve SpeedMultCurve = new(1f, 0.05f, 1f, 2f);
     // PerRound raised from 0.25 to 0.35 to compensate the late-game crowd taper above. Coins largely
     // self-correct (GameManager.UpgradeCostMultiplier indexes on current Coins, not on round, so
     // less income also means cheaper prices) but XP has no such damper — with ~46% fewer bodies by
@@ -348,15 +350,19 @@ public partial class EnemySpawner : Node2D
         enemy.GlobalPosition = spawnPos;
         enemy.GrantsRewards = grantsRewards;
 
-        // Elite spawn: 5% base chance + 2% per round, capped at 25%. Only Common/Rare enemies can be elite.
+        // Elite spawn: none before round 3 (opening rounds stay gentle), then 1.5% per round,
+        // capped at 20%. Only Common/Rare enemies can be elite.
         if (!enemy.IsQueuedForDeletion() && (enemy.Category == EnemyCategory.Common || enemy.Category == EnemyCategory.Rare))
         {
             int round = GameManager.Instance?.RoundNumber ?? 1;
-            float eliteChance = Mathf.Min(0.05f + (round - 1) * 0.02f, 0.25f);
-            if (_rng.NextDouble() < eliteChance)
+            if (round >= 3)
             {
-                var modifiers = new[] { EliteModifier.Vampiric, EliteModifier.Shielded, EliteModifier.Explosive, EliteModifier.Fast, EliteModifier.Regenerating };
-                enemy.MakeElite(modifiers[_rng.Next(modifiers.Length)]);
+                float eliteChance = Mathf.Min((round - 2) * 0.015f, 0.20f);
+                if (_rng.NextDouble() < eliteChance)
+                {
+                    var modifiers = new[] { EliteModifier.Vampiric, EliteModifier.Shielded, EliteModifier.Explosive, EliteModifier.Fast, EliteModifier.Regenerating };
+                    enemy.MakeElite(modifiers[_rng.Next(modifiers.Length)]);
+                }
             }
         }
 

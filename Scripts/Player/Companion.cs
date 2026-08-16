@@ -47,7 +47,7 @@ public partial class Companion : Node2D
     private void UpdateFireRate()
     {
         if (OwnerPlayer == null) return;
-        float effectiveRate = Mathf.Max(0.1f, OwnerPlayer.FireRate * StatPercent);
+        float effectiveRate = Mathf.Max(0.1f, OwnerPlayer.FireRate * StatPercent * OwnerPlayer.GetClassCompanionMultiplier());
         _fireCooldown.WaitTime = 1f / effectiveRate;
     }
 
@@ -82,7 +82,12 @@ public partial class Companion : Node2D
         var bullet = BulletScene.Instantiate<Bullet>();
         bullet.GlobalPosition = GlobalPosition;
         bullet.Direction = (nearest.GlobalPosition - GlobalPosition).Normalized();
-        int baseDamage = Mathf.Max(1, Mathf.RoundToInt(OwnerPlayer.BulletDamage * StatPercent));
+
+        // Rebote reward: the drone shares the player's bounce count at any tier — ricochet is a
+        // build-defining stat, and the drone is just a scaled-down version of the player's gun.
+        bullet.Ricochet = OwnerPlayer.RicochetCount + OwnerPlayer.GetClassRicochetBonus();
+
+        int baseDamage = Mathf.Max(1, Mathf.RoundToInt(OwnerPlayer.BulletDamage * StatPercent * OwnerPlayer.GetClassCompanionMultiplier()));
         bullet.Damage = OwnerPlayer.ApplyCrit(baseDamage, out bool isCrit);
         if (isCrit) bullet.Modulate = Palette.CritBullet;
 

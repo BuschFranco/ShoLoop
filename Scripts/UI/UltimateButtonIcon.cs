@@ -38,7 +38,7 @@ public partial class UltimateButtonIcon : Control
         DrawCircle(center, radius, BaseBg);
         DrawArc(center, radius, 0f, Mathf.Tau, 48, accent, 3f, true);
 
-        if (CooldownFraction > 0f)
+        if (CooldownFraction > 0.002f)
         {
             const int segments = 24;
             float startAngle = -Mathf.Pi / 2f;

@@ -29,11 +29,14 @@ public partial class GameManager : Node
     private static readonly Vector2I PortraitBaseSize = new(648, 1152);
 
     // Prices track the player's *current* coin balance, not lifetime earnings. Spending in the shop
-    // lowers prices on the next refresh; hoarding raises them. Same linear formula as before — just
-    // re-indexed from TotalCoinsEarned to Coins so the shop reacts to actual purchasing power.
-    private const float WealthCostBase = 6f;
-    private const float WealthCostPerStep = 0.2f;    // 0.2 per 40 coins = 0.005/coin
+    // lowers prices on the next refresh; hoarding raises them. Base is 3.5 so a Common (~8) costs a
+    // heavy ~28 coins at round 1 — enough to buy one thing, never everything — and every coin over
+    // 40 raises it further (~0.3 per 40), so the more you hoard the steeper the shop gets. Late
+    // rounds compound +10%/round on top, so income can't outrun the shop forever.
+    private const float WealthCostBase = 3.5f;
+    private const float WealthCostPerStep = 0.3f;     // 0.3 per 40 coins = 0.0075/coin
     private const float WealthCostStep = 40f;
+    private const float WealthCostRoundStep = 0.1f;   // +10% per round
     private const float WealthCostMax = 4000f;
 
     public int TotalCoinsEarned = 0;
@@ -43,11 +46,10 @@ public partial class GameManager : Node
         get
         {
             float mult = WealthCostBase + (Coins / WealthCostStep) * WealthCostPerStep;
-            if (GameManager.Instance?.RoundNumber == 1) mult *= 0.5f;
-            // Escalado por ronda: +4% por ronda para que rondas altas mantengan presión
+            // Escalado por ronda: +10% por ronda para que rondas altas mantengan presión
             float round = GameManager.Instance?.RoundNumber ?? 1;
-            float roundMult = 1f + (round - 1) * 0.04f;
-            return Mathf.Clamp(mult * roundMult, WealthCostBase, WealthCostMax);
+            float roundMult = 1f + (round - 1) * WealthCostRoundStep;
+            return Mathf.Clamp(mult * roundMult, 1.5f, WealthCostMax);
         }
     }
 

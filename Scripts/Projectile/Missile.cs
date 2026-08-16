@@ -98,7 +98,7 @@ public partial class Missile : Area2D
             points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * ExplosionRadius;
         }
         visual.Polygon = points;
-        visual.Color = Palette.MissileBlast;
+        visual.Color = Palette.PlayerBlast;
         visual.Scale = Vector2.Zero;
         visual.ZIndex = 5;
         parent.AddChild(visual);

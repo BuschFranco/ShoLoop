@@ -16,14 +16,19 @@ public static class Palette
     // Electric cyan, the one cold colour in the scheme. The player has to stay instantly findable
     // in a crowd of pink enemies, which a pink ship wouldn't.
     public static readonly Color Player = new("7dfdfe");
-    public static readonly Color PlayerBullet = new("ff4fd8");
+    // Bright poison green — the player's whole weapon family is green so it can never be confused
+    // with enemy fire (red). Every projectile visual below keys off this one family.
+    public static readonly Color PlayerBullet = new("3dff8f");
     public static readonly Color ShieldAura = new("4fa8ff", 0.35f);
-    public static readonly Color FireRangeRing = new("ff4fd8", 0.3f);
+    public static readonly Color FireRangeRing = new("3dff8f", 0.3f);
 
     // --- Player weapons ---
-    public static readonly Color LaserBeam = new("ff2fb9", 0.85f);
-    public static readonly Color OrbitBlade = new("f9c2ff");
-    public static readonly Color Missile = new("ff8ae2");
+    public static readonly Color LaserBeam = new("3dff8f", 0.85f);
+    public static readonly Color OrbitBlade = new("a8ffc8");
+    public static readonly Color Missile = new("3dff8f");
+    // Player-only missile detonation; hazards (Mine/MissileZone) keep the pink MissileBlast
+    // below so an enemy-area explosion stays unambiguously hostile.
+    public static readonly Color PlayerBlast = new("3dff8f", 0.5f);
     public static readonly Color MissileBlast = new("ff6ec7", 0.5f);
     public static readonly Color LevelUpNova = new("ffa8f0", 0.5f);
     public static readonly Color UltimateNova = new("ff2fb9", 0.4f);

@@ -15,7 +15,7 @@ public partial class Player : CharacterBody2D
     [Export] public PackedScene MissileScene;
     [Export] public PackedScene OrbitBladeScene;
     [Export] public PackedScene CompanionScene;
-    [Export] public Vector2 ArenaHalfExtents = new(1600f, 1000f);
+    [Export] public Vector2 ArenaHalfExtents = new(2200f, 1400f);
     [Export] public float LevelUpBurstRadius = 220f;
 
     private const float MaxFireRate = 12f;
@@ -68,12 +68,22 @@ public partial class Player : CharacterBody2D
     public float DodgeChance = 0f;           // percent, 0-25
     public float FortuneBonus = 0f;          // percent added to Rare/Epic/Legendary odds
     public int RicochetCount = 0;            // number of additional bounces
-    public enum BuildClass { None, Gunner, Tank, Assassin, Explorer, Pyromaniac, Armored }
+
+    // Rebote IV (the Legendary tier) is the only ricochet that makes side-shot lines bounce too.
+    // See FireInDirection: Common/Rare ranks would otherwise turn the whole side volley into free
+    // multi-targeting.
+    public const int LegendaryRicochetCount = 4;
+    public enum BuildClass { None, Gunner, Tank, Assassin, Explorer, Pyromaniac, Armored, Hunter }
+
+    public float EffectiveFireRange => FireRange * GetClassFireRangeMultiplier();
 
     // Build class system: grants passive bonuses based on stat thresholds.
-    private BuildClass _currentClass = BuildClass.None;
-    public BuildClass CurrentClass => _currentClass;
-    private bool _classFlashShown;
+    // Every class whose stat combination is met stays active — unlocked builds never deactivate
+    // (stats only go up), so this is a growing set. Passives from multiple classes stack at once;
+    // each one touches a different stat, so there's no conflict between them.
+    private readonly HashSet<BuildClass> _activeClasses = new();
+    public IEnumerable<BuildClass> ActiveClasses => _activeClasses;
+    public bool IsClassActive(BuildClass cls) => cls != BuildClass.None && _activeClasses.Contains(cls);
 
     public float ThornsDamage = 0f;          // damage dealt to enemies on hit
     private float _thornsCooldown;
@@ -172,7 +182,7 @@ public partial class Player : CharacterBody2D
     // player damage — basic shots, the Laser, Orbit Blades, and Missiles all read these two
     // properties rather than each keeping their own copy of the tier lookup.
     public float CurrentBurnDps => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Dps * GetClassBurnMultiplier() : 0f;
-    public float CurrentBurnDuration => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Duration : 0f;
+    public float CurrentBurnDuration => BurnLevel > 0 ? BurnTiers[BurnLevel - 1].Duration + GetClassBurnDurationBonus() : 0f;
 
     private static readonly (float Dps, float Duration)[] BurnTiers =
     {
@@ -319,7 +329,7 @@ public partial class Player : CharacterBody2D
         for (int i = 0; i <= segments; i++)
         {
             float angle = i / (float)segments * Mathf.Tau;
-            _fireRangeRing.AddPoint(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * FireRange);
+            _fireRangeRing.AddPoint(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * EffectiveFireRange);
         }
     }
 
@@ -481,7 +491,7 @@ public partial class Player : CharacterBody2D
         ResetKillStreak();
 
         // Armored class: reflect 30 damage to nearby enemies on hit (no cooldown).
-        if (_currentClass == BuildClass.Armored && sourcePosition.HasValue)
+        if (IsClassActive(BuildClass.Armored) && sourcePosition.HasValue)
         {
             var enemies = GetTree().GetNodesInGroup("enemies");
             int hit = 0;
@@ -492,7 +502,7 @@ public partial class Player : CharacterBody2D
                     float dist = GlobalPosition.DistanceTo(e.GlobalPosition);
                     if (dist <= 100f)
                     {
-                        e.TakeDamage(30);
+                        e.TakeDamage(60);
                         hit++;
                         if (hit >= 10) break;
                     }
@@ -525,8 +535,8 @@ public partial class Player : CharacterBody2D
         }
         else
         {
-            // Tank class passive: 20% chance to shrug off the hit without losing a life.
-            if (_currentClass == BuildClass.Tank && _dodgeRng.NextDouble() < 0.2)
+            // Tank class passive: 25% chance to shrug off the hit without losing a life.
+            if (IsClassActive(BuildClass.Tank) && _dodgeRng.NextDouble() < 0.25)
             {
                 _blinkShieldInstead = false;
                 _invulnTimer = InvulnDuration;
@@ -544,7 +554,7 @@ public partial class Player : CharacterBody2D
         {
             Vector2 away = (GlobalPosition - sourcePosition.Value);
             if (away != Vector2.Zero)
-                _knockbackVelocity = away.Normalized() * KnockbackForce;
+                _knockbackVelocity = away.Normalized() * KnockbackForce * GetClassKnockbackMultiplier();
         }
     }
 
@@ -584,30 +594,94 @@ public partial class Player : CharacterBody2D
         _killStreakTimer = 0f;
     }
 
-    // Build class: check stat thresholds and update the active class.
+    // Build class: check stat thresholds and activate every build whose combination is met. Each
+    // build needs a *combination* of rewards (some including shop items), so a single lucky pickup
+    // can't unlock one — you have to commit to the stat spread the build is themed around.
+    // Thresholds live in GetBuildRequirements so CheckBuildClass and the Loadout UI share them.
     public void CheckBuildClass()
     {
-        BuildClass newClass = BuildClass.None;
+        TryActivate(BuildClass.Gunner);
+        TryActivate(BuildClass.Tank);
+        TryActivate(BuildClass.Assassin);
+        TryActivate(BuildClass.Explorer);
+        TryActivate(BuildClass.Pyromaniac);
+        TryActivate(BuildClass.Armored);
+        TryActivate(BuildClass.Hunter);
+    }
 
-        if (FireRate >= 5f)
-            newClass = BuildClass.Gunner;
-        if (MaxLives >= 4 && MaxShieldCharges >= 3)
-            newClass = BuildClass.Tank;
-        if (CritChance >= 20f && BulletDamage >= 20)
-            newClass = BuildClass.Assassin;
-        if (FireRange >= 350f)
-            newClass = BuildClass.Explorer;
-        if (BurnLevel >= 3)
-            newClass = BuildClass.Pyromaniac;
-        if (OrbitCount > 0 && MaxShieldCharges >= 3)
-            newClass = BuildClass.Armored;
+    private void TryActivate(BuildClass cls)
+    {
+        if (_activeClasses.Contains(cls)) return;
+        foreach (var req in GetBuildRequirements(cls))
+            if (!req.IsMet(this)) return;
+        _activeClasses.Add(cls);
+        ApplyClassPassive(cls);
+    }
 
-        if (newClass != _currentClass)
+    // One-shot setup when a class activates (rather than every frame).
+    private void ApplyClassPassive(BuildClass cls)
+    {
+        if (cls == BuildClass.Armored)
         {
-            _currentClass = newClass;
-            _classFlashShown = false;
+            // Acorazado: free shield regen (1 charge / 12s) even without the shop item.
+            if (ShieldRegenPerMinute < 5f)
+            {
+                ShieldRegenPerMinute = 5f;
+                EnsureShieldRegenTimer();
+            }
         }
     }
+
+    // One entry per stat a build requires, shared by CheckBuildClass (who decides activation)
+    // and the Loadout UI (who shows ✓/✗ progress and which catalog rewards would close the gap) —
+    // one source of thresholds so the two can never drift apart again.
+    public readonly record struct BuildRequirement(UpgradeType Type, string Label, Func<Player, float> Current, float Needed, bool Additive)
+    {
+        public bool IsMet(Player p) => Current(p) >= Needed;
+    }
+
+    public static BuildRequirement[] GetBuildRequirements(BuildClass cls) => cls switch
+    {
+        BuildClass.Gunner => new[]
+        {
+            new BuildRequirement(UpgradeType.FireRate, "Cadencia", p => p.FireRate, 5f, Additive: true),
+            new BuildRequirement(UpgradeType.SideShot, "Disparo Lateral", p => p.ExtraFiringLines, 1f, Additive: true),
+        },
+        BuildClass.Tank => new[]
+        {
+            new BuildRequirement(UpgradeType.Heart, "Vidas", p => p.MaxLives, 4f, Additive: true),
+            new BuildRequirement(UpgradeType.HitShield, "Escudos", p => p.MaxShieldCharges, 3f, Additive: false),
+            new BuildRequirement(UpgradeType.ShieldRegen, "Regeneración", p => p.ShieldRegenPerMinute, 5f, Additive: false),
+        },
+        BuildClass.Assassin => new[]
+        {
+            new BuildRequirement(UpgradeType.CritChance, "Crítico", p => p.CritChance, 25f, Additive: true),
+            new BuildRequirement(UpgradeType.BulletDamage, "Daño", p => p.BulletDamage, 25f, Additive: true),
+            new BuildRequirement(UpgradeType.Ricochet, "Rebote", p => p.RicochetCount, 2f, Additive: false),
+        },
+        BuildClass.Explorer => new[]
+        {
+            new BuildRequirement(UpgradeType.FireRange, "Alcance", p => p.FireRange, 350f, Additive: true),
+            new BuildRequirement(UpgradeType.Pierce, "Perforación", p => p.BulletPierce, 2f, Additive: true),
+        },
+        BuildClass.Pyromaniac => new[]
+        {
+            new BuildRequirement(UpgradeType.Burn, "Incendiario", p => p.BurnLevel, 3f, Additive: false),
+            new BuildRequirement(UpgradeType.ShockwaveAura, "Onda de Choque", p => p.OndaLevel, 2f, Additive: false),
+        },
+        BuildClass.Armored => new[]
+        {
+            new BuildRequirement(UpgradeType.OrbitShield, "Cuchillas", p => p.OrbitCount, 2f, Additive: false),
+            new BuildRequirement(UpgradeType.HitShield, "Escudos", p => p.MaxShieldCharges, 3f, Additive: false),
+            new BuildRequirement(UpgradeType.Laser, "Láser", p => p.LaserLevel, 1f, Additive: false),
+        },
+        BuildClass.Hunter => new[]
+        {
+            new BuildRequirement(UpgradeType.Ricochet, "Rebote", p => p.RicochetCount, 2f, Additive: false),
+            new BuildRequirement(UpgradeType.Companion, "Dron", p => p.CompanionStatPercent, 0.3f, Additive: false),
+        },
+        _ => Array.Empty<BuildRequirement>(),
+    };
 
     // Heals 1 life, capped at MaxLives — used by the Heart pickup an enemy can drop. A mid-run
     // top-up, distinct from the Corazón Legendario reward which raises MaxLives itself.
@@ -708,7 +782,7 @@ public partial class Player : CharacterBody2D
         var inRange = new List<Enemy>();
         foreach (var n in enemies)
         {
-            if (n is Enemy enemy && IsInstanceValid(enemy) && GlobalPosition.DistanceTo(enemy.GlobalPosition) <= FireRange)
+            if (n is Enemy enemy && IsInstanceValid(enemy) && GlobalPosition.DistanceTo(enemy.GlobalPosition) <= EffectiveFireRange)
                 inRange.Add(enemy);
         }
 
@@ -779,7 +853,7 @@ public partial class Player : CharacterBody2D
             }
         }
 
-        return nearestDist <= FireRange * FireRange ? nearest : null;
+        return nearestDist <= EffectiveFireRange * EffectiveFireRange ? nearest : null;
     }
 
     private void SpawnLaserBeam(Vector2 targetGlobalPos, bool isCrit = false)
@@ -1156,7 +1230,7 @@ public partial class Player : CharacterBody2D
             }
         }
         if (nearest == null) return;
-        if (nearestDist > FireRange * FireRange) return;
+        if (nearestDist > EffectiveFireRange * EffectiveFireRange) return;
 
         Vector2 baseDir = (nearest.GlobalPosition - GlobalPosition).Normalized();
         FireInDirection(baseDir);
@@ -1175,7 +1249,7 @@ public partial class Player : CharacterBody2D
                 float side = (i % 2 == 1) ? 1f : -1f;
                 int rank = (i + 1) / 2;
                 Vector2 offset = perpendicular * SideShotSpacing * rank * side;
-                FireInDirection(baseDir, offset);
+                FireInDirection(baseDir, offset, isSideShot: true);
             }
         }
     }
@@ -1190,31 +1264,58 @@ public partial class Player : CharacterBody2D
     public int ApplyCrit(int baseDamage, out bool isCrit)
     {
         isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
-        float classBonus = _currentClass == BuildClass.Assassin ? 1.15f : 1f;
+        float classBonus = IsClassActive(BuildClass.Assassin) ? 1.25f : 1f;
         return isCrit ? Mathf.RoundToInt(baseDamage * CritMultiplier * classBonus) : Mathf.RoundToInt(baseDamage * classBonus);
     }
 
-    // Class passive: Gunner gets +10% bullet damage.
+    // Class passive: Gunner gets +15% bullet damage.
     private int ApplyClassDamage(int baseDamage)
     {
-        if (_currentClass == BuildClass.Gunner)
-            return Mathf.RoundToInt(baseDamage * 1.1f);
+        if (IsClassActive(BuildClass.Gunner))
+            return Mathf.RoundToInt(baseDamage * 1.15f);
         return baseDamage;
     }
 
-    // Class passive: Explorer gets +20% move speed.
+    // Class passive: Explorer gets +30% move speed and +10% fire range.
     public float GetClassSpeedMultiplier()
     {
-        return _currentClass == BuildClass.Explorer ? 1.2f : 1f;
+        return IsClassActive(BuildClass.Explorer) ? 1.3f : 1f;
     }
 
-    // Class passive: Pyromaniac gets +50% burn DPS.
+    public float GetClassFireRangeMultiplier()
+    {
+        return IsClassActive(BuildClass.Explorer) ? 1.1f : 1f;
+    }
+
+    // Class passive: Pyromaniac gets +75% burn DPS and +1s burn duration.
     public float GetClassBurnMultiplier()
     {
-        return _currentClass == BuildClass.Pyromaniac ? 1.5f : 1f;
+        return IsClassActive(BuildClass.Pyromaniac) ? 1.75f : 1f;
     }
 
-    private void FireInDirection(Vector2 dir, Vector2 positionOffset = default)
+    public float GetClassBurnDurationBonus()
+    {
+        return IsClassActive(BuildClass.Pyromaniac) ? 1f : 0f;
+    }
+
+    // Class passive: Hunter gets +1 ricochet (beyond the owned reward count) and a stronger drone.
+    public int GetClassRicochetBonus()
+    {
+        return IsClassActive(BuildClass.Hunter) ? 1 : 0;
+    }
+
+    public float GetClassCompanionMultiplier()
+    {
+        return IsClassActive(BuildClass.Hunter) ? 1.1f : 1f;
+    }
+
+    // Class passive: Tank shrugs off 25% of hits and takes 40% less knockback.
+    public float GetClassKnockbackMultiplier()
+    {
+        return IsClassActive(BuildClass.Tank) ? 0.6f : 1f;
+    }
+
+    private void FireInDirection(Vector2 dir, Vector2 positionOffset = default, bool isSideShot = false)
     {
         if (BulletScene == null || _bulletsContainer == null) return;
 
@@ -1224,7 +1325,13 @@ public partial class Player : CharacterBody2D
         bullet.Speed = BulletSpeed;
         bullet.Pierce = BulletPierce;
         bullet.Knockback = BulletKnockback;
-        bullet.Ricochet = RicochetCount;
+
+        // Side lines only bounce once the player has legendary-tier Rebote (Rebote IV, count 4):
+        // letting Common/Rare ricochet spread the whole side volley would make side shots strictly
+        // free multi-targeting. Main and diagonal Twin lines bounce at whatever tier the player has.
+        bullet.Ricochet = isSideShot
+            ? (RicochetCount >= LegendaryRicochetCount ? RicochetCount : 0)
+            : RicochetCount + GetClassRicochetBonus();
 
         // Class bonus: Gunner gets +10% bullet damage.
         bullet.Damage = ApplyClassDamage(bullet.Damage);
@@ -1240,8 +1347,15 @@ public partial class Player : CharacterBody2D
         _bulletsContainer.AddChild(bullet);
     }
 
+    // Every upgrade ever applied this run, mapped to its strongest tier — the single entry point
+    // is ApplyUpgrade, so this covers level-up picks, shop purchases and the boss Ultimate choice
+    // alike. Drives the Loadout menu's "items equipados" list.
+    private readonly Dictionary<UpgradeType, RewardTier> _ownedTiers = new();
+    public IReadOnlyDictionary<UpgradeType, RewardTier> OwnedTiers => _ownedTiers;
+
     public void ApplyUpgrade(UpgradeData upgrade)
     {
+        _ownedTiers[upgrade.Type] = upgrade.Tier;
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:

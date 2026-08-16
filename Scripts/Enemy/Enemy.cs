@@ -220,10 +220,11 @@ public partial class Enemy : CharacterBody2D
     // is still ~1x), so at the flat rate the player reaches the first shop with almost nothing to
     // spend. Mirrors the late-round taper below, in the opposite direction.
     private const int EarlyDropRound = 3;   // exclusive — rounds 1 and 2 get the boost
-    private const float EarlyXpCoinDropChance = 0.07f;
+    private const float EarlyXpCoinDropChance = 0.09f;
 
     // Round 1 gets a higher per-gem value (7 instead of 3) so the player starts with more buying
-    // power. Rounds 2-4 keep the original flat value of 3 via EarlyCoinPickupValue below.
+    // power — but not so much that every shop item is instantly affordable. Rounds 2-4 keep the
+    // original flat value of 3 via EarlyCoinPickupValue below.
     private const int Round1CoinValueRound = 2;   // exclusive — only round 1
     private const int Round1CoinPickupValue = 7;
 

@@ -126,7 +126,7 @@ public partial class RoundEventDirector : Node
     {
         if (GetTree().GetFirstNodeInGroup("player") is not Node2D player) return;
 
-        var extents = player is Player p ? p.ArenaHalfExtents : new Vector2(1600f, 1000f);
+        var extents = player is Player p ? p.ArenaHalfExtents : new Vector2(2200f, 1400f);
         float clearanceSq = MineSpawnClearance * MineSpawnClearance;
 
         for (int i = 0; i < MineCount; i++)

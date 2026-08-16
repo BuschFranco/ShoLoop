@@ -1,0 +1,66 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Scripts/UI/LoadoutMenu.cs" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.043, 0.024, 0.078, 0.96)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.4902, 0.9922, 0.9961, 0.85)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 14.0
+content_margin_top = 12.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+
+[node name="LoadoutMenu" type="PanelContainer"]
+custom_minimum_size = Vector2(460, 520)
+layout_mode = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+script = ExtResource("1")
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Box" type="VBoxContainer" parent="ScrollContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="ScrollContainer/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 20
+text = "EQUIPO Y CONSTRUCCIONES"
+horizontal_alignment = 1
+
+[node name="ItemsLabel" type="RichTextLabel" parent="ScrollContainer/Box"]
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+theme_override_colors/default_color = Color(0.9, 0.93, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/normal_font_size = 13
+text = ""
+
+[node name="Sep" type="Control" parent="ScrollContainer/Box"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="BuildsLabel" type="RichTextLabel" parent="ScrollContainer/Box"]
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+theme_override_colors/default_color = Color(0.9, 0.93, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/normal_font_size = 13
+text = ""

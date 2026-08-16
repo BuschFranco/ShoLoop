@@ -29,7 +29,6 @@ public partial class HUD : Control
     private CooldownIcon _ondaIcon;
     private CooldownIcon _vendavalIcon;
     private Label _streakLabel;
-    private Label _classLabel;
     private int _lastStreak;
     private Tween _streakPulseTween;
     private Control _bossHealthBar;
@@ -87,15 +86,8 @@ public partial class HUD : Control
         _streakLabel.HorizontalAlignment = HorizontalAlignment.Right;
         AddChild(_streakLabel);
 
-        // Build class label — positioned below the streak label.
-        _classLabel = new Label();
-        _classLabel.Text = "";
-        _classLabel.AddThemeFontSizeOverride("font_size", 18);
-        _classLabel.AddThemeColorOverride("font_color", new Color(0.5f, 1f, 0.8f));
-        _classLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
-        _classLabel.AddThemeConstantOverride("outline_size", 3);
-        _classLabel.HorizontalAlignment = HorizontalAlignment.Right;
-        AddChild(_classLabel);
+        // Build class lives inside the stats panel (UpdateStatsLabel), not as a floating label
+        // below the top bar.
 
         _scoreDeltaTimer = new Timer();
         _scoreDeltaTimer.OneShot = true;
@@ -216,10 +208,6 @@ public partial class HUD : Control
         _streakLabel.Position = _topBarPanel.Position + new Vector2(150f, _topBarPanel.Size.Y + 10f);
         _streakLabel.Size = new Vector2(200f, 30f);
 
-        // Build class below the streak.
-        _classLabel.Position = _topBarPanel.Position + new Vector2(0f, _topBarPanel.Size.Y + 36f);
-        _classLabel.Size = new Vector2(200f, 30f);
-
         UpdateCooldownIcons();
         UpdateUltimateUi();
         UpdateBossHealthBar();
@@ -291,38 +279,6 @@ public partial class HUD : Control
         {
             _streakLabel.Visible = false;
             _lastStreak = 0;
-        }
-
-        // Build class display
-        if (_player != null && _player.CurrentClass != Player.BuildClass.None)
-        {
-            string className = _player.CurrentClass switch
-            {
-                Player.BuildClass.Gunner => "ARTILLERO",
-                Player.BuildClass.Tank => "TANQUE",
-                Player.BuildClass.Assassin => "ASESINO",
-                Player.BuildClass.Explorer => "EXPLORADOR",
-                Player.BuildClass.Pyromaniac => "PIRÓMANO",
-                Player.BuildClass.Armored => "ACORAZADO",
-                _ => ""
-            };
-            _classLabel.Text = className;
-            _classLabel.Visible = true;
-            // Color distincto por clase.
-            _classLabel.Modulate = _player.CurrentClass switch
-            {
-                Player.BuildClass.Gunner => new Color(1f, 0.5f, 0.2f),
-                Player.BuildClass.Tank => new Color(0.4f, 0.7f, 1f),
-                Player.BuildClass.Assassin => new Color(0.9f, 0.2f, 0.9f),
-                Player.BuildClass.Explorer => new Color(0.3f, 1f, 0.5f),
-                Player.BuildClass.Pyromaniac => new Color(1f, 0.4f, 0.1f),
-                Player.BuildClass.Armored => new Color(0.7f, 0.7f, 0.8f),
-                _ => Colors.White
-            };
-        }
-        else
-        {
-            _classLabel.Visible = false;
         }
     }
 
@@ -418,9 +374,22 @@ public partial class HUD : Control
     {
         if (_player == null) return;
 
-        _statsLabel.Text =
+        string stats =
             $"DAÑO {_player.BulletDamage} · CAD {_player.FireRate:0.0}/s · CRIT {_player.CritChance:0}%\n" +
             $"RANGO {_player.FireRange:0} · BAJAS {GameManager.Instance.EnemiesKilled}";
+
+        // Fixed display order so the panel doesn't re-shuffle as builds unlock — the set grows,
+        // but listing order stays stable from run to run.
+        var names = new List<string>();
+        if (_player.IsClassActive(Player.BuildClass.Gunner)) names.Add("ARTILLERO");
+        if (_player.IsClassActive(Player.BuildClass.Tank)) names.Add("TANQUE");
+        if (_player.IsClassActive(Player.BuildClass.Assassin)) names.Add("ASESINO");
+        if (_player.IsClassActive(Player.BuildClass.Explorer)) names.Add("EXPLORADOR");
+        if (_player.IsClassActive(Player.BuildClass.Pyromaniac)) names.Add("PIRÓMANO");
+        if (_player.IsClassActive(Player.BuildClass.Armored)) names.Add("ACORAZADO");
+        if (_player.IsClassActive(Player.BuildClass.Hunter)) names.Add("CAZADOR");
+
+        _statsLabel.Text = names.Count == 0 ? stats : $"{stats}\nBUILD {string.Join(" · ", names)}";
     }
 
     private void OnXpChanged(int xp, int xpToNext)

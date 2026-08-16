@@ -30,7 +30,7 @@ public partial class CooldownIcon : Control
         DrawCircle(center, radius, ready ? IconColor : IconColor.Darkened(0.35f));
         DrawArc(center, radius, 0f, Mathf.Tau, 32, Colors.Black.Lightened(0.1f), 2f, true);
 
-        if (CooldownFraction > 0f)
+        if (CooldownFraction > 0.002f)
         {
             const int segments = 24;
             float startAngle = -Mathf.Pi / 2f;

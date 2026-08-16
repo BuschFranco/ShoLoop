@@ -1,15 +1,16 @@
+using System.Linq;
+
 namespace ShooterLoop;
 
 public partial class BuildsMenu : Control
 {
-    private static readonly (string Name, string Require, string Bonus)[] Builds =
+    // Names, benefits and requirement thresholds live in BuildCatalog / Player.GetBuildRequirements,
+    // shared with the in-run Loadout panel — this menu is just rendering that same data.
+    private static readonly Player.BuildClass[] ClassOrder =
     {
-        ("ARTILLERO",    "Cadencia de disparo 5.0+",            "+10% de daño en balas"),
-        ("TANQUE",       "4+ vidas Y 3+ escudos",               "20% de no perder vida al recibir golpe"),
-        ("ASESINO",      "20%+ de crítico Y 20+ de daño de bala",  "+15% de daño en críticos"),
-        ("EXPLORADOR",   "350+ de alcance de disparo",          "+20% de velocidad de movimiento"),
-        ("PIRÓMANO",     "3+ niveles de Incendiario",           "+50% de daño de quemadura"),
-        ("ACORAZADO",    "Escudo orbital + 3+ escudos",         "Refleja 30 de daño al recibir golpe"),
+        Player.BuildClass.Gunner, Player.BuildClass.Tank, Player.BuildClass.Assassin,
+        Player.BuildClass.Explorer, Player.BuildClass.Pyromaniac, Player.BuildClass.Armored,
+        Player.BuildClass.Hunter,
     };
 
     public void Open() => Visible = true;
@@ -23,10 +24,15 @@ public partial class BuildsMenu : Control
     private void Populate()
     {
         var list = GetNode<RichTextLabel>("CenterContainer/Panel/Box/BuildsList");
-        var lines = new string[Builds.Length];
-        for (int i = 0; i < Builds.Length; i++)
+        var lines = new string[ClassOrder.Length];
+        for (int i = 0; i < ClassOrder.Length; i++)
         {
-            lines[i] = $"[color=#7dfdfe]{Builds[i].Name}[/color]  [color=#b8a040]{Builds[i].Require}[/color]  →  [color=#7fff7f]{Builds[i].Bonus}[/color]";
+            var cls = ClassOrder[i];
+            string reqText = string.Join(" y ", Player.GetBuildRequirements(cls)
+                .Select(BuildCatalog.RequirementText));
+            lines[i] = $"[color=#7dfdfe]{BuildCatalog.Name(cls)}[/color]  " +
+                       $"[color=#b8a040]{reqText}[/color]  →  " +
+                       $"[color=#7fff7f]{BuildCatalog.Bonus(cls)}[/color]";
         }
         list.Text = string.Join("\n", lines);
     }

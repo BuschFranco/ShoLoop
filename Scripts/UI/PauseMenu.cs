@@ -4,6 +4,9 @@ public partial class PauseMenu : Control
 {
     private Label _statsLabel;
     private Button _resumeButton;
+    private Button _menuButton;
+    private PanelContainer _pausePanel;
+    private LoadoutMenu _loadoutMenu;
 
     public override void _Ready()
     {
@@ -11,9 +14,27 @@ public partial class PauseMenu : Control
         Visible = false;
         ProcessMode = ProcessModeEnum.Always;
 
-        _statsLabel = GetNode<Label>("Panel/VBoxContainer/StatsLabel");
-        _resumeButton = GetNode<Button>("Panel/VBoxContainer/ResumeButton");
+        _statsLabel = GetNode<Label>("CenterContainer/HBox/Panel/VBoxContainer/StatsLabel");
+        _resumeButton = GetNode<Button>("CenterContainer/HBox/Panel/VBoxContainer/ResumeButton");
+        _menuButton = GetNode<Button>("CenterContainer/HBox/Panel/VBoxContainer/MenuButton");
+        _pausePanel = GetNode<PanelContainer>("CenterContainer/HBox/Panel");
+        _loadoutMenu = GetNode<LoadoutMenu>("CenterContainer/HBox/LoadoutMenu");
         _resumeButton.Pressed += OnResumePressed;
+        _menuButton.Pressed += OnMenuPressed;
+
+        // Portrait (648px wide) can't fit both panels at landscape widths — shrink both so the
+        // HBox still fits side by side with a comfortable margin.
+        bool portrait = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
+        if (portrait)
+        {
+            _pausePanel.CustomMinimumSize = new Vector2(250f, 0f);
+            _loadoutMenu.CustomMinimumSize = new Vector2(360f, 940f);
+        }
+        else
+        {
+            _pausePanel.CustomMinimumSize = new Vector2(340f, 0f);
+            _loadoutMenu.CustomMinimumSize = new Vector2(460f, 520f);
+        }
     }
 
     public void Open()
@@ -49,6 +70,7 @@ public partial class PauseMenu : Control
         }
 
         _statsLabel.Text = string.Join("\n", lines);
+        _loadoutMenu.Refresh(player);
         Visible = true;
     }
 
@@ -56,5 +78,13 @@ public partial class PauseMenu : Control
     {
         Visible = false;
         GameManager.Instance.Resume();
+    }
+
+    private void OnMenuPressed()
+    {
+        // Abandon the run entirely: same path as the Game Over screen, so no run state carries
+        // back into the main menu (and the next run starts from a clean ResetRun).
+        GameManager.Instance.ResetRun();
+        GetTree().ChangeSceneToFile("res://Scenes/UI/MainMenu.tscn");
     }
 }
