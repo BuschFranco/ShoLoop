@@ -68,8 +68,26 @@ public partial class Player : CharacterBody2D
     public float DodgeChance = 0f;           // percent, 0-25
     public float FortuneBonus = 0f;          // percent added to Rare/Epic/Legendary odds
     public int RicochetCount = 0;            // number of additional bounces
+    public enum BuildClass { None, Gunner, Tank, Assassin, Explorer, Zealot, Armored }
+
+    // Build class system: grants passive bonuses based on stat thresholds.
+    private BuildClass _currentClass = BuildClass.None;
+    public BuildClass CurrentClass => _currentClass;
+    private bool _classFlashShown;
+
     public float ThornsDamage = 0f;          // damage dealt to enemies on hit
     private float _thornsCooldown;
+
+    // Kill streak system: rewards rapid kills with escalating XP/coin bonuses.
+    private int _killStreak;
+    private float _killStreakTimer;
+    private const float KillStreakWindow = 2.0f;   // seconds between kills to maintain streak
+    private const float KillStreakBonus = 0.1f;    // +10% per streak level
+    private const int KillStreakMax = 15;           // cap at ×2.5 bonus
+
+    public int KillStreak => _killStreak;
+    public float KillStreakMultiplier => 1f + Mathf.Min(_killStreak, KillStreakMax) * KillStreakBonus;
+
     public bool HasExtraProjectile => _hasExtraProjectile;
     public bool HasOrbitShield => OrbitCount > 0;
 
@@ -317,7 +335,7 @@ public partial class Player : CharacterBody2D
         // Ease toward the requested velocity rather than assigning it outright — this is what gives
         // the movement its arranque/frenada. Steering mid-move interpolates through the turn too,
         // which reads as the ship banking rather than pivoting on the spot.
-        Vector2 targetVelocity = dir * MoveSpeed;
+        Vector2 targetVelocity = dir * MoveSpeed * GetClassSpeedMultiplier();
         float rate = dir == Vector2.Zero ? MoveDeceleration : MoveAcceleration;
         _moveVelocity = _moveVelocity.MoveToward(targetVelocity, rate * (float)delta);
 
@@ -393,6 +411,13 @@ public partial class Player : CharacterBody2D
 
         if (_thornsCooldown > 0f)
             _thornsCooldown -= (float)delta;
+
+        if (_killStreakTimer > 0f)
+        {
+            _killStreakTimer -= (float)delta;
+            if (_killStreakTimer <= 0f)
+                _killStreak = 0;
+        }
     }
 
     // Turns the triangle to face the direction the player is actually moving in — it used to be
@@ -450,6 +475,29 @@ public partial class Player : CharacterBody2D
         {
             _invulnTimer = InvulnDuration * 0.5f; // shorter invuln on dodge
             return;
+        }
+
+        // Any hit that lands (shield or heart) resets the kill streak.
+        ResetKillStreak();
+
+        // Armored class: reflect 30 damage to nearby enemies on hit (no cooldown).
+        if (_currentClass == BuildClass.Armored && sourcePosition.HasValue)
+        {
+            var enemies = GetTree().GetNodesInGroup("enemies");
+            int hit = 0;
+            foreach (var node in enemies)
+            {
+                if (node is Enemy e && !e.IsQueuedForDeletion())
+                {
+                    float dist = GlobalPosition.DistanceTo(e.GlobalPosition);
+                    if (dist <= 100f)
+                    {
+                        e.TakeDamage(30);
+                        hit++;
+                        if (hit >= 10) break;
+                    }
+                }
+            }
         }
 
         // Thorns: damage enemies when hit
@@ -513,6 +561,44 @@ public partial class Player : CharacterBody2D
     {
         CurrentLives = MaxLives;
         LivesChanged?.Invoke(CurrentLives, MaxLives);
+    }
+
+    // Call from GameManager.RegisterKill to maintain the kill streak counter.
+    public void RegisterKillForStreak()
+    {
+        _killStreak++;
+        _killStreakTimer = KillStreakWindow;
+    }
+
+    public void ResetKillStreak()
+    {
+        _killStreak = 0;
+        _killStreakTimer = 0f;
+    }
+
+    // Build class: check stat thresholds and update the active class.
+    public void CheckBuildClass()
+    {
+        BuildClass newClass = BuildClass.None;
+
+        if (FireRate >= 5f)
+            newClass = BuildClass.Gunner;
+        if (MaxLives >= 5 || MaxShieldCharges >= 3)
+            newClass = BuildClass.Tank;
+        if (CritChance >= 20f)
+            newClass = BuildClass.Assassin;
+        if (FireRange >= 350f)
+            newClass = BuildClass.Explorer;
+        if (EquippedUltimate != null)
+            newClass = BuildClass.Zealot;
+        if (OrbitCount > 0 && MaxShieldCharges >= 3)
+            newClass = BuildClass.Armored;
+
+        if (newClass != _currentClass)
+        {
+            _currentClass = newClass;
+            _classFlashShown = false;
+        }
     }
 
     // Heals 1 life, capped at MaxLives — used by the Heart pickup an enemy can drop. A mid-run
@@ -849,7 +935,8 @@ public partial class Player : CharacterBody2D
         // concurrently with it the way it used to. Modelled by simply adding the active duration on
         // top — no extra state or callback needed, and the HUD's readout stays honest because it shows
         // the whole remaining lock either way. Nova is instantaneous, so it gets the bare cooldown.
-        UltimateCooldownRemaining = GetUltimateActiveDuration(EquippedUltimate.Value) + UltimateCooldownDuration;
+        // Class bonus: Zealot gets -20% ultimate cooldown.
+        UltimateCooldownRemaining = GetUltimateActiveDuration(EquippedUltimate.Value) + UltimateCooldownDuration * GetClassUltimateCooldownMultiplier();
     }
 
     // Nova detonates on the frame it's triggered; the other two run for a while. Only the timed ones
@@ -1096,7 +1183,28 @@ public partial class Player : CharacterBody2D
     public int ApplyCrit(int baseDamage, out bool isCrit)
     {
         isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
-        return isCrit ? Mathf.RoundToInt(baseDamage * CritMultiplier) : baseDamage;
+        float classBonus = _currentClass == BuildClass.Assassin ? 1.15f : 1f;
+        return isCrit ? Mathf.RoundToInt(baseDamage * CritMultiplier * classBonus) : Mathf.RoundToInt(baseDamage * classBonus);
+    }
+
+    // Class passive: Gunner gets +10% bullet damage.
+    private int ApplyClassDamage(int baseDamage)
+    {
+        if (_currentClass == BuildClass.Gunner)
+            return Mathf.RoundToInt(baseDamage * 1.1f);
+        return baseDamage;
+    }
+
+    // Class passive: Explorer gets +20% move speed.
+    public float GetClassSpeedMultiplier()
+    {
+        return _currentClass == BuildClass.Explorer ? 1.2f : 1f;
+    }
+
+    // Class passive: Zealot gets -20% ultimate cooldown.
+    public float GetClassUltimateCooldownMultiplier()
+    {
+        return _currentClass == BuildClass.Zealot ? 0.8f : 1f;
     }
 
     private void FireInDirection(Vector2 dir, Vector2 positionOffset = default)
@@ -1110,6 +1218,9 @@ public partial class Player : CharacterBody2D
         bullet.Pierce = BulletPierce;
         bullet.Knockback = BulletKnockback;
         bullet.Ricochet = RicochetCount;
+
+        // Class bonus: Gunner gets +10% bullet damage.
+        bullet.Damage = ApplyClassDamage(bullet.Damage);
 
         bullet.BurnDps = CurrentBurnDps;
         bullet.BurnDuration = CurrentBurnDuration;
@@ -1221,6 +1332,7 @@ public partial class Player : CharacterBody2D
                 ThornsDamage = Mathf.Max(ThornsDamage, upgrade.Value);
                 break;
         }
+        CheckBuildClass();
     }
 
     // Shield regen (shop-only Regeneración). Stored as charges-per-minute so "higher is better"

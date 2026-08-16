@@ -348,6 +348,18 @@ public partial class EnemySpawner : Node2D
         enemy.GlobalPosition = spawnPos;
         enemy.GrantsRewards = grantsRewards;
 
+        // Elite spawn: 5% base chance + 2% per round, capped at 25%. Only Common/Rare enemies can be elite.
+        if (!enemy.IsQueuedForDeletion() && (enemy.Category == EnemyCategory.Common || enemy.Category == EnemyCategory.Rare))
+        {
+            int round = GameManager.Instance?.RoundNumber ?? 1;
+            float eliteChance = Mathf.Min(0.05f + (round - 1) * 0.02f, 0.25f);
+            if (_rng.NextDouble() < eliteChance)
+            {
+                var modifiers = new[] { EliteModifier.Vampiric, EliteModifier.Shielded, EliteModifier.Explosive, EliteModifier.Fast, EliteModifier.Regenerating };
+                enemy.MakeElite(modifiers[_rng.Next(modifiers.Length)]);
+            }
+        }
+
         // Lets the HUD's fixed boss health bar find the live boss instance by polling the group,
         // the same way everything else here discovers the player/enemies — no signal needed.
         if (scene == BossScene) enemy.AddToGroup("boss");

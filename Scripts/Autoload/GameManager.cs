@@ -118,15 +118,20 @@ public partial class GameManager : Node
     // "Puntaje" always tracks the same progression that drives leveling, instead of following its
     // own separate (and previously flat, un-scaled) per-category table. Coins remain completely
     // separate — this only concerns Score/XP.
-    public void RegisterKill(int xpReward, int coinsReward, EnemyCategory category = EnemyCategory.Common)
+    public int RegisterKill(int xpReward, int coinsReward, EnemyCategory category = EnemyCategory.Common)
     {
         EnemiesKilled++;
         if (category != EnemyCategory.Common) SpecialEnemiesKilled++;
 
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
 
-        // Sabiduría scales XP; Botín scales coins. Each touches only its own currency.
-        AddXp(Mathf.RoundToInt(xpReward * (player?.XpMultiplier ?? 1f)));
+        // Kill streak: rapid kills boost XP/coin payouts.
+        player?.RegisterKillForStreak();
+        float streakMult = player?.KillStreakMultiplier ?? 1f;
+
+        // Sabiduría scales XP; Botín scales coins. Streak only boosts XP, not coins.
+        int finalXp = Mathf.RoundToInt(xpReward * (player?.XpMultiplier ?? 1f) * streakMult);
+        AddXp(finalXp);
         AddCoins(Mathf.RoundToInt(coinsReward * (player?.CoinMultiplier ?? 1f)));
 
         // Deliberately the *unmultiplied* xpReward, which breaks the otherwise 1:1 Score/XP sync.
@@ -147,6 +152,8 @@ public partial class GameManager : Node
 
             BeginRoundEnd();
         }
+
+        return finalXp;
     }
 
     public void AddCoins(int amount)
@@ -371,6 +378,7 @@ public partial class GameManager : Node
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
         player?.HealFullLives();
         player?.RefillShield();
+        player?.ResetKillStreak();
 
         // Pickups are no longer swept at round end (see EndRound), so anything left on the field gets
         // its full lifetime back here — otherwise a drop from the last second of the previous round

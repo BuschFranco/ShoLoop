@@ -28,6 +28,10 @@ public partial class HUD : Control
     private CooldownIcon _ultimateIcon;
     private CooldownIcon _ondaIcon;
     private CooldownIcon _vendavalIcon;
+    private Label _streakLabel;
+    private Label _classLabel;
+    private int _lastStreak;
+    private Tween _streakPulseTween;
     private Control _bossHealthBar;
     private ProgressBar _bossHpBar;
     private Enemy _currentBoss;
@@ -72,6 +76,26 @@ public partial class HUD : Control
         _vendavalIcon = GetNode<CooldownIcon>("CooldownIcons/VendavalIcon");
         _bossHealthBar = GetNode<Control>("BossHealthBar");
         _bossHpBar = GetNode<ProgressBar>("BossHealthBar/BossHpBar");
+
+        // Kill streak label — positioned center-right, below the round timer.
+        _streakLabel = new Label();
+        _streakLabel.Text = "";
+        _streakLabel.AddThemeFontSizeOverride("font_size", 20);
+        _streakLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.15f));
+        _streakLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _streakLabel.AddThemeConstantOverride("outline_size", 3);
+        _streakLabel.HorizontalAlignment = HorizontalAlignment.Right;
+        AddChild(_streakLabel);
+
+        // Build class label — positioned below the streak label.
+        _classLabel = new Label();
+        _classLabel.Text = "";
+        _classLabel.AddThemeFontSizeOverride("font_size", 18);
+        _classLabel.AddThemeColorOverride("font_color", new Color(0.5f, 1f, 0.8f));
+        _classLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _classLabel.AddThemeConstantOverride("outline_size", 3);
+        _classLabel.HorizontalAlignment = HorizontalAlignment.Right;
+        AddChild(_classLabel);
 
         _scoreDeltaTimer = new Timer();
         _scoreDeltaTimer.OneShot = true;
@@ -188,6 +212,14 @@ public partial class HUD : Control
         // panel's height also breathes (e.g. the Shield row only appears once you own a Barrier).
         _roundTimerLabel.Position = _topBarPanel.Position + new Vector2(0f, _topBarPanel.Size.Y + 10f);
 
+        // Kill streak to the right of the round timer, same vertical level.
+        _streakLabel.Position = _topBarPanel.Position + new Vector2(150f, _topBarPanel.Size.Y + 10f);
+        _streakLabel.Size = new Vector2(200f, 30f);
+
+        // Build class below the streak.
+        _classLabel.Position = _topBarPanel.Position + new Vector2(0f, _topBarPanel.Size.Y + 36f);
+        _classLabel.Size = new Vector2(200f, 30f);
+
         UpdateCooldownIcons();
         UpdateUltimateUi();
         UpdateBossHealthBar();
@@ -232,6 +264,65 @@ public partial class HUD : Control
         else if (!urgent)
         {
             _lastPulsedSecond = -1;
+        }
+
+        // Kill streak display
+        if (_player != null && _player.KillStreak >= 3)
+        {
+            _streakLabel.Text = $"RACHA DE {_player.KillStreak} (×{_player.KillStreakMultiplier:0.0})";
+            _streakLabel.Visible = true;
+            // Color progresivo: blanco → rojo intenso según racha
+            float t = Mathf.Min(_player.KillStreak / 40f, 1f);
+            _streakLabel.Modulate = new Color(1f, Mathf.Lerp(1f, 0.15f, t), Mathf.Lerp(1f, 0f, t));
+
+            // Pulse animation when streak increases.
+            if (_player.KillStreak > _lastStreak)
+            {
+                _streakPulseTween?.Kill();
+                _streakPulseTween = CreateTween();
+                _streakPulseTween.TweenProperty(_streakLabel, "scale", new Vector2(1.4f, 1.4f), 0.1f)
+                    .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+                _streakPulseTween.TweenProperty(_streakLabel, "scale", Vector2.One, 0.15f)
+                    .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+            }
+            _lastStreak = _player.KillStreak;
+        }
+        else
+        {
+            _streakLabel.Visible = false;
+            _lastStreak = 0;
+        }
+
+        // Build class display
+        if (_player != null && _player.CurrentClass != Player.BuildClass.None)
+        {
+            string className = _player.CurrentClass switch
+            {
+                Player.BuildClass.Gunner => "ARTILLERO",
+                Player.BuildClass.Tank => "TANQUE",
+                Player.BuildClass.Assassin => "ASESINO",
+                Player.BuildClass.Explorer => "EXPLORADOR",
+                Player.BuildClass.Zealot => "FANÁTICO",
+                Player.BuildClass.Armored => "ACORAZADO",
+                _ => ""
+            };
+            _classLabel.Text = className;
+            _classLabel.Visible = true;
+            // Color distincto por clase.
+            _classLabel.Modulate = _player.CurrentClass switch
+            {
+                Player.BuildClass.Gunner => new Color(1f, 0.5f, 0.2f),
+                Player.BuildClass.Tank => new Color(0.4f, 0.7f, 1f),
+                Player.BuildClass.Assassin => new Color(0.9f, 0.2f, 0.9f),
+                Player.BuildClass.Explorer => new Color(0.3f, 1f, 0.5f),
+                Player.BuildClass.Zealot => new Color(1f, 0.9f, 0.3f),
+                Player.BuildClass.Armored => new Color(0.7f, 0.7f, 0.8f),
+                _ => Colors.White
+            };
+        }
+        else
+        {
+            _classLabel.Visible = false;
         }
     }
 

@@ -4,6 +4,8 @@ namespace ShooterLoop;
 // renumbering the existing members would silently reclassify all of them.
 public enum EnemyCategory { Common, Rare, Special, Hidden, Boss, Demon }
 
+public enum EliteModifier { None, Vampiric, Shielded, Explosive, Fast, Regenerating }
+
 public partial class Enemy : CharacterBody2D
 {
     [Export] public float MoveSpeed = 90f;
@@ -12,6 +14,12 @@ public partial class Enemy : CharacterBody2D
     [Export] public int CoinsReward = 1;
     [Export] public int ContactDamage = 10;
     [Export] public EnemyCategory Category = EnemyCategory.Common;
+
+    // Elite system: certain enemies spawn with bonus stats and a modifier.
+    public bool IsElite;
+    public EliteModifier EliteModifier = EliteModifier.None;
+    private float _regenTimer;
+    private int _shieldCharges;
 
     [Export] public bool CanSplit = false;
     [Export] public int SplitCount = 2;
@@ -85,6 +93,53 @@ public partial class Enemy : CharacterBody2D
     {
         _burnDps = Mathf.Max(_burnDps, dps);
         _burnRemaining = Mathf.Max(_burnRemaining, duration);
+    }
+
+    // Elite system: apply bonus stats and visual indicator.
+    public void MakeElite(EliteModifier modifier)
+    {
+        IsElite = true;
+        EliteModifier = modifier;
+        MaxHp = Mathf.RoundToInt(MaxHp * 1.5f);
+        CurrentHp = MaxHp;
+        MoveSpeed *= 1.2f;
+        _shieldCharges = modifier == EliteModifier.Shielded ? 1 : 0;
+
+        // Ensure health bar exists for elites.
+        if (_healthBarFill == null)
+            CreateHealthBar();
+
+        // Visual: add a colored border glow via a second Polygon2D child.
+        if (_visual != null)
+        {
+            var glow = new Polygon2D();
+            glow.Polygon = _visual.Polygon;
+            glow.Scale = Vector2.One * 1.15f;
+            glow.Modulate = GetEliteColor(modifier);
+            glow.ZIndex = -1;
+            AddChild(glow);
+        }
+    }
+
+    private static Color GetEliteColor(EliteModifier modifier) => modifier switch
+    {
+        EliteModifier.Vampiric => new Color(1f, 0.2f, 0.2f, 0.7f),
+        EliteModifier.Shielded => new Color(0.3f, 0.5f, 1f, 0.7f),
+        EliteModifier.Explosive => new Color(1f, 0.6f, 0f, 0.7f),
+        EliteModifier.Fast => new Color(1f, 1f, 0.2f, 0.7f),
+        EliteModifier.Regenerating => new Color(0.2f, 1f, 0.3f, 0.7f),
+        _ => new Color(1f, 1f, 1f, 0.5f),
+    };
+
+    // Called by the damage system; Shielded elites block one hit before taking damage.
+    public bool TryBlockWithEliteShield()
+    {
+        if (_shieldCharges > 0)
+        {
+            _shieldCharges--;
+            return true;
+        }
+        return false;
     }
 
     protected void TickBurn(float delta)
@@ -308,6 +363,17 @@ public partial class Enemy : CharacterBody2D
         TickBurn((float)delta);
         if (CurrentHp <= 0) return;
 
+        // Elite regenerating modifier: heal 1 HP/sec.
+        if (IsElite && EliteModifier == EliteModifier.Regenerating && CurrentHp < MaxHp)
+        {
+            _regenTimer += (float)delta;
+            if (_regenTimer >= 1f)
+            {
+                _regenTimer -= 1f;
+                CurrentHp = Mathf.Min(CurrentHp + 1, MaxHp);
+            }
+        }
+
         TickStragglerReposition((float)delta);
 
         FinishMovement(ComputeMoveDirection(delta), delta);
@@ -509,14 +575,36 @@ public partial class Enemy : CharacterBody2D
             // it just contributes no XP, Score or coins.
             int xpToGive = willSplit || !GrantsRewards ? 0 : XpReward;
             int coinsToGive = GrantsRewards ? CoinsReward : 0;
-            GameManager.Instance?.RegisterKill(xpToGive, coinsToGive, Category);
+            int finalXp = GameManager.Instance?.RegisterKill(xpToGive, coinsToGive, Category) ?? xpToGive;
 
             // Score is synced 1:1 with XP now, so a mid-chain Splitter kill (xpToGive == 0 until
             // the final generation) correctly shows no popup either — only the terminal kill does.
-            if (xpToGive > 0)
-                SpawnScorePopup(xpToGive);
+            // Shows the actual XP gained after streak/wisdom multipliers.
+            if (finalXp > 0)
+                SpawnScorePopup(finalXp);
 
             TryDropPickup();
+
+            // Explosive elite: damage nearby enemies and the player on death.
+            if (IsElite && EliteModifier == EliteModifier.Explosive)
+            {
+                const float explosionRadius = 80f;
+                var entities = GetTree().GetNodesInGroup("enemies");
+                foreach (var node in entities)
+                {
+                    if (node is Enemy e && e != this && !e.IsQueuedForDeletion())
+                    {
+                        float dist = GlobalPosition.DistanceTo(e.GlobalPosition);
+                        if (dist <= explosionRadius)
+                            e.TakeDamage(20);
+                    }
+                }
+                // Damage the player too if in range.
+                var player = GetTree().GetFirstNodeInGroup("player") as Player;
+                if (player != null && GlobalPosition.DistanceTo(player.GlobalPosition) <= explosionRadius)
+                    player.TakeHit(GlobalPosition);
+            }
+
             QueueFree();
         }
         else if (showFlash)
