@@ -207,7 +207,7 @@ public partial class Player : CharacterBody2D
     private const float InvulnDuration = 2f;
     private float _blinkTimer = 0f;
     private const float BlinkInterval = 0.1f;
-    private Polygon2D _visual;
+    private Sprite2D _visual;
     private Vector2 _knockbackVelocity = Vector2.Zero;
     private const float KnockbackForce = 220f;
     private const float KnockbackDecay = 900f;
@@ -259,6 +259,13 @@ public partial class Player : CharacterBody2D
     public override void _Ready()
     {
         AddToGroup("player");
+
+        // Applied before anything below snapshots or consumes these fields, so the chosen character
+        // shifts the run's whole stat curve rather than being overwritten by it.
+        var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
+        MoveSpeed *= character.MoveSpeedMultiplier;
+        BulletDamage = Mathf.RoundToInt(BulletDamage * character.BulletDamageMultiplier);
+
         CurrentLives = MaxLives;
 
         _baseFireRate = FireRate;
@@ -277,7 +284,9 @@ public partial class Player : CharacterBody2D
 
         _joystick = GetTree().GetFirstNodeInGroup("virtual_joystick") as VirtualJoystick;
 
-        _visual = GetNode<Polygon2D>("Visual");
+        _visual = GetNode<Sprite2D>("Visual");
+        _visual.Texture = GD.Load<Texture2D>(character.SpritePath);
+        _visual.Modulate = character.Color;
 
         _shieldAura = GetNode<Polygon2D>("ShieldAura");
         var pulse = CreateTween();

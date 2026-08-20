@@ -4,7 +4,7 @@ namespace ShooterLoop;
 //
 // Scope note: this covers everything drawn *procedurally* from code (rings, beams, blasts, floating
 // labels, obstacles, arena edge). Visuals authored as nodes in a .tscn keep their colour in the
-// scene file, because `Enemy` reads its own `Visual.Color` back as the hit-flash restore target —
+// scene file, because `Enemy` reads its own `Visual.Modulate` back as the hit-flash restore target —
 // moving those here would give the same value two owners. The scene values are kept in step with
 // the constants below by hand; the table in docs/visuals.md lists both sides.
 //

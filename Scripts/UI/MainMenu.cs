@@ -5,7 +5,8 @@ public partial class MainMenu : Control
     public override void _Ready()
     {
         var startButton = GetNode<Button>("VBoxContainer/ButtonsRow/StartButton");
-        startButton.Pressed += OnStartPressed;
+        var characterSelect = GetNode<CharacterSelectMenu>("CharacterSelectMenu");
+        startButton.Pressed += characterSelect.Open;
         startButton.GrabFocus();
 
         var highScoreLabel = GetNode<Label>("VBoxContainer/HighScoreLabel");
@@ -45,10 +46,5 @@ public partial class MainMenu : Control
         }
 
         list.Text = string.Join("\n", lines);
-    }
-
-    private void OnStartPressed()
-    {
-        GetTree().ChangeSceneToFile("res://Scenes/Arena.tscn");
     }
 }

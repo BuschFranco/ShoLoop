@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Enemy/DemonStalker.cs" id="1"]
+[ext_resource type="Texture2D" path="res://Assets/Sprites/Enemies/demon_stalker.png" id="2"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_stalker"]
 radius = 13.0
@@ -18,9 +19,10 @@ Category = 5
 HealthBarOffset = -22.0
 AvoidanceProbeDistance = 100.0
 
-[node name="Visual" type="Polygon2D" parent="."]
-color = Color(1, 0.25, 0.36, 1)
-polygon = PackedVector2Array(16, 0, 2, -8, 6, -15, -4, -9, -14, -13, -8, 0, -14, 13, -4, 9, 6, 15, 2, 8)
+[node name="Visual" type="Sprite2D" parent="."]
+texture = ExtResource("2")
+modulate = Color(1, 0.25, 0.36, 1)
+scale = Vector2(0.2, 0.2)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_stalker")

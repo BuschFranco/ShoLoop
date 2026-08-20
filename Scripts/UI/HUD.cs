@@ -212,6 +212,7 @@ public partial class HUD : Control
         UpdateUltimateUi();
         UpdateBossHealthBar();
         UpdateStatsLabel();
+        UpdateKillStreak();
 
         // The pre-round countdown gets its own big centered label rather than the small top-bar
         // one — at 72px in the middle of the screen it's actually noticeable, which the corner
@@ -253,8 +254,13 @@ public partial class HUD : Control
         {
             _lastPulsedSecond = -1;
         }
+    }
 
-        // Kill streak display
+    // Runs unconditionally every frame (called before the round-starting/boss-round early returns
+    // above) — it used to sit after them and would freeze mid-value for the whole "Preparate..."
+    // countdown, and for an entire boss round, since both paths return before ever reaching it.
+    private void UpdateKillStreak()
+    {
         if (_player != null && _player.KillStreak >= 3)
         {
             _streakLabel.Text = $"RACHA DE {_player.KillStreak} (×{_player.KillStreakMultiplier:0.0})";

@@ -109,11 +109,11 @@ public partial class Enemy : CharacterBody2D
         if (_healthBarFill == null)
             CreateHealthBar();
 
-        // Visual: add a colored border glow via a second Polygon2D child.
+        // Visual: add a colored border glow via a second Sprite2D child.
         if (_visual != null)
         {
-            var glow = new Polygon2D();
-            glow.Polygon = _visual.Polygon;
+            var glow = new Sprite2D();
+            glow.Texture = _visual.Texture;
             glow.Scale = Vector2.One * 1.15f;
             glow.Modulate = GetEliteColor(modifier);
             glow.ZIndex = -1;
@@ -253,12 +253,12 @@ public partial class Enemy : CharacterBody2D
 
     // Hit-reaction state. The flash restores this exact colour rather than assuming one, since
     // every enemy scene picks its own.
-    private Polygon2D _visual;
+    private Sprite2D _visual;
 
     // Read-only access for a subclass's own telegraph tweens (e.g. Boss's charge windup), which
     // must animate Modulate rather than Color — Color is owned by the hit-flash tween above and
     // the two would fight over it if a subclass also drove Color.
-    protected Polygon2D Visual => _visual;
+    protected Sprite2D Visual => _visual;
     private Color _visualBaseColor = Colors.White;
     private Tween _hitTween;
     private const float HitFlashDuration = 0.14f;
@@ -270,8 +270,8 @@ public partial class Enemy : CharacterBody2D
         CurrentHp = MaxHp;
         _player = GetTree().GetFirstNodeInGroup("player") as Node2D;
 
-        _visual = GetNodeOrNull<Polygon2D>("Visual");
-        if (_visual != null) _visualBaseColor = _visual.Color;
+        _visual = GetNodeOrNull<Sprite2D>("Visual");
+        if (_visual != null) _visualBaseColor = _visual.Modulate;
 
         _chaseAngleOffset = Mathf.DegToRad((float)(_rng.NextDouble() * 2.0 - 1.0) * MaxChaseAngleOffset);
 
@@ -625,14 +625,14 @@ public partial class Enemy : CharacterBody2D
         // the same two properties and can leave the enemy stuck mid-flash or mid-punch.
         if (_hitTween != null && _hitTween.IsValid()) _hitTween.Kill();
 
-        _visual.Color = Colors.White;
+        _visual.Modulate = Colors.White;
         _visual.Scale = Vector2.One * HitPunchScale;
 
         // Tweens the Visual child, not the enemy itself — the enemy's own Scale carries the
         // Splitter's per-generation shrink and must not be clobbered.
         _hitTween = CreateTween();
         _hitTween.SetParallel(true);
-        _hitTween.TweenProperty(_visual, "color", _visualBaseColor, HitFlashDuration);
+        _hitTween.TweenProperty(_visual, "modulate", _visualBaseColor, HitFlashDuration);
         _hitTween.TweenProperty(_visual, "scale", Vector2.One, HitFlashDuration)
             .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
     }

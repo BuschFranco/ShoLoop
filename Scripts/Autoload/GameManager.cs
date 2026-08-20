@@ -651,12 +651,28 @@ public partial class GameManager : Node
             button.Modulate = new Color(1f, 1f, 1f, UltimateButtonOpacity);
     }
 
+    // Which character was picked at the character-select screen (CharacterSelectMenu), read by
+    // Player._Ready() when a run starts. Persisted the same way as the opacity sliders above, so
+    // the last pick is remembered across sessions instead of resetting to Equilibrado every launch.
+    public CharacterId SelectedCharacter { get; private set; } = CharacterId.Equilibrado;
+
+    public void SetSelectedCharacter(CharacterId id)
+    {
+        SelectedCharacter = id;
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, "selected_character", (int)id);
+        config.Save(SettingsFilePath);
+    }
+
     private void LoadSettings()
     {
         var config = new ConfigFile();
         if (config.Load(SettingsFilePath) != Error.Ok) return;
         JoystickOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "joystick_opacity", 1f), 0f, 1f);
         UltimateButtonOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "ultimate_button_opacity", 1f), 0f, 1f);
+        SelectedCharacter = (CharacterId)(int)config.GetValue(SettingsSection, "selected_character", (int)CharacterId.Equilibrado);
     }
 
     private const string RecordsFilePath = "user://records.cfg";

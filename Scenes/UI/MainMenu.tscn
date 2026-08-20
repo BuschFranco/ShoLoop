@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://dxe0juxpbyi86" path="res://Scripts/UI/MainMenu.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/OptionsMenu.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/BuildsMenu.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/CharacterSelectMenu.tscn" id="4"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
 content_margin_left = 14.0
@@ -174,5 +175,9 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="BuildsMenu" parent="." unique_id=1831938220 instance=ExtResource("3")]
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CharacterSelectMenu" parent="." instance=ExtResource("4")]
 grow_horizontal = 2
 grow_vertical = 2
