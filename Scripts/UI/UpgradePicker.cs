@@ -4,8 +4,8 @@ public partial class UpgradePicker : Control
 {
     private static readonly PackedScene CardScene = GD.Load<PackedScene>("res://Scenes/UI/RewardCard.tscn");
 
-    private static readonly StyleBoxFlat RewardPanelStyle = CreatePanelStyle(Palette.RewardPanelBorder);
-    private static readonly StyleBoxFlat UltimatePanelStyle = CreatePanelStyle(Palette.UltimatePanelBorder);
+    private static readonly StyleBoxFlat RewardPanelStyle = UIUtil.CreatePanelStyle(Palette.RewardPanelBorder);
+    private static readonly StyleBoxFlat UltimatePanelStyle = UIUtil.CreatePanelStyle(Palette.UltimatePanelBorder);
 
     public const string LevelUpTitle = "¡SUBISTE DE NIVEL! Elige una mejora";
     public const string UltimateTitle = "¡JEFE DERROTADO! Elige tu Ultimate";
@@ -117,18 +117,5 @@ public partial class UpgradePicker : Control
         // level-up, and Open() QueueFrees the cards, including the very card whose Activated signal is
         // still on the stack. One deferred frame is imperceptible and sidesteps that entirely.
         Callable.From(() => GameManager.Instance.ApplyUpgradeAndResume(chosen)).CallDeferred();
-    }
-
-    private static StyleBoxFlat CreatePanelStyle(Color borderColor)
-    {
-        var style = new StyleBoxFlat();
-        style.BgColor = new Color(0.043f, 0.024f, 0.078f, 0.94f);
-        style.BorderColor = new Color(borderColor, 0.85f);
-        style.SetBorderWidthAll(3);
-        style.SetCornerRadiusAll(12);
-        style.SetContentMarginAll(16f);
-        style.ContentMarginTop = 14f;
-        style.ContentMarginBottom = 14f;
-        return style;
     }
 }

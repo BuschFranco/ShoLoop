@@ -21,9 +21,6 @@ public partial class MainMenu : Control
         PopulateRecords();
     }
 
-    // The dated top-ten written by GameManager.RegisterFinalScore at the end of every run. Rendered as
-    // one Label with newlines rather than a node per row: it's a fixed, short, read-only list, so a
-    // container full of children would be more machinery than the content justifies.
     private void PopulateRecords()
     {
         var list = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/RecordsPanel/RecordsBox/RecordsList");
@@ -35,7 +32,6 @@ public partial class MainMenu : Control
             return;
         }
 
-        // Colors: position in gold, score in cyan, date in dim gold
         var lines = new string[records.Count];
         for (int i = 0; i < records.Count; i++)
         {

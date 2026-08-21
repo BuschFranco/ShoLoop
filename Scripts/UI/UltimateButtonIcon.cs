@@ -14,6 +14,9 @@ public partial class UltimateButtonIcon : Control
     // Shown as a countdown number inside the circle while cooling; 0 hides it.
     public float CooldownSeconds = 0f;
 
+    private float _lastFraction = -1f;
+    private float _lastSeconds = -1f;
+
     private static readonly Color Gold = Palette.BossHealthBarFill;
     private static readonly Color BaseBg = new(0.102f, 0.0588f, 0.1686f, 0.85f);
     private static readonly Color CooldownShade = new(0f, 0f, 0f, 0.72f);
@@ -24,10 +27,17 @@ public partial class UltimateButtonIcon : Control
         MouseFilter = MouseFilterEnum.Ignore;
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        if (!Mathf.IsEqualApprox(CooldownFraction, _lastFraction)
+            || !Mathf.IsEqualApprox(CooldownSeconds, _lastSeconds))
+            QueueRedraw();
+    }
 
     public override void _Draw()
     {
+        _lastFraction = CooldownFraction;
+        _lastSeconds = CooldownSeconds;
         Vector2 center = Size / 2f;
         float radius = Mathf.Min(Size.X, Size.Y) / 2f - 2f;
         if (radius <= 0f) return;

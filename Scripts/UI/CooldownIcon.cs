@@ -12,15 +12,22 @@ public partial class CooldownIcon : Control
     // 1 = just used (fully covered), 0 = ready (fully clear).
     public float CooldownFraction = 0f;
 
+    private float _lastFraction = -1f;
+
     public override void _Ready()
     {
         CustomMinimumSize = new Vector2(36, 36);
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    public override void _Process(double delta)
+    {
+        if (!Mathf.IsEqualApprox(CooldownFraction, _lastFraction))
+            QueueRedraw();
+    }
 
     public override void _Draw()
     {
+        _lastFraction = CooldownFraction;
         Vector2 center = Size / 2f;
         float radius = Mathf.Min(Size.X, Size.Y) / 2f - 2f;
         if (radius <= 0f) return;

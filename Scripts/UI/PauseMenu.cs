@@ -7,6 +7,8 @@ public partial class PauseMenu : Control
     private Button _menuButton;
     private PanelContainer _pausePanel;
     private LoadoutMenu _loadoutMenu;
+    private HSlider _cameraDistanceSlider;
+    private Label _cameraDistanceLabel;
 
     public override void _Ready()
     {
@@ -17,13 +19,14 @@ public partial class PauseMenu : Control
         _statsLabel = GetNode<Label>("CenterContainer/HBox/Panel/VBoxContainer/StatsLabel");
         _resumeButton = GetNode<Button>("CenterContainer/HBox/Panel/VBoxContainer/ResumeButton");
         _menuButton = GetNode<Button>("CenterContainer/HBox/Panel/VBoxContainer/MenuButton");
+        _cameraDistanceSlider = GetNode<HSlider>("CenterContainer/HBox/Panel/VBoxContainer/CameraDistanceSlider");
+        _cameraDistanceLabel = GetNode<Label>("CenterContainer/HBox/Panel/VBoxContainer/CameraDistanceLabel");
         _pausePanel = GetNode<PanelContainer>("CenterContainer/HBox/Panel");
         _loadoutMenu = GetNode<LoadoutMenu>("CenterContainer/HBox/LoadoutMenu");
         _resumeButton.Pressed += OnResumePressed;
         _menuButton.Pressed += OnMenuPressed;
+        _cameraDistanceSlider.ValueChanged += OnCameraDistanceChanged;
 
-        // Portrait (648px wide) can't fit both panels at landscape widths — shrink both so the
-        // HBox still fits side by side with a comfortable margin.
         bool portrait = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
         if (portrait)
         {
@@ -62,14 +65,15 @@ public partial class PauseMenu : Control
             lines.Add($"Cuchillas orbitales: {player.OrbitCount}");
             lines.Add($"Compañero: {(player.CompanionStatPercent > 0 ? $"{player.CompanionStatPercent * 100:0}% de tus estadísticas" : "No")}");
 
-            // Adaptive-difficulty readout — see DifficultyBalancer. Surfaced so the auto-scaling
-            // is visible while playtesting instead of silently changing enemy stats.
             var spawner = GetTree().GetFirstNodeInGroup("enemy_spawner") as EnemySpawner;
             if (spawner != null)
                 lines.Add($"Poder: {player.GetOffensivePower():0.0}x   Ajuste enemigo: {spawner.CatchUpMultiplier:0.00}x");
         }
 
         _statsLabel.Text = string.Join("\n", lines);
+        _cameraDistanceSlider.Value = gm.CameraDistance;
+        float camPct = 2000f / gm.CameraDistance * 100f;
+        _cameraDistanceLabel.Text = $"Distancia Cámara: {camPct:0}%";
         _loadoutMenu.Refresh(player);
         Visible = true;
     }
@@ -82,9 +86,15 @@ public partial class PauseMenu : Control
 
     private void OnMenuPressed()
     {
-        // Abandon the run entirely: same path as the Game Over screen, so no run state carries
-        // back into the main menu (and the next run starts from a clean ResetRun).
         GameManager.Instance.ResetRun();
         GetTree().ChangeSceneToFile("res://Scenes/UI/MainMenu.tscn");
+    }
+
+    private void OnCameraDistanceChanged(double value)
+    {
+        GameManager.Instance.CameraDistance = (float)value;
+        GameManager.Instance.UpdateCameraExtents();
+        float pct = 2000f / (float)value * 100f;
+        _cameraDistanceLabel.Text = $"Distancia Cámara: {pct:0}%";
     }
 }

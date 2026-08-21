@@ -19,6 +19,8 @@ public partial class GameManager : Node
     public enum ScreenOrientation { Landscape, Portrait }
     public ScreenOrientation CurrentOrientation { get; private set; } = ScreenOrientation.Portrait;
 
+    public float CameraDistance = 2000f;
+
     // The project's reference/base size (matches project.godot's implicit 1152x648 default, made
     // explicit there) and its portrait counterpart. window/stretch/mode="canvas_items" + "expand"
     // scales UI, and reveals extra world through the camera, relative to whichever of these is
@@ -460,6 +462,16 @@ public partial class GameManager : Node
         var menu = GetTree().GetFirstNodeInGroup("pause_menu") as PauseMenu;
         menu?.Open();
         Pause();
+    }
+
+    public void UpdateCameraExtents()
+    {
+        if (GetTree().GetFirstNodeInGroup("camera_rig") is CameraRig camera)
+        {
+            float defaultDistance = 2000f;
+            float zoomValue = defaultDistance / CameraDistance;
+            camera.Zoom = new Vector2(zoomValue, zoomValue);
+        }
     }
 
     public float GetShopSurchargeMultiplier(UpgradeType type)

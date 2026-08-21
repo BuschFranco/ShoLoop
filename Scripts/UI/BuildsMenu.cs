@@ -6,12 +6,6 @@ public partial class BuildsMenu : Control
 {
     // Names, benefits and requirement thresholds live in BuildCatalog / Player.GetBuildRequirements,
     // shared with the in-run Loadout panel — this menu is just rendering that same data.
-    private static readonly Player.BuildClass[] ClassOrder =
-    {
-        Player.BuildClass.Gunner, Player.BuildClass.Tank, Player.BuildClass.Assassin,
-        Player.BuildClass.Explorer, Player.BuildClass.Pyromaniac, Player.BuildClass.Armored,
-        Player.BuildClass.Hunter,
-    };
 
     public void Open() => Visible = true;
 
@@ -24,10 +18,10 @@ public partial class BuildsMenu : Control
     private void Populate()
     {
         var list = GetNode<RichTextLabel>("CenterContainer/Panel/Box/BuildsList");
-        var lines = new string[ClassOrder.Length];
-        for (int i = 0; i < ClassOrder.Length; i++)
+        var lines = new string[BuildCatalog.ClassOrder.Length];
+        for (int i = 0; i < BuildCatalog.ClassOrder.Length; i++)
         {
-            var cls = ClassOrder[i];
+            var cls = BuildCatalog.ClassOrder[i];
             string reqText = string.Join(" y ", Player.GetBuildRequirements(cls)
                 .Select(BuildCatalog.RequirementText));
             lines[i] = $"[color=#7dfdfe]{BuildCatalog.Name(cls)}[/color]  " +

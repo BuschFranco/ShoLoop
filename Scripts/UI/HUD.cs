@@ -414,7 +414,7 @@ public partial class HUD : Control
         _statsLabel.Text = stats;
 
         int activeCount = 0;
-        foreach (var cls in BuildDisplayOrder)
+        foreach (var cls in BuildCatalog.ClassOrder)
             if (_player.IsClassActive(cls)) activeCount++;
 
         _buildPanel.Visible = activeCount > 0;
@@ -431,7 +431,7 @@ public partial class HUD : Control
         if (activeCount == _shownBuildCount) return;
 
         var names = new List<string>(activeCount);
-        foreach (var cls in BuildDisplayOrder)
+        foreach (var cls in BuildCatalog.ClassOrder)
             if (_player.IsClassActive(cls)) names.Add(BuildCatalog.Name(cls));
 
         _buildLabel.Text = $"BUILD  {string.Join(" · ", names)}";
@@ -445,16 +445,6 @@ public partial class HUD : Control
     // Fixed listing order, so the chip never re-shuffles as builds unlock: the set grows but each
     // name keeps its place from run to run. The names themselves come from BuildCatalog, the same
     // source the builds menu and the loadout panel read, so the three can't drift apart.
-    private static readonly Player.BuildClass[] BuildDisplayOrder =
-    {
-        Player.BuildClass.Gunner,
-        Player.BuildClass.Tank,
-        Player.BuildClass.Assassin,
-        Player.BuildClass.Explorer,
-        Player.BuildClass.Pyromaniac,
-        Player.BuildClass.Armored,
-        Player.BuildClass.Hunter,
-    };
 
     // A short white strobe on the whole chip, so a build unlocking mid-fight registers even with the
     // player's eyes on the arena rather than the top bar. Modulate only: the chip lives in a

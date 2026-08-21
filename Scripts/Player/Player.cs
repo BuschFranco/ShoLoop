@@ -1328,14 +1328,6 @@ public partial class Player : CharacterBody2D
         return isCrit ? Mathf.RoundToInt(baseDamage * CritMultiplier * classBonus) : Mathf.RoundToInt(baseDamage * classBonus);
     }
 
-    // Class passive: Gunner gets +15% bullet damage.
-    private int ApplyClassDamage(int baseDamage)
-    {
-        if (IsClassActive(BuildClass.Gunner))
-            return Mathf.RoundToInt(baseDamage * 1.15f);
-        return baseDamage;
-    }
-
     // Class passive: Explorer gets +30% move speed and +10% fire range.
     public float GetClassSpeedMultiplier()
     {
@@ -1392,9 +1384,6 @@ public partial class Player : CharacterBody2D
         bullet.Ricochet = isSideShot
             ? (RicochetCount >= LegendaryRicochetCount ? RicochetCount : 0)
             : RicochetCount + GetClassRicochetBonus();
-
-        // Class bonus: Gunner gets +10% bullet damage.
-        bullet.Damage = ApplyClassDamage(bullet.Damage);
 
         bullet.BurnDps = CurrentBurnDps;
         bullet.BurnDuration = CurrentBurnDuration;

@@ -6,20 +6,27 @@ namespace ShooterLoop;
 // CheckBuildClass evaluates); BuildCatalog is only presentation on top of that.
 public static class BuildCatalog
 {
-    // Indexed by BuildClass (None=0, so entries start at 1).
-    private static readonly (string Name, string Bonus)[] Entries =
+    // Single source of truth for display order — referenced by HUD, LoadoutMenu, and BuildsMenu.
+    public static readonly Player.BuildClass[] ClassOrder =
     {
-        ("ARTILLERO", "+15% de daño en balas"),
-        ("TANQUE", "25% de no perder vida y -40% retroceso"),
-        ("ASESINO", "+25% de daño en críticos"),
-        ("EXPLORADOR", "+30% velocidad y +10% alcance"),
-        ("PIRÓMANO", "+75% quema y +1s de duración"),
-        ("ACORAZADO", "Refleja 60 y escudo se regenera cada 12s"),
-        ("CAZADOR", "+1 rebote y dron +10% más fuerte"),
+        Player.BuildClass.Gunner, Player.BuildClass.Tank, Player.BuildClass.Assassin,
+        Player.BuildClass.Explorer, Player.BuildClass.Pyromaniac, Player.BuildClass.Armored,
+        Player.BuildClass.Hunter,
     };
 
-    public static string Name(Player.BuildClass cls) => Entries[(int)cls - 1].Name;
-    public static string Bonus(Player.BuildClass cls) => Entries[(int)cls - 1].Bonus;
+    private static readonly Dictionary<Player.BuildClass, (string Name, string Bonus)> Entries = new()
+    {
+        [Player.BuildClass.Gunner] = ("ARTILLERO", "+15% de daño en balas"),
+        [Player.BuildClass.Tank] = ("TANQUE", "25% de no perder vida y -40% retroceso"),
+        [Player.BuildClass.Assassin] = ("ASESINO", "+25% de daño en críticos"),
+        [Player.BuildClass.Explorer] = ("EXPLORADOR", "+30% velocidad y +10% alcance"),
+        [Player.BuildClass.Pyromaniac] = ("PIRÓMANO", "+75% quema y +1s de duración"),
+        [Player.BuildClass.Armored] = ("ACORAZADO", "Refleja 60 y escudo se regenera cada 12s"),
+        [Player.BuildClass.Hunter] = ("CAZADOR", "+1 rebote y dron +10% más fuerte"),
+    };
+
+    public static string Name(Player.BuildClass cls) => Entries[cls].Name;
+    public static string Bonus(Player.BuildClass cls) => Entries[cls].Bonus;
 
     public static bool AllMet(Player.BuildClass cls, Player p)
     {

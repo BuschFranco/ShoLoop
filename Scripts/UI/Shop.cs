@@ -7,7 +7,7 @@ public partial class Shop : Control
     // Built in code rather than left in the .tscn so it reads from Palette.ShopPanelBorder instead of a
     // hand-synced duplicate of the same hex — the scene used to carry its own copy, which meant the
     // Palette constant was dead code that could silently drift from what shipped.
-    private static readonly StyleBoxFlat PanelStyle = CreatePanelStyle(Palette.ShopPanelBorder);
+    private static readonly StyleBoxFlat PanelStyle = UIUtil.CreatePanelStyle(Palette.ShopPanelBorder);
 
     private Label _coinsLabel;
     private VBoxContainer _cardsContainer;
@@ -224,18 +224,5 @@ public partial class Shop : Control
         if (!Visible) return;
         Visible = false;
         GameManager.Instance.StartNextRound();
-    }
-
-    private static StyleBoxFlat CreatePanelStyle(Color borderColor)
-    {
-        var style = new StyleBoxFlat();
-        style.BgColor = new Color(0.043f, 0.024f, 0.078f, 0.94f);
-        style.BorderColor = new Color(borderColor, 0.85f);
-        style.SetBorderWidthAll(3);
-        style.SetCornerRadiusAll(12);
-        style.SetContentMarginAll(16f);
-        style.ContentMarginTop = 14f;
-        style.ContentMarginBottom = 14f;
-        return style;
     }
 }

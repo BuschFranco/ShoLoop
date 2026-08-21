@@ -52,4 +52,16 @@ text = "Reanudar"
 layout_mode = 2
 text = "Menu Principal"
 
+[node name="CameraDistanceLabel" type="Label" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Distancia Cámara: 2000"
+
+[node name="CameraDistanceSlider" type="HSlider" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+layout_mode = 2
+min_value = 800
+max_value = 2400
+value = 2000
+
 [node name="LoadoutMenu" parent="CenterContainer/HBox" instance=ExtResource("2")]
+h_separation = 24
+v_separation = 4

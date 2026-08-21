@@ -10,13 +10,6 @@ public partial class LoadoutMenu : PanelContainer
     private RichTextLabel _itemsLabel;
     private RichTextLabel _buildsLabel;
 
-    private static readonly Player.BuildClass[] ClassOrder =
-    {
-        Player.BuildClass.Gunner, Player.BuildClass.Tank, Player.BuildClass.Assassin,
-        Player.BuildClass.Explorer, Player.BuildClass.Pyromaniac, Player.BuildClass.Armored,
-        Player.BuildClass.Hunter,
-    };
-
     public override void _Ready()
     {
         _itemsLabel = GetNode<RichTextLabel>("ScrollContainer/Box/ItemsLabel");
@@ -93,7 +86,7 @@ public partial class LoadoutMenu : PanelContainer
     {
         var lines = new List<string>();
 
-        foreach (var cls in ClassOrder)
+        foreach (var cls in BuildCatalog.ClassOrder)
         {
             var reqs = Player.GetBuildRequirements(cls);
             bool allMet = BuildCatalog.AllMet(cls, p);
