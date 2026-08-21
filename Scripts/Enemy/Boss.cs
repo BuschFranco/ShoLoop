@@ -162,9 +162,13 @@ public partial class Boss : ShooterEnemy
         EnterPhase(Phase.Execute, LungeExecuteDuration);
     }
 
-    // Fair warning before the dash: a warm tint ramping in (Modulate, not Color — Color is owned
-    // by Enemy's own hit-flash tween, and the two would otherwise fight over the same property)
-    // plus a slow scale pulse, so a player watching the boss actually sees the tell.
+    // Fair warning before the dash: a warm tint ramping in plus a slow scale pulse, so a player
+    // watching the boss actually sees the tell.
+    //
+    // Both properties are borrowed, not owned: Modulate holds the boss's identity colour and Scale
+    // holds its on-screen size, so ResetTelegraph has to hand them back (see VisualBaseColor /
+    // VisualBaseScale on Enemy). Pulsing to a literal Vector2.One instead of off the base scale is
+    // what used to inflate the boss to its texture's full resolution mid-windup.
     private void PlayTelegraph(float duration)
     {
         if (Visual == null) return;
@@ -173,7 +177,7 @@ public partial class Boss : ShooterEnemy
         _telegraphTween = CreateTween();
         _telegraphTween.SetParallel(true);
         _telegraphTween.TweenProperty(Visual, "modulate", TelegraphTint, duration * 0.6f);
-        _telegraphTween.TweenProperty(Visual, "scale", Vector2.One * 1.25f, duration * 0.5f)
+        _telegraphTween.TweenProperty(Visual, "scale", VisualBaseScale * 1.25f, duration * 0.5f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
     }
 
@@ -204,10 +208,16 @@ public partial class Boss : ShooterEnemy
         tween.Chain().TweenCallback(Callable.From(() => label.QueueFree()));
     }
 
+    // Restores both properties the telegraph borrowed. Modulate must go back to VisualBaseColor,
+    // not to Colors.White: the scene's Modulate is the boss's identity colour, so resetting to
+    // white left it a plain white shape for the rest of the fight after its very first dash.
     private void ResetTelegraph()
     {
         _telegraphTween?.Kill();
-        if (Visual != null) Visual.Modulate = Colors.White;
+        if (Visual == null) return;
+
+        Visual.Modulate = VisualBaseColor;
+        Visual.Scale = VisualBaseScale;
     }
 
     public override void _PhysicsProcess(double delta)

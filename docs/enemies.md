@@ -111,7 +111,7 @@ Damage-over-time applied by the player's bullets (see [player.md](player.md#burn
 - **Refreshes rather than stacks** — a second hit takes `Max` of both the DPS and the remaining duration. Stacking separate instances would make sustained fire scale burn quadratically with fire rate, dwarfing every other damage source almost immediately.
 - Ticks every `BurnTickInterval` (0.25s), dealing `dps × accumulated` so the total is correct regardless of framerate.
 - Damage goes through `TakeDamage(damage, showFlash: false)` — only the flash+scale-punch is suppressed, not the floating damage number. At 4 ticks/second the flash would strobe rather than read as a hit landing, but the number is exactly what tells you Incendiario is doing anything, so it stays on. (`TakeDamage`'s two flags, `showFlash` and `showNumber`, used to be a single `showFeedback` bool; burn passing that as `false` silently meant burn ticks showed no number at all, which read as burn not working.) Everything else calls the 3-arg form's defaults and keeps both.
-- Tinted via **`Modulate`, not the `Visual`'s `Color`** — the [hit reaction](#hit-reaction) below owns `Color` and the two would fight over it. `Modulate` multiplies on top, so a burning enemy still flashes white when shot.
+- Tinted on the **enemy root's `Modulate`, not the `Visual`'s** — the [hit reaction](#hit-reaction) below owns the `Visual`'s `Modulate` (and the `Visual`'s value is the enemy's identity colour besides), so the two would fight over one property. Tinting the parent multiplies on top of the child, so a burning enemy still flashes white when shot.
 - `TickBurn` is called **before** movement in `_PhysicsProcess`, with an early `return` if it killed the enemy, since `TakeDamage` can `QueueFree` from inside it.
 
 ## Hit reaction
@@ -122,7 +122,7 @@ Damage-over-time applied by the player's bullets (see [player.md](player.md#burn
 - It tweens the **`Visual` child**, not the enemy node. The enemy's own `Scale` carries the Splitter's per-generation shrink (`SplitVisualScale`) and must not be clobbered.
 - Any in-flight tween is `Kill()`ed before starting a new one. Rapid hits (a laser volley, a blade sweep) would otherwise stack tweens fighting over the same two properties and could leave an enemy stuck mid-flash or mid-punch.
 
-The flash restores each enemy's own base colour, captured from the `Visual` node in `_Ready()` rather than assumed, since every enemy scene picks its own.
+The flash restores each enemy's own base colour **and its base scale**, both captured from the `Visual` node in `_Ready()` rather than assumed, since every enemy scene picks its own colour and the `Visual`'s `scale` is what carries its on-screen size (see [visuals.md](visuals.md)). Assuming `Colors.White` and `Vector2.One` here is precisely what broke rendering in `e0ee940`; the snapshots are exposed to subclasses as `VisualBaseColor`/`VisualBaseScale` so the boss and stalker dash telegraphs restore the same values.
 
 ## Keeping the pack dispersed
 

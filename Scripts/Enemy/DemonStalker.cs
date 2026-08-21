@@ -68,8 +68,10 @@ public partial class DemonStalker : Enemy
         PlayTelegraph();
     }
 
-    // Brief tint so the burst is readable rather than feeling like a teleport. Animates Modulate, not
-    // Color — Color belongs to Enemy's hit-flash tween and the two would fight over it.
+    // Brief tint so the burst is readable rather than feeling like a teleport. Modulate is borrowed,
+    // not owned — it carries this enemy's identity colour — so the tween has to settle back on
+    // VisualBaseColor. Returning to Colors.White instead left the stalker a plain white shape from
+    // its first lunge onwards.
     private void PlayTelegraph()
     {
         if (Visual == null) return;
@@ -77,6 +79,6 @@ public partial class DemonStalker : Enemy
         _telegraphTween?.Kill();
         _telegraphTween = CreateTween();
         _telegraphTween.TweenProperty(Visual, "modulate", Palette.Warning, 0.08f);
-        _telegraphTween.TweenProperty(Visual, "modulate", Colors.White, LungeDuration);
+        _telegraphTween.TweenProperty(Visual, "modulate", VisualBaseColor, LungeDuration);
     }
 }

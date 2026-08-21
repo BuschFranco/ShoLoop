@@ -1,19 +1,46 @@
 # Visuals: Palette, Glow & Animation
 
-The game has no art assets — every visual is a `Polygon2D`, `Line2D`, or `Label` built either in a
-`.tscn` or procedurally in code. The look comes entirely from colour, glow, and tweens.
+Almost nothing here is an art asset. Pickups, mines, novas, blasts, projectiles, obstacles, health
+bars, the arena edge, the joystick and every HUD element are a `Polygon2D`, `Line2D`, `ColorRect` or
+`Label` built either in a `.tscn` or procedurally in code. The look comes from colour, glow, and
+tweens.
+
+The one exception is the **entity bodies** — the player and the 11 enemies — which are `Sprite2D`
+nodes fed by the flat white SVG silhouettes in `Assets/Sprites/`. They were `Polygon2D` until commit
+`e0ee940`; the shapes are the same, only the mechanism changed. Three rules keep that mechanism
+honest, and breaking any one of them is what made `e0ee940` a visual regression:
+
+1. **The SVG is pure white.** The scene's `modulate` supplies the entity's colour by multiplying over
+   it, exactly as `Polygon2D.color` used to. A pre-tinted sprite would come out doubly tinted.
+2. **Size lives in the scene's `scale`, not in the SVG.** Each SVG is authored at 4× its world size
+   and every entity scene sets `scale = Vector2(0.25, 0.25)` — one number across all twelve, so a
+   wrong size is obvious on sight. (The 4× supersample is what keeps edges crisp through the 1.25–1.3×
+   punch and telegraph pulses.)
+3. **No animation may assume `Vector2.One` or `Colors.White` is the resting state.** Because `scale`
+   and `modulate` are now load-bearing, every tween has to return to `Enemy.VisualBaseScale` /
+   `Enemy.VisualBaseColor` (snapshotted in `_Ready` before the spawn animation runs) or to
+   `Player._visualBaseScale`. Ignoring this is what inflated every entity to its texture's full
+   resolution and left the boss permanently white after its first dash.
+
+Replacing a placeholder with real art is therefore overwriting one `.svg` — as long as it stays white
+and the scene keeps `scale` as its size knob.
 
 ## Where colour lives (two places, on purpose)
 
 | Source | Covers | File |
 |---|---|---|
 | `Palette.cs` | everything drawn procedurally — rings, beams, blasts, floating labels, obstacles, arena edge, health bars | [Scripts/Util/Palette.cs](../Scripts/Util/Palette.cs) |
-| `.tscn` `color =` | visuals authored as scene nodes — ship, enemy bodies, projectile bodies, UI dims | the individual scene files |
+| `.tscn` `color =` / `modulate =` | visuals authored as scene nodes — projectile bodies, UI dims, and the ship/enemy bodies (`modulate`, since those are white sprites) | the individual scene files |
 
-They're **not** unified, and that's deliberate: `Enemy` reads its own `Visual.Color` back in `_Ready`
-as `_visualBaseColor`, the restore target for the [hit flash](enemies.md#hit-reaction). Moving enemy
-colours into `Palette` would give the same value two owners and let them silently drift apart. The
-two sides are kept in step by hand.
+They're **not** unified, and that's deliberate: `Enemy` reads its own `Visual.Modulate` back in
+`_Ready` as `_visualBaseColor`, the restore target for the [hit flash](enemies.md#hit-reaction) and
+for the boss/stalker dash telegraphs. Moving enemy colours into `Palette` would give the same value
+two owners and let them silently drift apart. The two sides are kept in step by hand.
+
+The player is the one entity whose colour is *not* authored in its scene: `Player._Ready` overwrites
+`Visual.Modulate` with the selected character's `CharacterInfo.Color` (see
+[CharacterCatalog.cs](../Scripts/Player/CharacterCatalog.cs)), so the value in `Player.tscn` is only
+the editor-time preview.
 
 ### The palette
 

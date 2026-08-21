@@ -109,17 +109,29 @@ public partial class Enemy : CharacterBody2D
         if (_healthBarFill == null)
             CreateHealthBar();
 
-        // Visual: add a colored border glow via a second Sprite2D child.
-        if (_visual != null)
-        {
-            var glow = new Sprite2D();
-            glow.Texture = _visual.Texture;
-            glow.Scale = Vector2.One * 1.15f;
-            glow.Modulate = GetEliteColor(modifier);
-            glow.ZIndex = -1;
-            AddChild(glow);
-        }
+        // The glow is deliberately NOT built here. EnemySpawner calls this before adding the enemy
+        // to the tree, so _Ready hasn't run and "Visual" cannot be resolved yet — the glow used to
+        // sit behind an `if (_visual != null)` guard right here, which meant it never passed and
+        // elites silently rendered with no glow at all. _Ready builds it instead, off IsElite.
     }
+
+    // A tinted copy of the enemy's own silhouette sitting just behind it, so an elite reads as the
+    // same creature with an aura rather than as a different enemy. Scaled off VisualBaseScale, not
+    // Vector2.One: the sprite's on-screen size lives in the Visual's scale, so a hardcoded 1.15
+    // would blow the halo up to the texture's full resolution and detach it from the enemy.
+    private void CreateEliteGlow()
+    {
+        if (_visual == null) return;
+
+        var glow = new Sprite2D();
+        glow.Texture = _visual.Texture;
+        glow.Scale = _visualBaseScale * EliteGlowScale;
+        glow.Modulate = GetEliteColor(EliteModifier);
+        glow.ZIndex = -1;
+        AddChild(glow);
+    }
+
+    private const float EliteGlowScale = 1.15f;
 
     private static Color GetEliteColor(EliteModifier modifier) => modifier switch
     {
@@ -255,11 +267,23 @@ public partial class Enemy : CharacterBody2D
     // every enemy scene picks its own.
     private Sprite2D _visual;
 
-    // Read-only access for a subclass's own telegraph tweens (e.g. Boss's charge windup), which
-    // must animate Modulate rather than Color — Color is owned by the hit-flash tween above and
-    // the two would fight over it if a subclass also drove Color.
+    // Read-only access for a subclass's own telegraph tweens (e.g. Boss's charge windup), plus the
+    // two resting values every such tween has to return to.
+    //
+    // Both snapshots exist because the Visual node's own Modulate and Scale are load-bearing now:
+    // the scene stores the enemy's identity colour in Modulate and its on-screen size in Scale.
+    // Anything that treats Colors.White or Vector2.One as "the resting state" silently destroys one
+    // of the two — which is exactly how the boss ended up permanently white after its first dash,
+    // and how every enemy ended up rendering at its texture's full 128px.
     protected Sprite2D Visual => _visual;
+    protected Color VisualBaseColor => _visualBaseColor;
+    protected Vector2 VisualBaseScale => _visualBaseScale;
     private Color _visualBaseColor = Colors.White;
+
+    // Size comes from the scene's Scale (0.25 for every entity, against a 4x-supersampled SVG),
+    // not from vertex coordinates the way it did when Visual was a Polygon2D. Snapshotted in
+    // _Ready *before* PlaySpawnAnimation runs, since that animation is what would overwrite it.
+    private Vector2 _visualBaseScale = Vector2.One;
     private Tween _hitTween;
     private const float HitFlashDuration = 0.14f;
     private const float HitPunchScale = 1.3f;
@@ -271,15 +295,25 @@ public partial class Enemy : CharacterBody2D
         _player = GetTree().GetFirstNodeInGroup("player") as Node2D;
 
         _visual = GetNodeOrNull<Sprite2D>("Visual");
-        if (_visual != null) _visualBaseColor = _visual.Modulate;
+        if (_visual != null)
+        {
+            _visualBaseColor = _visual.Modulate;
+            _visualBaseScale = _visual.Scale;
+        }
 
         _chaseAngleOffset = Mathf.DegToRad((float)(_rng.NextDouble() * 2.0 - 1.0) * MaxChaseAngleOffset);
 
         // Boss gets its own fixed bar on the HUD instead (see HUD.cs) — carrying this floating
         // sliver too would undercut the point of that bar being visually distinct. Demons are tanky
         // enough to need the same read Specials get.
-        if (Category == EnemyCategory.Special || Category == EnemyCategory.Demon)
+        // The null check matters for elites: MakeElite already built a bar before this node entered
+        // the tree, and this call had no guard, so an elite Special/Demon got a second overlapping
+        // pair of bars whose orphaned fill never tracked damage again.
+        if (_healthBarFill == null
+            && (Category == EnemyCategory.Special || Category == EnemyCategory.Demon))
             CreateHealthBar();
+
+        if (IsElite) CreateEliteGlow();
 
         PlaySpawnAnimation();
     }
@@ -296,7 +330,7 @@ public partial class Enemy : CharacterBody2D
 
         var tween = CreateTween();
         tween.SetParallel(true);
-        tween.TweenProperty(_visual, "scale", Vector2.One, 0.28f)
+        tween.TweenProperty(_visual, "scale", _visualBaseScale, 0.28f)
             .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
         tween.TweenProperty(_visual, "rotation", 0f, 0.28f)
             .SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
@@ -626,14 +660,14 @@ public partial class Enemy : CharacterBody2D
         if (_hitTween != null && _hitTween.IsValid()) _hitTween.Kill();
 
         _visual.Modulate = Colors.White;
-        _visual.Scale = Vector2.One * HitPunchScale;
+        _visual.Scale = _visualBaseScale * HitPunchScale;
 
         // Tweens the Visual child, not the enemy itself — the enemy's own Scale carries the
         // Splitter's per-generation shrink and must not be clobbered.
         _hitTween = CreateTween();
         _hitTween.SetParallel(true);
         _hitTween.TweenProperty(_visual, "modulate", _visualBaseColor, HitFlashDuration);
-        _hitTween.TweenProperty(_visual, "scale", Vector2.One, HitFlashDuration)
+        _hitTween.TweenProperty(_visual, "scale", _visualBaseScale, HitFlashDuration)
             .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
     }
 

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://Scripts/Enemy/ShooterEnemy.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyBullet.tscn" id="2"]
-[ext_resource type="Texture2D" path="res://Assets/Sprites/Enemies/shooter.png" id="3"]
+[ext_resource type="Texture2D" path="res://Assets/Sprites/Enemies/shooter.svg" id="3"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_shooter"]
 radius = 16.0
