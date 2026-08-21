@@ -297,6 +297,12 @@ public partial class Enemy : CharacterBody2D
         _visual = GetNodeOrNull<Sprite2D>("Visual");
         if (_visual != null)
         {
+            // Juli's perk repaints the whole roster. Applied *before* the snapshot so green becomes
+            // this enemy's identity colour outright — otherwise the hit flash and the dash telegraphs
+            // would keep restoring the scene's original colour and undo it on the first hit.
+            if (_player is Player tinter && tinter.EnemyTint.HasValue)
+                _visual.Modulate = tinter.EnemyTint.Value;
+
             _visualBaseColor = _visual.Modulate;
             _visualBaseScale = _visual.Scale;
         }
@@ -368,6 +374,34 @@ public partial class Enemy : CharacterBody2D
         _healthBarFill.Polygon = RectPoints(HealthBarWidth * pct, HealthBarHeight);
     }
 
+    // Shared "text drifts up and fades" routine for the callouts that announce a state change: the
+    // boss's pattern telegraphs and the hack tell. SpawnDamageNumber and SpawnScorePopup below stay
+    // separate on purpose — their drift and fade timings differ from this one (damage numbers are
+    // deliberately fast because burn fires them four times a second and slow ones would pile up), so
+    // folding them in here would mean four more parameters and no gain.
+    protected void SpawnFloatingLabel(string text, Color color, int fontSize, Vector2 offset, int zIndex = 15)
+    {
+        var parent = GetParent();
+        if (parent == null) return;
+
+        var label = new Label();
+        label.Text = text;
+        label.AddThemeColorOverride("font_color", color);
+        label.AddThemeColorOverride("font_outline_color", Colors.Black);
+        label.AddThemeConstantOverride("outline_size", 3);
+        label.AddThemeFontSizeOverride("font_size", fontSize);
+        label.ZIndex = zIndex;
+        parent.AddChild(label);
+        label.GlobalPosition = GlobalPosition + offset;
+
+        var tween = label.CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(label, "position", label.Position + new Vector2(0f, -24f), 0.9f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(label, "modulate:a", 0f, 0.6f).SetDelay(0.4f);
+        tween.Chain().TweenCallback(Callable.From(() => label.QueueFree()));
+    }
+
     private void SpawnDamageNumber(int amount)
     {
         var parent = GetParent();
@@ -409,9 +443,16 @@ public partial class Enemy : CharacterBody2D
             }
         }
 
-        TickStragglerReposition((float)delta);
+        TickPeriodicChecks((float)delta);
+        if (CurrentHp <= 0) return;
 
-        FinishMovement(ComputeMoveDirection(delta), delta);
+        // ComputeMoveDirection is called even while hacked, and its result thrown away. DemonStalker
+        // decrements its lunge/cooldown timers *inside* that method, so skipping the call freezes them
+        // — it would then finish the remainder of a lunge in a now-stale direction when the hack ends,
+        // which reads as a teleport-slide. The cost of calling it is one telegraphed lunge that never
+        // happens; at one second, that's the cheaper of the two.
+        Vector2 moveDir = ComputeMoveDirection(delta);
+        FinishMovement(IsHacked ? Vector2.Zero : moveDir, delta);
     }
 
     // Steer around obstacles rather than into them. MoveAndSlide alone isn't enough: it only slides when
@@ -435,20 +476,81 @@ public partial class Enemy : CharacterBody2D
     // so the relocation is never witnessed. Checked on an accumulator rather than every frame because a
     // group lookup plus a distance test per enemy per frame is real cost in a 60-enemy crowd.
     private const float StragglerDistance = 1100f;
-    private const float StragglerCheckInterval = 0.5f;
-    private float _stragglerAccumulator;
+    private const float PeriodicCheckInterval = 0.5f;
+    private float _periodicAccumulator;
 
-    private void TickStragglerReposition(float delta)
+    // Both checks below share one accumulator: each is a distance test per enemy, neither needs
+    // frame precision, and doing them every frame across a 60-enemy crowd is real cost.
+    private void TickPeriodicChecks(float delta)
     {
-        _stragglerAccumulator += delta;
-        if (_stragglerAccumulator < StragglerCheckInterval) return;
-        _stragglerAccumulator = 0f;
+        _periodicAccumulator += delta;
+        if (_periodicAccumulator < PeriodicCheckInterval) return;
+        _periodicAccumulator = 0f;
 
+        TickProximityPerks();
+        if (CurrentHp <= 0) return;   // a suicide roll just killed us; nothing left to reposition
+
+        RepositionIfStraggler();
+    }
+
+    private void RepositionIfStraggler()
+    {
         float limitSq = StragglerDistance * StragglerDistance;
         if (GlobalPosition.DistanceSquaredTo(_player.GlobalPosition) < limitSq) return;
 
         if (GetTree().GetFirstNodeInGroup("enemy_spawner") is EnemySpawner spawner)
             GlobalPosition = spawner.PickInterceptPosition();
+    }
+
+    // "Hackeado" (Maxi's perk): this enemy is inoperable — it can't steer and, if it's a ShooterEnemy,
+    // can't fire. It can still be shoved and still separates from its neighbours, so a frozen enemy is
+    // a harmless obstacle rather than a rigid pillar the crowd stacks on.
+    private float _hackedTimer;
+    private const float HackDuration = 1f;
+    public bool IsHacked => _hackedTimer > 0f;
+
+    public void ApplyHack(float duration)
+    {
+        // Bosses are exempt. Not just for balance — a boss never runs the code that would tick this
+        // timer down (Boss overrides _PhysicsProcess without calling base), so a hacked boss would be
+        // frozen and unable to fire for the rest of the fight. See the note in FinishMovement.
+        if (Category == EnemyCategory.Boss) return;
+
+        // Refreshes rather than stacks, so overlapping hacks can't compound into a long freeze.
+        _hackedTimer = Mathf.Max(_hackedTimer, duration);
+        SpawnFloatingLabel("HACKEADO", Palette.Warning, 14, new Vector2(-30f, HealthBarOffset - 14f), zIndex: 12);
+    }
+
+    // Character perks that fire on closing with the player: Maxi hacks their ships, Nico L's presence
+    // makes them give up on the spot.
+    //
+    // Rolled ONCE per enemy, not on a schedule. A repeating roll would scale with how long an enemy
+    // loiters in range and with how many are alive at once — at a late-round cap of 24 enemies,
+    // "1%" every half second is a hack roughly every two seconds, which is a permanent stun, not a
+    // rare event. One roll per enemy ties the rate to enemies *spawned* instead, which is the thing
+    // the 1% reads as.
+    private bool _proximityPerkRolled;
+
+    private void TickProximityPerks()
+    {
+        if (_proximityPerkRolled || _player is not Player player) return;
+        if (player.EnemyHackChance <= 0f && player.EnemySuicideChance <= 0f) return;
+
+        float range = player.EffectiveFireRange;
+        if (GlobalPosition.DistanceSquaredTo(player.GlobalPosition) > range * range) return;
+
+        _proximityPerkRolled = true;
+
+        // Death goes through the normal damage path rather than QueueFree, so a humiliated enemy
+        // still pays out its XP, score, coins and drops exactly like any other kill.
+        if (player.EnemySuicideChance > 0f && _rng.NextDouble() < player.EnemySuicideChance)
+        {
+            TakeDamage(CurrentHp);
+            return;
+        }
+
+        if (player.EnemyHackChance > 0f && _rng.NextDouble() < player.EnemyHackChance)
+            ApplyHack(HackDuration);
     }
 
     // Direction toward the player, plus this instance's persistent heading offset. Exposed so a
@@ -483,6 +585,13 @@ public partial class Enemy : CharacterBody2D
 
     protected void FinishMovement(Vector2 moveDir, double delta)
     {
+        // Ticked here rather than in _PhysicsProcess because this is the one seam every subclass
+        // funnels through — Boss overrides _PhysicsProcess without calling base, so a timer ticked
+        // there would never run for a boss and a hacked one would stay frozen forever. ApplyHack
+        // refuses bosses outright, but keeping the tick here means that invariant isn't the only
+        // thing standing between a future change and an unwinnable encounter.
+        if (_hackedTimer > 0f) _hackedTimer -= (float)delta;
+
         float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
         Vector2 separation = ComputeSeparation();
 
@@ -726,6 +835,12 @@ public partial class Enemy : CharacterBody2D
         bool isEarlyRound = round < EarlyDropRound;
         float xpChance = isEarlyRound ? EarlyXpCoinDropChance : XpPickupDropChance;
         float coinChance = isEarlyRound ? EarlyXpCoinDropChance : CoinPickupDropChance;
+
+        // A character perk (Manu's "mano larga") stacks straight onto the chance rather than scaling
+        // it, so it stays worth the same in every round instead of being swallowed by the early-round
+        // boost above. Clamped because chance and certainty are not the same thing.
+        if (_player is Player thief)
+            coinChance = Mathf.Min(coinChance + thief.CoinDropBonus, 1f);
 
         if (HeartPickupScene != null && _rng.NextDouble() < heartChance)
         {

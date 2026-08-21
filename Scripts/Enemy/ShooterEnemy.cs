@@ -20,6 +20,10 @@ public partial class ShooterEnemy : Enemy
 
     private void OnFireTimeout()
     {
+        // Hacked means inoperable, weapons included. The timer keeps running rather than being paused,
+        // so recovering doesn't dump a saved-up volley all at once.
+        if (IsHacked) return;
+
         var player = GetTree().GetFirstNodeInGroup("player") as Node2D;
         if (EnemyBulletScene == null || player == null || !IsInstanceValid(player)) return;
 

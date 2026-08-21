@@ -59,27 +59,27 @@ public partial class HUD : Control
         // bought, because it only had three heart nodes.
         _heartIcons = new[]
         {
-            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart1"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart2"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart3"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart4"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart5"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/LivesRow/Heart6"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart1"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart2"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart3"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart4"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart5"),
+            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart6"),
         };
-        _shieldRow = GetNode<Control>("TopBarPanel/TopBar/ShieldRow");
+        _shieldRow = GetNode<Control>("TopBarPanel/TopBar/StatusRow/Meters/ShieldRow");
         _shieldIcons = new[]
         {
-            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield1"),
-            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield2"),
-            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield3"),
-            GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield4"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/StatusRow/Meters/ShieldRow/Shield1"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/StatusRow/Meters/ShieldRow/Shield2"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/StatusRow/Meters/ShieldRow/Shield3"),
+            GetNode<ShieldIcon>("TopBarPanel/TopBar/StatusRow/Meters/ShieldRow/Shield4"),
         };
-        // Who you picked, shown next to your lives. Read once here rather than polled: the selection
-        // is fixed for the whole run (it's chosen before the arena scene even loads). Same texture
-        // and tint the ship itself uses, so a white silhouette picks up its Color while a photo
-        // portrait (Color = White) shows through untouched.
+        // Who you picked, shown left of the lives/shields column and vertically centred against it.
+        // Read once here rather than polled: the selection is fixed for the whole run (it's chosen
+        // before the arena scene even loads). Same texture and tint the ship itself uses, so a white
+        // silhouette picks up its Color while a photo portrait (Color = White) shows through untouched.
         var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
-        var portrait = GetNode<TextureRect>("TopBarPanel/TopBar/LivesRow/Portrait");
+        var portrait = GetNode<TextureRect>("TopBarPanel/TopBar/StatusRow/Portrait");
         portrait.Texture = CharacterCatalog.Texture(character);
         portrait.Modulate = character.Color;
 
@@ -225,8 +225,10 @@ public partial class HUD : Control
         // overlap the panel as "Ronda 9" becomes "Ronda 10".
         _cooldownIcons.Position = _topBarPanel.Position + new Vector2(_topBarPanel.Size.X + 12f, 0f);
 
-        // Same reasoning, but pinned below the panel's bottom edge instead of its right — the
-        // panel's height also breathes (e.g. the Shield row only appears once you own a Barrier).
+        // Same reasoning, but pinned below the panel's bottom edge instead of its right. The height
+        // moves less than it used to: the shield row now lives inside StatusRow, which is sized by
+        // the 80px portrait, so unlocking a Barrier no longer makes the whole panel taller. What
+        // still moves it is the build chip appearing and wrapping to a second line.
         _roundTimerLabel.Position = _topBarPanel.Position + new Vector2(0f, _topBarPanel.Size.Y + 10f);
 
         // Kill streak to the right of the round timer, same vertical level.

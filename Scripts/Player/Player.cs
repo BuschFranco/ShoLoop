@@ -215,6 +215,18 @@ public partial class Player : CharacterBody2D
     // within the first second of every run.
     private Vector2 _visualBaseScale = Vector2.One;
 
+    // Extra coin-pickup drop chance granted by the selected character (Manu), read by
+    // Enemy.TryDropPickup off the player node. Lives here rather than on GameManager for the same
+    // reason MoveSpeed/BulletDamage do: the character's effect on a run is applied in one place.
+    public float CoinDropBonus;
+
+    // The rest of the selected character's effects on enemies, re-exposed for Enemy/EnemySpawner to
+    // read off the player node so neither has to know CharacterCatalog exists.
+    public float EnemyHpMultiplier = 1f;
+    public Color? EnemyTint;
+    public float EnemyHackChance;
+    public float EnemySuicideChance;
+
     // How wide the ship draws, in world px, whatever the selected character's texture resolution is
     // (_Ready divides by the texture's longest side to get there). Matches the 36px the original
     // Polygon2D triangle spanned, which is roughly the 16px-radius collision circle — the visual
@@ -277,6 +289,15 @@ public partial class Player : CharacterBody2D
         var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
         MoveSpeed *= character.MoveSpeedMultiplier;
         BulletDamage = Mathf.RoundToInt(BulletDamage * character.BulletDamageMultiplier);
+        CoinDropBonus = character.CoinDropBonus;
+        EnemyTint = character.EnemyTint;
+        EnemyHackChance = character.EnemyHackChance;
+        EnemySuicideChance = character.EnemySuicideChance;
+
+        // Guarded rather than assigned straight across: CharacterInfo is a struct, so an entry that
+        // simply doesn't set this arrives as 0 — which would delete every enemy's health instead of
+        // leaving it alone. A real 0.9 still gets through.
+        EnemyHpMultiplier = character.EnemyHpMultiplier > 0f ? character.EnemyHpMultiplier : 1f;
 
         CurrentLives = MaxLives;
 

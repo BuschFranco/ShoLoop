@@ -227,71 +227,81 @@ max_value = 10.0
 value = 0.0
 show_percentage = false
 
-[node name="LivesRow" type="HBoxContainer" parent="TopBarPanel/TopBar"]
+[node name="StatusRow" type="HBoxContainer" parent="TopBarPanel/TopBar"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 6
 
-[node name="Portrait" type="TextureRect" parent="TopBarPanel/TopBar/LivesRow"]
-custom_minimum_size = Vector2(58, 58)
+[node name="Portrait" type="TextureRect" parent="TopBarPanel/TopBar/StatusRow"]
+custom_minimum_size = Vector2(80, 80)
 layout_mode = 2
-size_flags_vertical = 4
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Heart1" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+[node name="Meters" type="VBoxContainer" parent="TopBarPanel/TopBar/StatusRow"]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="LivesRow" type="HBoxContainer" parent="TopBarPanel/TopBar/StatusRow/Meters"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Heart1" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="Heart2" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+[node name="Heart2" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="Heart3" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+[node name="Heart3" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="Heart4" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+[node name="Heart4" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="Heart5" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+[node name="Heart5" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="Heart6" type="Control" parent="TopBarPanel/TopBar/LivesRow"]
+[node name="Heart6" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/LivesRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("4")
 
-[node name="ShieldRow" type="HBoxContainer" parent="TopBarPanel/TopBar"]
+[node name="ShieldRow" type="HBoxContainer" parent="TopBarPanel/TopBar/StatusRow/Meters"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="Shield1" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+[node name="Shield1" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/ShieldRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("5")
 
-[node name="Shield2" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+[node name="Shield2" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/ShieldRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("5")
 
-[node name="Shield3" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+[node name="Shield3" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/ShieldRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("5")
 
-[node name="Shield4" type="Control" parent="TopBarPanel/TopBar/ShieldRow"]
+[node name="Shield4" type="Control" parent="TopBarPanel/TopBar/StatusRow/Meters/ShieldRow"]
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("5")
@@ -348,7 +358,7 @@ offset_top = 20.0
 offset_right = 400.0
 offset_bottom = 56.0
 mouse_filter = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 4
 
 [node name="LaserIcon" type="Control" parent="CooldownIcons"]
 visible = false

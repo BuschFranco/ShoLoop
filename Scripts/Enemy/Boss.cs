@@ -89,7 +89,7 @@ public partial class Boss : ShooterEnemy
             case Phase.Idle:
                 EnterPhase(Phase.Windup, ChargeWindupDuration);
                 PlayTelegraph(ChargeWindupDuration);
-                SpawnPatternLabel("¡EMBESTIDA!");
+                SpawnFloatingLabel("¡EMBESTIDA!", TelegraphTint, 22, new Vector2(-50f, HealthBarOffset - 30f));
                 break;
             case Phase.Windup:
                 StartCharge();
@@ -147,7 +147,7 @@ public partial class Boss : ShooterEnemy
 
         EnterPhase(Phase.Windup, LungeWindupDuration);
         PlayTelegraph(LungeWindupDuration);
-        SpawnPatternLabel("¡ACELERÓN!");
+        SpawnFloatingLabel("¡ACELERÓN!", TelegraphTint, 22, new Vector2(-50f, HealthBarOffset - 30f));
     }
 
     private void StartLunge()
@@ -179,33 +179,6 @@ public partial class Boss : ShooterEnemy
         _telegraphTween.TweenProperty(Visual, "modulate", TelegraphTint, duration * 0.6f);
         _telegraphTween.TweenProperty(Visual, "scale", VisualBaseScale * 1.25f, duration * 0.5f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-    }
-
-    // Announces a pattern switch in text, on top of the colour telegraph — the fastest way to
-    // confirm the state machine is actually running, and a clearer tell than a subtle speed/colour
-    // change alone against a busy, bullet-filled screen. Same drift-up-and-fade shape as every
-    // other floating label in the game (SpawnDamageNumber, SpawnScorePopup, pickup labels).
-    private void SpawnPatternLabel(string text)
-    {
-        var parent = GetParent();
-        if (parent == null) return;
-
-        var label = new Label();
-        label.Text = text;
-        label.AddThemeColorOverride("font_color", TelegraphTint);
-        label.AddThemeColorOverride("font_outline_color", Colors.Black);
-        label.AddThemeConstantOverride("outline_size", 3);
-        label.AddThemeFontSizeOverride("font_size", 22);
-        label.ZIndex = 15;
-        parent.AddChild(label);
-        label.GlobalPosition = GlobalPosition + new Vector2(-50f, HealthBarOffset - 30f);
-
-        var tween = label.CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(label, "position", label.Position + new Vector2(0f, -24f), 0.9f)
-            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(label, "modulate:a", 0f, 0.6f).SetDelay(0.4f);
-        tween.Chain().TweenCallback(Callable.From(() => label.QueueFree()));
     }
 
     // Restores both properties the telegraph borrowed. Modulate must go back to VisualBaseColor,

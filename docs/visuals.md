@@ -39,7 +39,7 @@ two owners and let them silently drift apart. The two sides are kept in step by 
 
 The player is the one entity whose colour is *not* authored in its scene: `Player._Ready` overwrites
 `Visual.Modulate` with the selected character's `CharacterInfo.Color` (see
-[CharacterCatalog.cs](../Scripts/Player/CharacterCatalog.cs)), so the value in `Player.tscn` is only
+[characters.md](characters.md)), so the value in `Player.tscn` is only
 the editor-time preview.
 
 ### The palette
@@ -288,7 +288,8 @@ obvious at a glance.
   `UpgradePicker`, `RoundSummary`, `GameOverScreen`, `MainMenu`) is anchored by corner/edge/center
   rather than absolute position, so swapping the base size reflows all of them into a narrower,
   taller canvas without needing a second authored version of each scene. The widest fixed-pixel
-  panel (Shop, 480px) still leaves comfortable margin against the 648px portrait width.
+  panel is the character select at 600px, which still clears the 648px portrait width — but only
+  just, so it is the one to re-check when adding to that screen.
 - `project.godot`'s `window/handheld/orientation="portrait"` is only the pre-boot/manifest
   default for the very first launch before `GameManager._Ready` applies whatever was actually
   saved — a returning player who picked Horizontal last time won't see a portrait flash beyond

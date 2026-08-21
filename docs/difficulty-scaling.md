@@ -103,7 +103,7 @@ Split children (see [enemies.md](enemies.md#splitting-enemysplitter)) inherit th
 | | Round 1 | Round 2 | Round 5 | Round 10 | Round 18 |
 |---|---|---|---|---|---|
 | Spawn rate ceiling (burst ÷ interval) | ~1.0/s | ~1.4/s | ~4.3/s | ~14/s | ~58/s |
-| Concurrent cap (the real constraint) | 10 | 17 | 41 | 61 | 61 |
+| Concurrent cap (the real constraint) | 10 | 17 | 37 | 52 | 54 |
 | Enemy HP × | 1.0 | 1.25 | 2.0 | 3.25 | 5.25 |
 | Contact damage × | 1.0 | 1.22 | 1.88 | 3.0 | 4.74 |
 | Enemy speed × | 1.0 | 1.06 | 1.24 | 1.54 | 2.02 |

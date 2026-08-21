@@ -342,7 +342,13 @@ public partial class EnemySpawner : Node2D
 
         var enemy = scene.Instantiate<Enemy>();
         enemy.SelfScene = scene;
-        enemy.MaxHp = Mathf.RoundToInt(enemy.MaxHp * _hpMult);
+
+        // The selected character's own HP effect (Juli's -10%) folds in with the round curve here,
+        // before the enemy enters the tree — Enemy._Ready sets CurrentHp = MaxHp, so anything applied
+        // later would leave it spawning at more than full health. Mathf.Max keeps a rounding-down at
+        // low base HP from producing a 0-HP enemy that dies to nothing.
+        float characterHpMult = (_player as Player)?.EnemyHpMultiplier ?? 1f;
+        enemy.MaxHp = Mathf.Max(1, Mathf.RoundToInt(enemy.MaxHp * _hpMult * characterHpMult));
         enemy.ContactDamage = Mathf.RoundToInt(enemy.ContactDamage * _dmgMult);
         enemy.MoveSpeed *= _speedMult;
         enemy.XpReward = Mathf.RoundToInt(enemy.XpReward * _rewardMult);

@@ -37,6 +37,7 @@ reading before changing balance numbers:
 - [rounds.md](docs/rounds.md) — the round lifecycle, boss rounds, the modal queue
 - [enemies.md](docs/enemies.md) — enemy categories, shooters, splitting, collision layers
 - [player.md](docs/player.md) — movement/inertia, lives, shield, abilities, the arena & camera
+- [characters.md](docs/characters.md) — the playable cast, their perks, and how to change them
 - [rewards.md](docs/rewards.md) — the reward catalog and the stacking rules
 - [economy.md](docs/economy.md) — Coins vs. Score, shop pricing
 - [difficulty-scaling.md](docs/difficulty-scaling.md) — `RoundCurve` and adaptive difficulty

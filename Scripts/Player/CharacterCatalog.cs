@@ -12,8 +12,42 @@ public readonly struct CharacterInfo
 
     public string Name { get; init; }
     public string Description { get; init; }
+
+    // The character's mechanical effect, in one player-facing sentence, kept OUT of Description
+    // so the select screen can show it in its own bordered box instead of burying it at the end
+    // of a paragraph of flavour. Null/empty means "no perk" and the box hides itself —
+    // CharacterInfo is a struct, so an entry that doesn't set this gets null, not "".
+    public string PerkText { get; init; }
     public float MoveSpeedMultiplier { get; init; }
     public float BulletDamageMultiplier { get; init; }
+
+    // Added to the coin pickup's drop chance (Enemy.TryDropPickup), in absolute probability, not as
+    // a multiplier. Worth knowing why that scale is the fair one: from round 5 on a coin pickup is
+    // worth the same CoinsReward the kill already pays out directly, so raising a 2% drop chance to
+    // 17% raises total coin income by about the same 15% — the number reads as a percentage bonus to
+    // income, which is what a player assumes it means.
+    public float CoinDropBonus { get; init; }
+
+    // Effects a character has on the *enemies* rather than on the ship. All four are read once by
+    // Player._Ready and re-exposed there, so Enemy/EnemySpawner never have to know the catalog
+    // exists — the character's whole footprint on a run stays applied in one place.
+
+    // Scales every spawned enemy's MaxHp (Juli). 1.0 = untouched.
+    public float EnemyHpMultiplier { get; init; }
+
+    // Overrides every enemy's identity colour (Juli). Null leaves each scene's own colour alone.
+    public Color? EnemyTint { get; init; }
+
+    // Per-enemy chance, rolled once when that enemy first closes on the player, that it gets hacked
+    // and goes inoperable for a second (Maxi) or simply dies on the spot (Nico L).
+    //
+    // Rolled once per enemy rather than per tick, deliberately: a repeating roll would scale with how
+    // long an enemy loiters in range AND with how many are alive at once, so at a late-round cap of
+    // ~50 enemies a "2%" would fire several times a second. Once per enemy ties the rate to enemies
+    // *spawned*, which is what the percentage reads as. The cost is that it's subtle — expect only a
+    // handful of triggers per round, out at the edge of fire range. See docs/characters.md.
+    public float EnemyHackChance { get; init; }
+    public float EnemySuicideChance { get; init; }
 
     // Applied as the sprite's Modulate, so each pick reads as a visually distinct character on top
     // of the stat difference, not just a name.
@@ -50,6 +84,10 @@ public static class CharacterCatalog
 
     private static readonly CharacterInfo[] BuiltIns =
     {
+        // The three originals share ship.svg and are told apart by Color alone, which is how the ship
+        // looked before the character system existed. Their whole identity is mechanical, so the stat
+        // line lives in PerkText and they carry no flavour Description — Equilibrado is the mirror
+        // image, all Description and no perk.
         new()
         {
             Slug = "equilibrado",
@@ -64,7 +102,7 @@ public static class CharacterCatalog
         {
             Slug = "centella",
             Name = "Centella",
-            Description = "+15% velocidad, -10% daño de bala.",
+            PerkText = "+15% de velocidad, -10% de daño de bala.",
             MoveSpeedMultiplier = 1.15f,
             BulletDamageMultiplier = 0.9f,
             Color = new Color(0.75f, 1f, 0.3f, 1f), // yellow-green — reads as "fast"
@@ -74,29 +112,30 @@ public static class CharacterCatalog
         {
             Slug = "coloso",
             Name = "Coloso",
-            Description = "-10% velocidad, +20% daño de bala.",
+            PerkText = "-10% de velocidad, +20% de daño de bala.",
             MoveSpeedMultiplier = 0.9f,
             BulletDamageMultiplier = 1.2f,
             Color = new Color(1f, 0.45f, 0.2f, 1f), // orange — reads as "heavy hitter"
             SpritePath = "res://Assets/Sprites/Characters/ship.svg",
         },
 
-        // Portrait characters. Cosmetic by default — every multiplier is 1.0, so picking one is
-        // mechanically the same as picking Equilibrado — with Conrado as the single deliberate
-        // exception. Color is White on all of them because their sprites carry their own colours
-        // and must not be modulated.
-        //
-        // Swapping a photo is one command, and nothing else has to change:
-        //   python tools/prep_character_sprite.py foto.jpg Assets/Sprites/Characters/maxi.png
+        // Portrait characters — the joke roster, expected to rotate. Cosmetic by default: every
+        // multiplier defaults to 1.0, so a portrait with no perk arguments is mechanically identical
+        // to Equilibrado. Color is White on all of them because their sprites carry their own colours
+        // and must not be modulated. See docs/characters.md for how to add, edit or remove one.
         Portrait("maxi", "Maxi",
             "Antes del primer destello de luz, solo existía el vacío y Él: el Coloso primordial, el "
             + "Señor de la Lógica, el Mente Maestra que osó enseñarle a pensar al caos. Con las manos "
             + "desnudas forjó los cimientos del código, traduciendo el orden del universo en algoritmos "
-            + "eternos y tallando la realidad línea por línea. Programó la realidad que hoy vivimos."),
+            + "eternos y tallando la realidad línea por línea. Programó la realidad que hoy vivimos.",
+            perkText: "Tiene 2% de probabilidad de hackear la nave de los enemigos dentro de su rango "
+            + "y dejarlos inoperantes por 1 segundo.",
+            enemyHackChance: 0.02f),
 
         Portrait("conrado", "Conrado",
             "El abuelo de la oficina (Jubilado). Utilizarlo te hace más lento y te mea el mapa pero "
-            + "como te bancamos conra jaja. -50% de velocidad.",
+            + "como te bancamos conra jaja.",
+            perkText: "-50% de velocidad.",
             moveSpeed: 0.5f),
 
         Portrait("manu", "Manu",
@@ -106,7 +145,10 @@ public static class CharacterCatalog
             + "la sangre de Dios en el vino más embriagador que jamás haya tocado labios mortales. De "
             + "esa cosecha sacrílega erigió Vinitus, un imperio de púrpura, hierro y opulencia, "
             + "sostenido por la copa imperial donde cada trago es el recuerdo amargo de un cielo "
-            + "destronado."),
+            + "destronado.",
+            perkText: "Es medio turro, asi que seguro es mano larga: sus víctimas tienen +15% de "
+            + "dropear monedas.",
+            coinDropBonus: 0.15f),
 
         Portrait("juan", "Juan",
             "Juan con pelo jaja, que capo, carrea solo."),
@@ -116,24 +158,38 @@ public static class CharacterCatalog
             + "inmensidad tras la piel de un therian: una bestia ancestral que ruge con la esencia pura "
             + "de la naturaleza indomable en el barrio chino. No busca devotos ni coronas; su sola "
             + "existencia es una demostración de aura absoluto, un depredador de vibraciones ante el "
-            + "cual hasta los dioses bajan la mirada."),
+            + "cual hasta los dioses bajan la mirada.",
+            perkText: "Los enemigos tienen 1% de probabilidad de suicidarse al entrar en su rango por "
+            + "quedar humillados ante semejante aura.",
+            enemySuicideChance: 0.01f),
 
         Portrait("juli", "Juli",
-            "No hace nada. Si no la pongo seguro se enoja"),
+            "No hace nada. Si no la pongo seguro se enoja",
+            perkText: "Su presencia convierte a los enemigos en vegetarianos: se tornan verdes y "
+            + "-10% de salud.",
+            enemyHp: 0.9f, enemyTint: new Color("9bff4d")),
     };
 
-    // The portrait entries differ only in their text, their slug and (for Conrado) one multiplier,
-    // so spelling out six near-identical initialisers would just be six places for a stat to get
+    // The portrait entries differ only in their text, their slug and (for a few) one perk value, so
+    // spelling out nine near-identical initialisers would just be nine places for a stat to get
     // typo'd into being non-cosmetic. The defaults live here once, and only here.
     private static CharacterInfo Portrait(
-        string slug, string name, string description,
-        float moveSpeed = 1f, float bulletDamage = 1f) => new()
+        string slug, string name, string description, string perkText = null,
+        float moveSpeed = 1f, float bulletDamage = 1f, float coinDropBonus = 0f,
+        float enemyHp = 1f, Color? enemyTint = null,
+        float enemyHackChance = 0f, float enemySuicideChance = 0f) => new()
     {
         Slug = slug,
         Name = name,
         Description = description,
+        PerkText = perkText,
         MoveSpeedMultiplier = moveSpeed,
         BulletDamageMultiplier = bulletDamage,
+        CoinDropBonus = coinDropBonus,
+        EnemyHpMultiplier = enemyHp,
+        EnemyTint = enemyTint,
+        EnemyHackChance = enemyHackChance,
+        EnemySuicideChance = enemySuicideChance,
         Color = Colors.White,
         SpritePath = $"res://Assets/Sprites/Characters/{slug}.png",
     };
