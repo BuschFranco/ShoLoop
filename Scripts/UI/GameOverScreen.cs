@@ -25,7 +25,32 @@ public partial class GameOverScreen : Control
 
     public void Open()
     {
-        _scoreLabel.Text = $"Puntaje Final: {GameManager.Instance.Score}";
+        var gm = GameManager.Instance;
+        var player = GetTree().GetFirstNodeInGroup("player") as Player;
+
+        _scoreLabel.Text = $"Puntaje Final: {gm.Score}";
+
+        var summary = GetNodeOrNull<Label>("Panel/VBoxContainer/RunSummary");
+        if (summary != null)
+        {
+            var lines = new List<string>
+            {
+                $"Ronda {gm.RoundNumber}   Nv {gm.Level}   Enemigos: {gm.EnemiesKilled}",
+                $"Monedas: {gm.Coins}",
+            };
+
+            if (player != null)
+            {
+                var builds = new List<string>();
+                foreach (var cls in BuildCatalog.ClassOrder)
+                    if (player.IsClassActive(cls)) builds.Add(BuildCatalog.Name(cls));
+                if (builds.Count > 0)
+                    lines.Add($"Build: {string.Join(" + ", builds)}");
+            }
+
+            summary.Text = string.Join("\n", lines);
+        }
+
         Visible = true;
     }
 

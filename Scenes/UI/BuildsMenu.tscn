@@ -80,16 +80,24 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 6)
 layout_mode = 2
 
-[node name="BuildsList" type="RichTextLabel" parent="CenterContainer/Panel/Box"]
+[node name="ScrollContainer" type="ScrollContainer" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 400)
 layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BuildsList" type="RichTextLabel" parent="CenterContainer/Panel/Box/ScrollContainer"]
+custom_minimum_size = Vector2(400, 0)
+layout_mode = 2
+size_flags_horizontal = 3
 bbcode_enabled = true
-fit_content = true
 theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/normal_font_size = 14
 text = ""
 horizontal_alignment = 0
+fit_content = true
+scroll_active = true
 
 [node name="Sep2" type="Control" parent="CenterContainer/Panel/Box"]
 custom_minimum_size = Vector2(0, 6)

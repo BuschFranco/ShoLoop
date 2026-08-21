@@ -45,35 +45,43 @@ public partial class PauseMenu : Control
         var gm = GameManager.Instance;
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
 
-        var lines = new List<string>
-        {
-            $"Ronda {gm.RoundNumber}   Tiempo restante: {Mathf.CeilToInt(gm.RoundTimeRemaining)}s",
-            $"Nivel {gm.Level}   Monedas: {gm.Coins}   Puntaje: {gm.Score}",
-            $"Enemigos eliminados: {gm.EnemiesKilled}   Eliminaciones especiales: {gm.SpecialEnemiesKilled}",
-        };
+        var lines = new List<string>();
+
+        lines.Add("── ESTADO ──");
+        lines.Add($"Ronda {gm.RoundNumber}   Tiempo: {Mathf.CeilToInt(gm.RoundTimeRemaining)}s");
+        lines.Add($"Nv {gm.Level}   Monedas: {gm.Coins}   Puntaje: {gm.Score}");
+        lines.Add($"Eliminados: {gm.EnemiesKilled}   Especiales: {gm.SpecialEnemiesKilled}");
 
         if (player != null)
         {
-            lines.Add($"Vidas: {player.CurrentLives}/{player.MaxLives}");
-            lines.Add($"Escudo: {player.CurrentShieldCharges}/{player.MaxShieldCharges}");
-            lines.Add($"Velocidad de movimiento: {player.MoveSpeed:0}");
-            lines.Add($"Rango de disparo: {player.FireRange:0}");
-            lines.Add($"Velocidad de ataque: {player.FireRate:0.0}/s");
-            lines.Add($"Daño de bala: {player.BulletDamage}");
-            lines.Add($"Disparo Doble: {(player.HasExtraProjectile ? "Sí" : "No")}");
-            lines.Add($"Líneas de disparo lateral: {player.ExtraFiringLines}/{Player.MaxExtraFiringLinesCap}");
-            lines.Add($"Cuchillas orbitales: {player.OrbitCount}");
-            lines.Add($"Compañero: {(player.CompanionStatPercent > 0 ? $"{player.CompanionStatPercent * 100:0}% de tus estadísticas" : "No")}");
+            lines.Add("");
+            lines.Add("── COMBATE ──");
+            lines.Add($"Daño: {player.BulletDamage}   Cadencia: {player.FireRate:0.0}/s   Crítico: {player.CritChance:0}%");
+            lines.Add($"Alcance: {player.FireRange:0}   Perforación: {player.BulletPierce}   Rebote: {player.RicochetCount}");
+            lines.Add($"Retroceso: {player.BulletKnockback:0}   Esquiva: {player.DodgeChance:0}%");
+            lines.Add($"Disparo Doble: {(player.HasExtraProjectile ? "Sí" : "No")}   Líneas laterales: {player.ExtraFiringLines}/{Player.MaxExtraFiringLinesCap}");
+            lines.Add($"Cuchillas: {player.OrbitCount}   Escudo Voltáico: {(player.ThornsDamage > 0 ? $"{player.ThornsDamage:0} daño" : "No")}");
 
-            var spawner = GetTree().GetFirstNodeInGroup("enemy_spawner") as EnemySpawner;
-            if (spawner != null)
-                lines.Add($"Poder: {player.GetOffensivePower():0.0}x   Ajuste enemigo: {spawner.CatchUpMultiplier:0.00}x");
+            lines.Add("");
+            lines.Add("── DEFENSAS ──");
+            lines.Add($"Vidas: {player.CurrentLives}/{player.MaxLives}   Escudo: {player.CurrentShieldCharges}/{player.MaxShieldCharges}");
+            lines.Add($"Regeneración: {(player.ShieldRegenPerMinute > 0 ? $"{player.ShieldRegenPerMinute:0.#}/min" : "No")}");
+
+            lines.Add("");
+            lines.Add("── PODERES ──");
+            lines.Add($"Dron: {(player.CompanionStatPercent > 0 ? $"{player.CompanionStatPercent * 100:0}%" : "No")}");
+            if (player.LaserLevel > 0) lines.Add($"Láser: Lv{player.LaserLevel}");
+            if (player.MissileLevel > 0) lines.Add($"Misil: Lv{player.MissileLevel}");
+            if (player.BurnLevel > 0) lines.Add($"Incendiario: Lv{player.BurnLevel}");
+            if (player.OndaLevel > 0) lines.Add($"Onda: Lv{player.OndaLevel}");
+            if (player.VendavalLevel > 0) lines.Add($"Vendaval: Lv{player.VendavalLevel}");
+            if (player.EquippedUltimate != null) lines.Add($"Ultimate: {UltimateKindNames.Display(player.EquippedUltimate.Value)}");
         }
 
         _statsLabel.Text = string.Join("\n", lines);
         _cameraDistanceSlider.Value = gm.CameraDistance;
         float camPct = 2000f / gm.CameraDistance * 100f;
-        _cameraDistanceLabel.Text = $"Distancia Cámara: {camPct:0}%";
+        _cameraDistanceLabel.Text = $"Zoom: {camPct:0}%";
         _loadoutMenu.Refresh(player);
         Visible = true;
     }

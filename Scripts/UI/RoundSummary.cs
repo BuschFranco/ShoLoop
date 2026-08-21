@@ -36,22 +36,15 @@ public partial class RoundSummary : Control
 
         var lines = new List<string>
         {
-            $"Enemigos eliminados:  {kills}",
-            $"De élite / jefes:  {eliteKills}",
-            $"Monedas ganadas:  {coins}",
-            $"Puntaje ganado:  {score}",
+            $"Enemigos: {kills}   Especiales: {eliteKills}",
+            $"Monedas: +{coins}   Puntaje: +{score}",
         };
 
-        // Only worth a line when it actually happened — otherwise it reads as a permanent "0".
         if (levels > 0)
-            lines.Add($"Niveles subidos:  {levels}");
+            lines.Add($"Subiste {levels} nivel{(levels > 1 ? "es" : "")}");
 
         _stats.Text = string.Join("\n", lines);
         Visible = true;
-
-        // The .tscn's own offset_bottom is a safe non-zero fallback, same trick as HUD's
-        // TopBarPanel — this shrinks the box to exactly fit however many stat lines actually
-        // showed up (4 or 5), so it can never overflow into whatever modal is centered below it.
         _panel.ResetSize();
     }
 
