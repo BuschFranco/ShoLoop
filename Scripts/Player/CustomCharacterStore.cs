@@ -1,0 +1,210 @@
+using System.Collections.Generic;
+using System.Text;
+
+namespace ShooterLoop;
+
+// Player-created characters: persisted locally, never bundled with the game.
+//
+// Two pieces on disk, both under user:// (AppData on Windows, the app's private dir on Android):
+//   user://characters.cfg      one section per character, holding name/description/ring
+//   user://characters/<slug>.png   the processed portrait
+//
+// The portrait is processed on save rather than on load — cropping, resizing and masking a photo
+// every time the carousel steps would be wasteful, and it means the file on disk is already the
+// exact 144x144 circle the rest of the game expects. It mirrors tools/prep_character_sprite.py, so
+// a hand-made portrait and a player-made one are the same kind of asset.
+public static class CustomCharacterStore
+{
+    private const string ConfigPath = "user://characters.cfg";
+    private const string ImageDir = "user://characters";
+    private const string SlugPrefix = "custom_";
+
+    // Matches the built-in portraits: 4x the ~36px the ship occupies, which keeps the edge clean
+    // through the breathe/punch tweens that scale the sprite up.
+    private const int PortraitSize = 144;
+    private const float RingWidthRatio = 0.055f;
+
+    // Feathered over ~1.5px instead of a hard cutoff — a binary mask on a 144px circle leaves
+    // visible stair-stepping on the rim.
+    private const float EdgeFeather = 1.5f;
+
+    public const int MaxNameLength = 18;
+    public const int MaxDescriptionLength = 600;
+
+    // Cycled through for each new character so they're distinguishable at a glance without asking
+    // the player to pick a colour. Same neon set the built-in portraits use.
+    private static readonly Color[] RingColors =
+    {
+        new("ff4fd8"), new("3dff8f"), new("ffe066"),
+        new("7dfdfe"), new("c65bff"), new("ff8a5c"),
+    };
+
+    public static CharacterInfo[] LoadAll()
+    {
+        var config = new ConfigFile();
+        if (config.Load(ConfigPath) != Error.Ok) return System.Array.Empty<CharacterInfo>();
+
+        var result = new List<CharacterInfo>();
+        foreach (string slug in config.GetSections())
+        {
+            string imagePath = $"{ImageDir}/{slug}.png";
+            if (!FileAccess.FileExists(imagePath)) continue;   // image gone: skip rather than show a blank
+
+            result.Add(new CharacterInfo
+            {
+                Slug = slug,
+                Name = (string)config.GetValue(slug, "name", "Sin nombre"),
+                Description = (string)config.GetValue(slug, "description", ""),
+
+                // Hardcoded, not read from the file: these are cosmetic characters, and reading
+                // multipliers back from a text file the player can edit would be a cheat menu.
+                MoveSpeedMultiplier = 1f,
+                BulletDamageMultiplier = 1f,
+
+                Color = Colors.White,   // the portrait carries its own colours; see CharacterInfo.Color
+                SpritePath = imagePath,
+                IsCustom = true,
+            });
+        }
+        return result.ToArray();
+    }
+
+    // Returns the new character's slug, or null with a player-facing message — every failure here is
+    // something the player did (no image picked, unreadable file) and belongs on screen.
+    //
+    // Returning the slug matters: the caller frames the new character in the carousel, and it cannot
+    // just take the last entry. NextSlug reuses the lowest free number, so creating one after
+    // deleting an earlier one lands in the middle of the list, not at the end.
+    public static string Create(string name, string description, string sourcePath, out string error)
+    {
+        error = null;
+        name = name?.Trim() ?? "";
+        description = description?.Trim() ?? "";
+
+        if (name.Length == 0) { error = "Ponele un nombre."; return null; }
+        if (name.Length > MaxNameLength) { error = $"El nombre no puede pasar de {MaxNameLength} caracteres."; return null; }
+        if (description.Length > MaxDescriptionLength) { error = $"La descripción no puede pasar de {MaxDescriptionLength} caracteres."; return null; }
+        if (string.IsNullOrEmpty(sourcePath)) { error = "Elegí una imagen."; return null; }
+
+        var source = Image.LoadFromFile(sourcePath);
+        if (source == null) { error = "No pude leer esa imagen."; return null; }
+
+        var config = new ConfigFile();
+        config.Load(ConfigPath);   // missing file is fine: we're about to create it
+
+        string slug = NextSlug(config);
+        var portrait = MakePortrait(source, RingColors[config.GetSections().Length % RingColors.Length]);
+
+        DirAccess.MakeDirRecursiveAbsolute(ImageDir);
+        if (portrait.SavePng($"{ImageDir}/{slug}.png") != Error.Ok)
+        {
+            error = "No pude guardar la imagen.";
+            return null;
+        }
+
+        config.SetValue(slug, "name", name);
+        config.SetValue(slug, "description", description);
+        config.Save(ConfigPath);
+
+        CharacterCatalog.Invalidate();
+        return slug;
+    }
+
+    public static void Delete(string slug)
+    {
+        var config = new ConfigFile();
+        if (config.Load(ConfigPath) == Error.Ok && config.HasSection(slug))
+        {
+            config.EraseSection(slug);
+            config.Save(ConfigPath);
+        }
+
+        string imagePath = $"{ImageDir}/{slug}.png";
+        if (FileAccess.FileExists(imagePath))
+            DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(imagePath));
+
+        CharacterCatalog.Invalidate();
+    }
+
+    // user:// is outside the import pipeline, so the PNG has to be decoded at runtime instead of
+    // resolved to an imported CompressedTexture2D. Goes through CharacterCatalog.Texture, which
+    // caches the result.
+    public static Texture2D LoadTexture(string userPath)
+    {
+        var image = Image.LoadFromFile(userPath);
+        return image == null ? null : ImageTexture.CreateFromImage(image);
+    }
+
+    // Sequential rather than derived from the name, so two characters called the same thing don't
+    // collide and a name with accents or spaces doesn't have to be sanitised into a filename.
+    private static string NextSlug(ConfigFile config)
+    {
+        for (int i = 1; ; i++)
+        {
+            string candidate = SlugPrefix + i;
+            if (!config.HasSection(candidate) && !FileAccess.FileExists($"{ImageDir}/{candidate}.png"))
+                return candidate;
+        }
+    }
+
+    // Centre-crop to a square, resize, then mask to a circle with a neon ring — the same shape
+    // tools/prep_character_sprite.py produces, so player portraits and bundled ones match.
+    private static Image MakePortrait(Image source, Color ring)
+    {
+        int side = Mathf.Min(source.GetWidth(), source.GetHeight());
+        var square = source.GetRegion(new Rect2I(
+            (source.GetWidth() - side) / 2, (source.GetHeight() - side) / 2, side, side));
+
+        square.Resize(PortraitSize, PortraitSize, Image.Interpolation.Lanczos);
+        square.Convert(Image.Format.Rgba8);
+
+        float centre = (PortraitSize - 1) / 2f;
+        float outer = PortraitSize / 2f;
+        float inner = outer - Mathf.Max(2f, PortraitSize * RingWidthRatio);
+
+        for (int y = 0; y < PortraitSize; y++)
+        {
+            for (int x = 0; x < PortraitSize; x++)
+            {
+                float distance = new Vector2(x - centre, y - centre).Length();
+
+                // Outside the disc entirely, with a feathered rim.
+                if (distance >= outer)
+                {
+                    square.SetPixel(x, y, new Color(0, 0, 0, 0));
+                    continue;
+                }
+
+                float rimAlpha = Mathf.Clamp((outer - distance) / EdgeFeather, 0f, 1f);
+
+                if (distance >= inner)
+                {
+                    // Ring band: blend into the photo across the inner edge so the ring doesn't
+                    // read as a hard sticker pasted on top.
+                    float ringMix = Mathf.Clamp((distance - inner) / EdgeFeather, 0f, 1f);
+                    var blended = square.GetPixel(x, y).Lerp(ring, ringMix);
+                    square.SetPixel(x, y, new Color(blended.R, blended.G, blended.B, rimAlpha));
+                }
+                else if (rimAlpha < 1f)
+                {
+                    var pixel = square.GetPixel(x, y);
+                    square.SetPixel(x, y, new Color(pixel.R, pixel.G, pixel.B, rimAlpha));
+                }
+            }
+        }
+
+        return square;
+    }
+
+    // Godot's LineEdit/TextEdit will happily accept a newline-laden paste; the config file stores
+    // these verbatim, so collapse anything that would break a single-line value.
+    public static string Sanitise(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+
+        var builder = new StringBuilder(text.Length);
+        foreach (char c in text)
+            builder.Append(c == '\n' || c == '\r' || c == '\t' ? ' ' : c);
+        return builder.ToString().Trim();
+    }
+}

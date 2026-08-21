@@ -20,3 +20,7 @@ obj/
 /ShooterLoop.pck
 /data_ShooterLoop_windows_x86_64/
 /export_presets.cfg
+
+# Python bytecode from the tools/ scripts
+__pycache__/
+*.pyc

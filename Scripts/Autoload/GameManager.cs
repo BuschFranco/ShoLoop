@@ -654,15 +654,17 @@ public partial class GameManager : Node
     // Which character was picked at the character-select screen (CharacterSelectMenu), read by
     // Player._Ready() when a run starts. Persisted the same way as the opacity sliders above, so
     // the last pick is remembered across sessions instead of resetting to Equilibrado every launch.
-    public CharacterId SelectedCharacter { get; private set; } = CharacterId.Equilibrado;
+    // A slug rather than an enum value, because player-created characters have no compile-time
+    // identity — see CharacterCatalog.
+    public string SelectedCharacter { get; private set; } = CharacterCatalog.DefaultSlug;
 
-    public void SetSelectedCharacter(CharacterId id)
+    public void SetSelectedCharacter(string slug)
     {
-        SelectedCharacter = id;
+        SelectedCharacter = slug;
 
         var config = new ConfigFile();
         config.Load(SettingsFilePath);
-        config.SetValue(SettingsSection, "selected_character", (int)id);
+        config.SetValue(SettingsSection, "selected_character_slug", slug);
         config.Save(SettingsFilePath);
     }
 
@@ -672,7 +674,14 @@ public partial class GameManager : Node
         if (config.Load(SettingsFilePath) != Error.Ok) return;
         JoystickOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "joystick_opacity", 1f), 0f, 1f);
         UltimateButtonOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "ultimate_button_opacity", 1f), 0f, 1f);
-        SelectedCharacter = (CharacterId)(int)config.GetValue(SettingsSection, "selected_character", (int)CharacterId.Equilibrado);
+        // The selection used to be stored as an index into the built-in cast. Fall back to it when
+        // the slug key is absent, so an existing settings.cfg keeps whoever it had picked instead of
+        // silently resetting to Equilibrado.
+        string slug = (string)config.GetValue(SettingsSection, "selected_character_slug", "");
+        if (string.IsNullOrEmpty(slug))
+            slug = CharacterCatalog.SlugForLegacyIndex((int)config.GetValue(SettingsSection, "selected_character", 0));
+
+        SelectedCharacter = slug;
     }
 
     private const string RecordsFilePath = "user://records.cfg";

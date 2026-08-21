@@ -6,6 +6,20 @@ public partial class HUD : Control
     private ShieldIcon[] _shieldIcons;
     private Control _shieldRow;
     private Label _statsLabel;
+
+    // The active builds get their own bordered chip rather than a third line appended to
+    // _statsLabel. Sharing that label meant they inherited its 11px grey — deliberately muted, since
+    // raw stat numbers are reference material you go looking for — and a build is the opposite: a
+    // thing you earned, that changes how the run plays, and that you need to *notice* the moment it
+    // unlocks. Hence the separate node, the magenta border, and PlayBuildFlare below.
+    private PanelContainer _buildPanel;
+    private Label _buildLabel;
+    private Tween _buildFlareTween;
+
+    // Builds never deactivate (their thresholds are stat floors and stats only go up), so this only
+    // ever grows — comparing the count is enough to spot a new unlock, no set diffing needed.
+    private int _shownBuildCount;
+
     private ProgressBar _xpBar;
     private Label _levelLabel;
     private Label _roundLabel;
@@ -60,7 +74,18 @@ public partial class HUD : Control
             GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield3"),
             GetNode<ShieldIcon>("TopBarPanel/TopBar/ShieldRow/Shield4"),
         };
+        // Who you picked, shown next to your lives. Read once here rather than polled: the selection
+        // is fixed for the whole run (it's chosen before the arena scene even loads). Same texture
+        // and tint the ship itself uses, so a white silhouette picks up its Color while a photo
+        // portrait (Color = White) shows through untouched.
+        var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
+        var portrait = GetNode<TextureRect>("TopBarPanel/TopBar/LivesRow/Portrait");
+        portrait.Texture = CharacterCatalog.Texture(character);
+        portrait.Modulate = character.Color;
+
         _statsLabel = GetNode<Label>("TopBarPanel/TopBar/StatsLabel");
+        _buildPanel = GetNode<PanelContainer>("TopBarPanel/TopBar/BuildPanel");
+        _buildLabel = GetNode<Label>("TopBarPanel/TopBar/BuildPanel/BuildLabel");
         _xpBar = GetNode<ProgressBar>("TopBarPanel/TopBar/XpBar");
         _coinsLabel = GetNode<Label>("TopBarPanel/TopBar/PointsLabel");
         _scoreLabel = GetNode<Label>("TopBarPanel/TopBar/ScoreLabel");
@@ -86,8 +111,8 @@ public partial class HUD : Control
         _streakLabel.HorizontalAlignment = HorizontalAlignment.Right;
         AddChild(_streakLabel);
 
-        // Build class lives inside the stats panel (UpdateStatsLabel), not as a floating label
-        // below the top bar.
+        // Build classes live in their own chip inside the stats panel (see UpdateStatsLabel), not as
+        // a floating label below the top bar.
 
         _scoreDeltaTimer = new Timer();
         _scoreDeltaTimer.OneShot = true;
@@ -384,18 +409,65 @@ public partial class HUD : Control
             $"DAÑO {_player.BulletDamage} · CAD {_player.FireRate:0.0}/s · CRIT {_player.CritChance:0}%\n" +
             $"RANGO {_player.FireRange:0} · BAJAS {GameManager.Instance.EnemiesKilled}";
 
-        // Fixed display order so the panel doesn't re-shuffle as builds unlock — the set grows,
-        // but listing order stays stable from run to run.
-        var names = new List<string>();
-        if (_player.IsClassActive(Player.BuildClass.Gunner)) names.Add("ARTILLERO");
-        if (_player.IsClassActive(Player.BuildClass.Tank)) names.Add("TANQUE");
-        if (_player.IsClassActive(Player.BuildClass.Assassin)) names.Add("ASESINO");
-        if (_player.IsClassActive(Player.BuildClass.Explorer)) names.Add("EXPLORADOR");
-        if (_player.IsClassActive(Player.BuildClass.Pyromaniac)) names.Add("PIRÓMANO");
-        if (_player.IsClassActive(Player.BuildClass.Armored)) names.Add("ACORAZADO");
-        if (_player.IsClassActive(Player.BuildClass.Hunter)) names.Add("CAZADOR");
+        _statsLabel.Text = stats;
 
-        _statsLabel.Text = names.Count == 0 ? stats : $"{stats}\nBUILD {string.Join(" · ", names)}";
+        int activeCount = 0;
+        foreach (var cls in BuildDisplayOrder)
+            if (_player.IsClassActive(cls)) activeCount++;
+
+        _buildPanel.Visible = activeCount > 0;
+        if (activeCount == 0)
+        {
+            _shownBuildCount = 0;
+            return;
+        }
+
+        // Builds only ever accumulate, so the count changing is the only way the text can change.
+        // Everything below is therefore skipped on the vast majority of frames — this method runs
+        // every frame, and rebuilding the list and re-joining the string each time would be pure
+        // garbage for a label that changes maybe five times in a whole run.
+        if (activeCount == _shownBuildCount) return;
+
+        var names = new List<string>(activeCount);
+        foreach (var cls in BuildDisplayOrder)
+            if (_player.IsClassActive(cls)) names.Add(BuildCatalog.Name(cls));
+
+        _buildLabel.Text = $"BUILD  {string.Join(" · ", names)}";
+        _shownBuildCount = activeCount;
+
+        // A real new unlock — including the very first one, which is the one the player has never
+        // seen before and most needs pointed out.
+        PlayBuildFlare();
+    }
+
+    // Fixed listing order, so the chip never re-shuffles as builds unlock: the set grows but each
+    // name keeps its place from run to run. The names themselves come from BuildCatalog, the same
+    // source the builds menu and the loadout panel read, so the three can't drift apart.
+    private static readonly Player.BuildClass[] BuildDisplayOrder =
+    {
+        Player.BuildClass.Gunner,
+        Player.BuildClass.Tank,
+        Player.BuildClass.Assassin,
+        Player.BuildClass.Explorer,
+        Player.BuildClass.Pyromaniac,
+        Player.BuildClass.Armored,
+        Player.BuildClass.Hunter,
+    };
+
+    // A short white strobe on the whole chip, so a build unlocking mid-fight registers even with the
+    // player's eyes on the arena rather than the top bar. Modulate only: the chip lives in a
+    // VBoxContainer, and scaling a Control there would visually overlap its neighbours without the
+    // layout accounting for it.
+    private void PlayBuildFlare()
+    {
+        _buildFlareTween?.Kill();
+        _buildFlareTween = CreateTween();
+
+        for (int i = 0; i < 3; i++)
+        {
+            _buildFlareTween.TweenProperty(_buildPanel, "modulate", new Color(2.2f, 2.2f, 2.2f), 0.09f);
+            _buildFlareTween.TweenProperty(_buildPanel, "modulate", Colors.White, 0.16f);
+        }
     }
 
     private void OnXpChanged(int xp, int xpToNext)

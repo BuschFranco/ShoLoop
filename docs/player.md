@@ -2,6 +2,35 @@
 
 See [Player.cs](../Scripts/Player/Player.cs). Movement/joystick basics aren't covered here — this is about the systems added on top: auto-fire range, lives, shield, level-up nova, orbit blades, the companion drone, the Laser, and Ultimates.
 
+## Characters
+
+Picked before a run at [CharacterSelectMenu](../Scenes/UI/CharacterSelectMenu.tscn), applied in one place — `Player._Ready` reads `GameManager.SelectedCharacter`, looks it up in [CharacterCatalog](../Scripts/Player/CharacterCatalog.cs), and multiplies `MoveSpeed`/`BulletDamage` before anything else snapshots those fields.
+
+The catalog deliberately only varies those two stats, because they're the ones with no absolute ceiling of their own (unlike `MaxFireRate`/`MaxFireRange`/`MaxLivesCap`) — so a character is a playstyle preference, never a shortcut past the balance caps. Of the built-in cast only Equilibrado/Centella/Coloso and **Conrado** (`0.5×` move speed) have non-1.0 multipliers; the rest of the portrait characters are purely cosmetic.
+
+Identity is a **string slug**, not an enum, because player-created characters have no compile-time identity to enumerate. `GameManager` persists it as `selected_character_slug` in `user://settings.cfg`, falling back to the legacy integer index (`selected_character`) when that key is absent so an existing install keeps its pick.
+
+### Conrado and the enemy speed cap
+
+Worth knowing before retuning either: a slower character does **not** become easier to catch. `Enemy.FinishMovement` caps every enemy's sustained chase speed at `player.MoveSpeed * 0.9` (see [enemies.md](enemies.md)), so halving the player's speed halves the cap with it and the relative gap is unchanged. Conrado's handicap lands entirely on things that *don't* scale with the player: enemy bullets and missiles (fixed speed), arena traversal, and the timed round events. That's deliberate — pinning the cap to a fixed baseline instead would make enemies literally uncatchable-by-you at half speed, which is the exact bug the cap exists to prevent.
+
+### Custom characters
+
+The player can add their own: [CharacterCreator](../Scripts/UI/CharacterCreator.tscn) takes an image off the device, a name and a description, and [CustomCharacterStore](../Scripts/Player/CustomCharacterStore.cs) writes two things under `user://` (local only, never bundled, never uploaded):
+
+| Path | Contents |
+|---|---|
+| `user://characters.cfg` | one section per character (slug `custom_N`), holding `name` and `description` |
+| `user://characters/<slug>.png` | the processed 144×144 portrait |
+
+Three things about it that aren't obvious:
+
+- **Multipliers are hardcoded to 1.0 on load**, not read from the file. `characters.cfg` is plain text the player can edit, so reading stats back out of it would be shipping a cheat menu.
+- **The portrait is processed on save, not on load.** `MakePortrait` centre-crops to a square, resizes, then masks to a circle with a feathered rim and a neon ring — mirroring `tools/prep_character_sprite.py`, so a bundled portrait and a player-made one are the same kind of asset. Doing it per-load would redo that work every time the carousel stepped.
+- **`user://` textures can't be `GD.Load`ed** — nothing there goes through the import pipeline. They have to be decoded into an `ImageTexture` at runtime, which is why every consumer (the ship, the HUD portrait, the carousel) goes through `CharacterCatalog.Texture(info)` instead of loading `SpritePath` itself. That method also caches, since all three ask for the same texture.
+
+Slugs are sequential (`custom_1`, `custom_2`, …) and **reuse the lowest free number**, so a character created after a deletion lands in the middle of the list rather than at the end — which is why `Create` returns the new slug instead of letting the caller assume it's the last entry.
+
 ## Controls
 
 - **Movement**: the virtual joystick, or **WASD** on a keyboard. `GetKeyboardDirection()` (polled in `_PhysicsProcess` via `Input.IsKeyPressed`) is only consulted when the joystick itself reports `Vector2.Zero`, so touch input always wins if both are somehow active — they never fight each other.

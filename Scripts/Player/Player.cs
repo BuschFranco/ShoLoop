@@ -208,6 +208,18 @@ public partial class Player : CharacterBody2D
     private float _blinkTimer = 0f;
     private const float BlinkInterval = 0.1f;
     private Sprite2D _visual;
+
+    // The ship's on-screen size lives in the Visual's own Scale rather than in vertex coordinates
+    // the way it did when Visual was a Polygon2D. The breathe loop below therefore has to return
+    // here, not to Vector2.One — doing the latter blew the ship up to its texture's full resolution
+    // within the first second of every run.
+    private Vector2 _visualBaseScale = Vector2.One;
+
+    // How wide the ship draws, in world px, whatever the selected character's texture resolution is
+    // (_Ready divides by the texture's longest side to get there). Matches the 36px the original
+    // Polygon2D triangle spanned, which is roughly the 16px-radius collision circle — the visual
+    // and the hitbox agreeing is what keeps a near miss reading as a near miss.
+    private const float CharacterSpriteWorldSize = 36f;
     private Vector2 _knockbackVelocity = Vector2.Zero;
     private const float KnockbackForce = 220f;
     private const float KnockbackDecay = 900f;
@@ -285,8 +297,26 @@ public partial class Player : CharacterBody2D
         _joystick = GetTree().GetFirstNodeInGroup("virtual_joystick") as VirtualJoystick;
 
         _visual = GetNode<Sprite2D>("Visual");
-        _visual.Texture = GD.Load<Texture2D>(character.SpritePath);
+        _visual.Texture = CharacterCatalog.Texture(character);
         _visual.Modulate = character.Color;
+
+        // Scale is derived from the texture rather than taken from the scene, because the texture is
+        // swapped per character and the scene's own value can only ever be right for one of them.
+        // Leaving it fixed meant any sprite authored at a different resolution rendered at the wrong
+        // size — a 1024px photo would come out roughly seven times the ship's size. Deriving it here
+        // means a portrait can be dropped in at whatever resolution it happens to be and still
+        // occupy exactly CharacterSpriteWorldSize on screen, matching the ship and the hurtbox.
+        var texture = _visual.Texture;
+        if (texture != null)
+        {
+            float longestSide = Mathf.Max(texture.GetWidth(), texture.GetHeight());
+            if (longestSide > 0f)
+                _visual.Scale = Vector2.One * (CharacterSpriteWorldSize / longestSide);
+        }
+
+        // Snapshotted after the scale is settled — the breathe loop returns to this value, so
+        // capturing the scene's placeholder instead would undo the line above on the first tween.
+        _visualBaseScale = _visual.Scale;
 
         _shieldAura = GetNode<Polygon2D>("ShieldAura");
         var pulse = CreateTween();
@@ -305,9 +335,9 @@ public partial class Player : CharacterBody2D
     {
         var breathe = CreateTween();
         breathe.SetLoops();
-        breathe.TweenProperty(_visual, "scale", Vector2.One * 1.06f, 0.9f)
+        breathe.TweenProperty(_visual, "scale", _visualBaseScale * 1.06f, 0.9f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-        breathe.TweenProperty(_visual, "scale", Vector2.One, 0.9f)
+        breathe.TweenProperty(_visual, "scale", _visualBaseScale, 0.9f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 
         // The ring slowly counter-rotates — a static circle reads as UI, a drifting one as a field.
