@@ -86,9 +86,21 @@ public static class CustomCharacterStore
         if (description.Length > MaxDescriptionLength) { error = $"La descripción no puede pasar de {MaxDescriptionLength} caracteres."; return null; }
         if (string.IsNullOrEmpty(sourcePath)) { error = "Elegí una imagen."; return null; }
 
-        string globalSourcePath = ProjectSettings.GlobalizePath(sourcePath);
-        var source = Image.LoadFromFile(globalSourcePath);
-        if (source == null) source = Image.LoadFromFile(sourcePath);
+        var source = Image.LoadFromFile(sourcePath);
+        if (source == null)
+        {
+            byte[] imgBytes = null;
+            try { imgBytes = System.IO.File.ReadAllBytes(sourcePath); }
+            catch { }
+            if (imgBytes != null && imgBytes.Length > 0)
+            {
+                string tmp = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), "sholoop_src.png");
+                System.IO.File.WriteAllBytes(tmp, imgBytes);
+                source = Image.LoadFromFile(tmp);
+                try { System.IO.File.Delete(tmp); } catch { }
+            }
+        }
         if (source == null) { error = "No pude leer esa imagen."; return null; }
 
         var config = new ConfigFile();

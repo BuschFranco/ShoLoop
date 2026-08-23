@@ -127,13 +127,12 @@ public partial class CharacterCreator : Control
             return;
         }
 
-        string tmpPath = "user://_gallery_tmp.png";
-        var tmpFile = FileAccess.Open(tmpPath, FileAccess.ModeFlags.Write);
-        tmpFile.StoreBuffer(bytes);
-        tmpFile.Close();
+        string tmpGlobal = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "sholoop_gallery.png");
+        System.IO.File.WriteAllBytes(tmpGlobal, bytes);
 
-        var image = Image.LoadFromFile(tmpPath);
-        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(tmpPath));
+        var image = Image.LoadFromFile(tmpGlobal);
+        try { System.IO.File.Delete(tmpGlobal); } catch { }
 
         if (image == null)
         {
