@@ -86,7 +86,9 @@ public static class CustomCharacterStore
         if (description.Length > MaxDescriptionLength) { error = $"La descripción no puede pasar de {MaxDescriptionLength} caracteres."; return null; }
         if (string.IsNullOrEmpty(sourcePath)) { error = "Elegí una imagen."; return null; }
 
-        var source = Image.LoadFromFile(sourcePath);
+        string globalSourcePath = ProjectSettings.GlobalizePath(sourcePath);
+        var source = Image.LoadFromFile(globalSourcePath);
+        if (source == null) source = Image.LoadFromFile(sourcePath);
         if (source == null) { error = "No pude leer esa imagen."; return null; }
 
         var config = new ConfigFile();

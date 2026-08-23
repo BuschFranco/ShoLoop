@@ -118,7 +118,12 @@ public partial class CharacterCreator : Control
         }
 
         const string tempPath = "user://gallery_pick.png";
-        var image = Image.LoadFromFile(tempPath);
+        string globalPath = ProjectSettings.GlobalizePath(tempPath);
+
+        var image = Image.LoadFromFile(globalPath);
+        if (image == null)
+            image = Image.LoadFromFile(tempPath);
+
         if (image == null)
         {
             ShowError("No pude leer esa imagen.");
