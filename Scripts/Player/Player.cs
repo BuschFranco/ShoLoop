@@ -242,6 +242,7 @@ public partial class Player : CharacterBody2D
     // makes the turn look like banking instead of the whole ship instantly snapping to face a
     // direction change.
     private const float FacingTurnRate = 16f;
+    private bool _isCustomCharacter;
 
     // Movement ramps in and out instead of snapping between full speed and a dead stop, so the
     // player carries a little inertia. Both rates are px/s²: at MoveSpeed 265 that's ~0.15s to
@@ -287,6 +288,7 @@ public partial class Player : CharacterBody2D
         // Applied before anything below snapshots or consumes these fields, so the chosen character
         // shifts the run's whole stat curve rather than being overwritten by it.
         var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
+        _isCustomCharacter = character.IsCustom;
         MoveSpeed *= character.MoveSpeedMultiplier;
         BulletDamage = Mathf.RoundToInt(BulletDamage * character.BulletDamageMultiplier);
         CoinDropBonus = character.CoinDropBonus;
@@ -498,6 +500,7 @@ public partial class Player : CharacterBody2D
     // instead of resetting to some default — a stationary ship has no "forward" to snap back to.
     private void UpdateFacing(Vector2 inputDir, float delta)
     {
+        if (_isCustomCharacter) return;
         Vector2 facing = inputDir != Vector2.Zero ? inputDir
             : (_moveVelocity.LengthSquared() > 25f ? _moveVelocity : Vector2.Zero);
         if (facing == Vector2.Zero) return;
