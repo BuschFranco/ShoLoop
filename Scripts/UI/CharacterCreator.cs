@@ -1,5 +1,7 @@
 namespace ShooterLoop;
 
+using Godot;
+
 // "Crear piloto": pick an image off the device, type a name and a description, and it becomes a
 // selectable character stored locally (CustomCharacterStore). Opened from CharacterSelectMenu and
 // layered over it.
@@ -19,6 +21,7 @@ public partial class CharacterCreator : Control
     private Button _saveButton;
 
     private string _pickedImagePath = "";
+    private Timer _galleryPollTimer;
 
     public override void _Ready()
     {
@@ -29,13 +32,32 @@ public partial class CharacterCreator : Control
         _fileDialog = GetNode<FileDialog>("FileDialog");
         _saveButton = GetNode<Button>("CenterContainer/Panel/Box/SaveButton");
 
-        GetNode<Button>("CenterContainer/Panel/Box/Top/Side/ImageButton").Pressed += () => _fileDialog.PopupCentered();
+        GetNode<Button>("CenterContainer/Panel/Box/Top/Side/ImageButton").Pressed += OnImageButtonPressed;
         _saveButton.Pressed += Save;
         GetNode<Button>("CenterContainer/Panel/Box/CancelButton").Pressed += () => Visible = false;
 
         _fileDialog.FileSelected += OnFileSelected;
 
         _nameEdit.MaxLength = CustomCharacterStore.MaxNameLength;
+
+        if (OS.HasFeature("android"))
+        {
+            _galleryPollTimer = new Timer();
+            _galleryPollTimer.WaitTime = 0.15;
+            _galleryPollTimer.OneShot = true;
+            _galleryPollTimer.Timeout += OnGalleryPoll;
+            AddChild(_galleryPollTimer);
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        if (_galleryPollTimer != null)
+        {
+            _galleryPollTimer.Timeout -= OnGalleryPoll;
+            _galleryPollTimer.QueueFree();
+            _galleryPollTimer = null;
+        }
     }
 
     public void Open()
@@ -47,6 +69,65 @@ public partial class CharacterCreator : Control
         ShowError("");
         Visible = true;
         _nameEdit.GrabFocus();
+    }
+
+    private void OnImageButtonPressed()
+    {
+        if (OS.HasFeature("android"))
+        {
+            RequestNativeGallery();
+        }
+        else
+        {
+            _fileDialog.PopupCentered();
+        }
+    }
+
+    private void RequestNativeGallery()
+    {
+        using var flag = FileAccess.Open("user://.gallery_request", FileAccess.ModeFlags.Write);
+        if (flag == null)
+        {
+            ShowError("No pude abrir la galería.");
+            return;
+        }
+        _galleryPollTimer.Start();
+    }
+
+    private void OnGalleryPoll()
+    {
+        using var ready = FileAccess.Open("user://.gallery_ready", FileAccess.ModeFlags.Read);
+        if (ready == null)
+        {
+            _galleryPollTimer.Start();
+            return;
+        }
+
+        string status = ready.GetAsText().Trim();
+        ready.Close();
+        using (var dir = DirAccess.Open("user://"))
+            dir?.Remove(".gallery_ready");
+
+        if (status == "cancelled")
+            return;
+
+        if (status != "ok")
+        {
+            ShowError("No pude cargar la imagen.");
+            return;
+        }
+
+        const string tempPath = "user://gallery_pick.png";
+        var image = Image.LoadFromFile(tempPath);
+        if (image == null)
+        {
+            ShowError("No pude leer esa imagen.");
+            return;
+        }
+
+        _pickedImagePath = tempPath;
+        _preview.Texture = ImageTexture.CreateFromImage(image);
+        ShowError("");
     }
 
     private void OnFileSelected(string path)
