@@ -103,34 +103,45 @@ public partial class CharacterCreator : Control
             return;
         }
 
-        string status = ready.GetAsText().Trim();
+        string readyText = ready.GetAsText().Trim();
         ready.Close();
         using (var dir = DirAccess.Open("user://"))
             dir?.Remove(".gallery_ready");
 
-        if (status == "cancelled")
-            return;
-
-        if (status != "ok")
+        if (readyText == "cancelled" || readyText == "failed")
         {
-            ShowError("No pude cargar la imagen.");
+            if (readyText == "failed")
+                ShowError("No pude cargar la imagen.");
             return;
         }
 
-        const string tempPath = "user://gallery_pick.png";
-        string globalPath = ProjectSettings.GlobalizePath(tempPath);
+        string absolutePath = readyText;
 
-        var image = Image.LoadFromFile(globalPath);
-        if (image == null)
-            image = Image.LoadFromFile(tempPath);
+        byte[] bytes = null;
+        try { bytes = System.IO.File.ReadAllBytes(absolutePath); }
+        catch { }
 
-        if (image == null)
+        if (bytes == null || bytes.Length == 0)
         {
             ShowError("No pude leer esa imagen.");
             return;
         }
 
-        _pickedImagePath = tempPath;
+        string tmpPath = "user://_gallery_tmp.png";
+        var tmpFile = FileAccess.Open(tmpPath, FileAccess.ModeFlags.Write);
+        tmpFile.StoreBuffer(bytes);
+        tmpFile.Close();
+
+        var image = Image.LoadFromFile(tmpPath);
+        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(tmpPath));
+
+        if (image == null)
+        {
+            ShowError("No pude decodificar la imagen.");
+            return;
+        }
+
+        _pickedImagePath = absolutePath;
         _preview.Texture = ImageTexture.CreateFromImage(image);
         ShowError("");
     }
