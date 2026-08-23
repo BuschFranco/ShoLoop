@@ -87,7 +87,7 @@ public static class CustomCharacterStore
         if (string.IsNullOrEmpty(sourcePath)) { error = "Elegí una imagen."; return null; }
 
         var source = Image.LoadFromFile(sourcePath);
-        if (source == null)
+        if (source == null && sourcePath.StartsWith("/"))
         {
             byte[] imgBytes = null;
             try { imgBytes = System.IO.File.ReadAllBytes(sourcePath); }
