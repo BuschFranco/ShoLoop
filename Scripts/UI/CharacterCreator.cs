@@ -117,9 +117,14 @@ public partial class CharacterCreator : Control
 
         string absolutePath = readyText;
 
+        GD.Print($"[Gallery] Absolute path from Java: {absolutePath}");
+        GD.Print($"[Gallery] File exists: {System.IO.File.Exists(absolutePath)}");
+
         byte[] bytes = null;
         try { bytes = System.IO.File.ReadAllBytes(absolutePath); }
-        catch { }
+        catch (System.Exception ex) { GD.PrintErr($"[Gallery] ReadAllBytes exception: {ex.Message}"); }
+
+        GD.Print($"[Gallery] Bytes read: {bytes?.Length ?? 0}");
 
         if (bytes == null || bytes.Length == 0)
         {
@@ -130,8 +135,27 @@ public partial class CharacterCreator : Control
         string tmpGlobal = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(), "sholoop_gallery.png");
         System.IO.File.WriteAllBytes(tmpGlobal, bytes);
+        GD.Print($"[Gallery] Wrote temp to: {tmpGlobal}");
 
         var image = Image.LoadFromFile(tmpGlobal);
+        GD.Print($"[Gallery] Image.LoadFromFile result: {image != null}");
+
+        if (image == null)
+        {
+            string altPath = absolutePath;
+            GD.Print($"[Gallery] Trying absolute path directly: {altPath}");
+            image = Image.LoadFromFile(altPath);
+            GD.Print($"[Gallery] Direct load result: {image != null}");
+        }
+
+        if (image == null)
+        {
+            string userPath = "user://gallery_pick.png";
+            GD.Print($"[Gallery] Trying user:// path: {userPath}");
+            image = Image.LoadFromFile(userPath);
+            GD.Print($"[Gallery] user:// load result: {image != null}");
+        }
+
         try { System.IO.File.Delete(tmpGlobal); } catch { }
 
         if (image == null)
