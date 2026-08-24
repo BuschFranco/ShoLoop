@@ -65,3 +65,25 @@ value = 2000
 [node name="LoadoutMenu" parent="CenterContainer/HBox" instance=ExtResource("2")]
 h_separation = 24
 v_separation = 4
+
+[node name="ResumeCountdownLabel" type="Label" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -90.0
+offset_right = 250.0
+offset_bottom = 90.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 40
+theme_override_colors/font_color = Color(1, 0.85, 0.15, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "Reanudando en...
+3"

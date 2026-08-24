@@ -12,10 +12,15 @@ public partial class Shop : Control
     private Label _coinsLabel;
     private VBoxContainer _cardsContainer;
     private Button _continueButton;
+    private Button _reloadButton;
     private readonly List<RewardCard> _cards = new();
     private List<UpgradeData> _items;
     private bool[] _resolved;
     private Tween _coinsTween;
+
+    // 20% of the coin balance at the moment the shop opened — fixed for the whole visit, so buying
+    // something (which lowers the balance) never changes what a reroll costs mid-visit.
+    private int _reloadCost;
 
     // Guards the auto-close path from firing twice (it would call StartNextRound twice).
     private bool _closing;
@@ -33,9 +38,11 @@ public partial class Shop : Control
         GetNode<PanelContainer>("CenterContainer/Panel").AddThemeStyleboxOverride("panel", PanelStyle);
         _coinsLabel = GetNode<Label>("CenterContainer/Panel/VBoxContainer/CoinsRow/CoinsLabel");
         _cardsContainer = GetNode<VBoxContainer>("CenterContainer/Panel/VBoxContainer/CardsContainer");
-        _continueButton = GetNode<Button>("CenterContainer/Panel/VBoxContainer/ContinueButton");
+        _continueButton = GetNode<Button>("CenterContainer/Panel/VBoxContainer/ButtonsRow/ContinueButton");
+        _reloadButton = GetNode<Button>("CenterContainer/Panel/VBoxContainer/ButtonsRow/ReloadButton");
 
         _continueButton.Pressed += OnContinuePressed;
+        _reloadButton.Pressed += OnReloadPressed;
         GameManager.Instance.CoinsChanged += OnCoinsChanged;
     }
 
@@ -48,26 +55,39 @@ public partial class Shop : Control
 
     public void Open()
     {
+        _closing = false;
+        _purchasedThisVisit = false;
+
+        // Fixed for the whole visit — see the field comment on _reloadCost.
+        _reloadCost = Mathf.RoundToInt(GameManager.Instance.Coins * 0.2f);
+        _reloadButton.Text = $"Recargar ({_reloadCost})";
+
+        RollItems();
+        UpdateCoinsLabel(GameManager.Instance.Coins);
+        Visible = true;
+
+        CheckAutoAdvance();
+    }
+
+    // Rolls a fresh set of 3 offers and rebuilds the cards for them. Shared by Open() and the Reload
+    // button — a reroll is exactly "open again" for the offers themselves, just without touching the
+    // per-visit state (_closing, _purchasedThisVisit, _reloadCost) that Open() alone owns.
+    private void RollItems()
+    {
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
         _items = UpgradeData.PickRandomTiered(3, GameManager.Instance.RoundNumber, RewardSource.Shop, isUseless: player != null ? player.IsRewardUseless : null, fortuneBonus: player?.FortuneBonus ?? 0f);
         _resolved = new bool[_items.Count];
-        _closing = false;
-        _purchasedThisVisit = false;
         for (int i = 0; i < _items.Count; i++)
             _resolved[i] = player != null && player.IsRewardUseless(_items[i]);
 
-        // Cards are instantiated per open rather than being three fixed slots in the scene. PickRandomTiered
+        // Cards are instantiated per roll rather than being three fixed slots in the scene. PickRandomTiered
         // can legitimately return fewer than 3 offers when the pool runs dry, and the old fixed slots left
         // the leftovers on screen as empty cards.
         BuildCards();
         RefreshCards();
-        UpdateCoinsLabel(GameManager.Instance.Coins);
-        Visible = true;
 
         for (int i = 0; i < _cards.Count; i++)
             _cards[i].PlayAppearFlare(i * 0.08f);
-
-        CheckAutoAdvance();
     }
 
     private void BuildCards()
@@ -205,6 +225,22 @@ public partial class Shop : Control
             _closing = true;
             OnContinuePressed();
         }
+    }
+
+    // Costs a fixed 20% of the coins the player had when the shop opened (_reloadCost), regardless of
+    // what the balance is now — see the field comment. Doesn't touch _purchasedThisVisit: rerolling
+    // isn't "having acted on an offer", so it shouldn't by itself make CheckAutoAdvance start closing
+    // the shop — but it's still worth re-checking in case an earlier purchase already unlocked it and
+    // this reroll happens to leave nothing pending/affordable.
+    private void OnReloadPressed()
+    {
+        if (GameManager.Instance.Coins < _reloadCost) return;
+
+        GameManager.Instance.SpendCoins(_reloadCost);
+        RollItems();
+        PulseCoins(_reloadCost);
+
+        CheckAutoAdvance();
     }
 
     private bool AnyPendingAffordable()

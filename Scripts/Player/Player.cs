@@ -553,7 +553,7 @@ public partial class Player : CharacterBody2D
         // Any hit that lands (shield or heart) resets the kill streak.
         ResetKillStreak();
 
-        // Armored class: reflect 30 damage to nearby enemies on hit (no cooldown).
+        // Armored class: reflect 60 damage to nearby enemies on hit (no cooldown).
         if (IsClassActive(BuildClass.Armored) && sourcePosition.HasValue)
         {
             var enemies = GetTree().GetNodesInGroup("enemies");

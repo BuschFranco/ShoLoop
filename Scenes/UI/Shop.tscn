@@ -57,8 +57,20 @@ text = "0 monedas"
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ContinueButton" type="Button" parent="CenterContainer/Panel/VBoxContainer"]
+[node name="ButtonsRow" type="HBoxContainer" parent="CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ReloadButton" type="Button" parent="CenterContainer/Panel/VBoxContainer/ButtonsRow"]
 custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Recargar"
+
+[node name="ContinueButton" type="Button" parent="CenterContainer/Panel/VBoxContainer/ButtonsRow"]
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 16
 text = "Siguiente Ronda"
