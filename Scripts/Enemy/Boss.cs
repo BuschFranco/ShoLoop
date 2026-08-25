@@ -6,6 +6,11 @@ namespace ShooterLoop;
 // rolls ONE movement pattern once at spawn and commits to it for its whole life, so different boss
 // rounds actually read as different encounters instead of every boss being the same straight-line
 // chaser. See docs/enemies.md for the full breakdown of what each pattern does and why.
+//
+// On top of the movement pattern, every boss ALSO rolls a random fan of AttackAbility instances
+// (see the Attack abilities region below) — a second, independent axis of variety layered on the
+// same "roll once, commit for the fight" philosophy. At 50% HP it additionally rolls one random
+// Phase2 effect, once — see TryTriggerPhase2.
 public partial class Boss : ShooterEnemy
 {
     private enum Pattern { Chase, Charge, Lunge }
@@ -57,16 +62,20 @@ public partial class Boss : ShooterEnemy
         // not every boss should feel gimmicked, and it keeps Charge/Lunge from feeling like "the"
         // boss pattern rather than one of a few.
         _pattern = (Pattern)_rng.Next(3);
-        if (_pattern == Pattern.Chase) return;
+        if (_pattern != Pattern.Chase)
+        {
+            _phaseTimer = new Timer { OneShot = true };
+            AddChild(_phaseTimer);
+            _phaseTimer.Timeout += OnPhaseTimeout;
 
-        _phaseTimer = new Timer { OneShot = true };
-        AddChild(_phaseTimer);
-        _phaseTimer.Timeout += OnPhaseTimeout;
+            // Charge's Idle is a fixed delay before its next windup. Lunge's Idle has no timer at
+            // all — it just sits in Phase.Idle until ComputeLungeMoveDir's per-frame proximity
+            // check fires it.
+            if (_pattern == Pattern.Charge)
+                EnterPhase(Phase.Idle, ChargeIdleDuration);
+        }
 
-        // Charge's Idle is a fixed delay before its next windup. Lunge's Idle has no timer at all —
-        // it just sits in Phase.Idle until ComputeLungeMoveDir's per-frame proximity check fires it.
-        if (_pattern == Pattern.Charge)
-            EnterPhase(Phase.Idle, ChargeIdleDuration);
+        RollAbilities();
     }
 
     private void EnterPhase(Phase phase, float duration)
@@ -202,12 +211,22 @@ public partial class Boss : ShooterEnemy
         TickBurn((float)delta);
         if (CurrentHp <= 0) return;
 
-        Vector2 moveDir = _pattern switch
-        {
-            Pattern.Charge => ComputeChargeMoveDir(),
-            Pattern.Lunge => ComputeLungeMoveDir(),
-            _ => ComputeAvoidanceDirection(ChaseDirection()),
-        };
+        TryTriggerPhase2();
+
+        if (_spinLaserExecuting)
+            AdvanceSpinLaser((float)delta);
+
+        // Channeling an attack ability freezes movement entirely, same reasoning as Charge/Lunge's
+        // own Windup freeze: a boss that keeps chasing while unleashing a telegraphed attack
+        // undercuts the "get ready to dodge" read this whole system is built around.
+        Vector2 moveDir = _channeling
+            ? Vector2.Zero
+            : _pattern switch
+            {
+                Pattern.Charge => ComputeChargeMoveDir(),
+                Pattern.Lunge => ComputeLungeMoveDir(),
+                _ => ComputeAvoidanceDirection(ChaseDirection()),
+            };
 
         FinishMovement(moveDir, delta);
     }
@@ -247,5 +266,396 @@ public partial class Boss : ShooterEnemy
     {
         ResetTelegraph();
         return _dashDirection * LungeSpeedMultiplier;
+    }
+
+    // --- Attack abilities ---
+    //
+    // A second, independent axis of variety on top of the movement Pattern above: every boss rolls
+    // AbilityCount distinct AttackAbility values from the full pool at spawn and commits to that
+    // fan for its whole life, same "roll once" philosophy as Pattern. Each active ability runs on
+    // its own repeating Timer; the ones NOT rolled simply never get a timer and never fire.
+    //
+    // Every ability follows the same Windup-then-Execute shape as Charge/Lunge (telegraph tint +
+    // floating label, then the actual effect after a beat), and _channeling gates movement AND
+    // every other ability from firing at the same time — only one "special thing" is ever visible
+    // at once, which is what keeps every telegraph readable.
+    private enum AttackAbility { FanBarrage, MeteorRain, ShockwaveRing, MineDrop, SummonAdds, SpinLaser }
+
+    private const int AbilityCount = 2;
+    private const float AbilityInitialDelayBase = 3.5f;
+    private const float AbilityInitialDelayStagger = 2.5f;
+    private const float AbilityRetryDelay = 0.6f;
+
+    private static readonly AttackAbility[] AllAbilities = Enum.GetValues<AttackAbility>();
+
+    private static readonly Dictionary<AttackAbility, string> AbilityLabels = new()
+    {
+        [AttackAbility.FanBarrage] = "¡RÁFAGA!",
+        [AttackAbility.MeteorRain] = "¡LLUVIA DE METEOROS!",
+        [AttackAbility.ShockwaveRing] = "¡ONDA DEVASTADORA!",
+        [AttackAbility.MineDrop] = "¡CAMPO MINADO!",
+        [AttackAbility.SummonAdds] = "¡REFUERZOS!",
+        [AttackAbility.SpinLaser] = "¡RAYO GIRATORIO!",
+    };
+
+    private static readonly Dictionary<AttackAbility, float> AbilityCooldowns = new()
+    {
+        [AttackAbility.FanBarrage] = 6.5f,
+        [AttackAbility.MeteorRain] = 9.5f,
+        [AttackAbility.ShockwaveRing] = 8.5f,
+        [AttackAbility.MineDrop] = 11f,
+        [AttackAbility.SummonAdds] = 15f,
+        [AttackAbility.SpinLaser] = 12f,
+    };
+
+    private static readonly Dictionary<AttackAbility, float> AbilityWindups = new()
+    {
+        [AttackAbility.FanBarrage] = 0.4f,
+        [AttackAbility.MeteorRain] = 0.5f,
+        [AttackAbility.ShockwaveRing] = 0.9f,
+        [AttackAbility.MineDrop] = 0.4f,
+        [AttackAbility.SummonAdds] = 0.4f,
+        [AttackAbility.SpinLaser] = 0.6f,
+    };
+
+    private readonly HashSet<AttackAbility> _activeAbilities = new();
+    private readonly Dictionary<AttackAbility, Timer> _abilityTimers = new();
+    private bool _channeling;
+
+    private void RollAbilities()
+    {
+        var pool = new List<AttackAbility>(AllAbilities);
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int j = _rng.Next(i + 1);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+
+        for (int i = 0; i < Mathf.Min(AbilityCount, pool.Count); i++)
+            ActivateAbility(pool[i], AbilityInitialDelayBase + i * AbilityInitialDelayStagger);
+    }
+
+    private void ActivateAbility(AttackAbility ability, float initialDelay)
+    {
+        if (_activeAbilities.Contains(ability)) return;
+        _activeAbilities.Add(ability);
+
+        var timer = new Timer { OneShot = true };
+        AddChild(timer);
+        timer.Timeout += () => BeginAbility(ability);
+        _abilityTimers[ability] = timer;
+
+        timer.WaitTime = initialDelay;
+        timer.Start();
+    }
+
+    private void RestartAbilityTimer(AttackAbility ability, float delay)
+    {
+        if (_abilityTimers.TryGetValue(ability, out var timer))
+        {
+            timer.WaitTime = Mathf.Max(0.05f, delay);
+            timer.Start();
+        }
+    }
+
+    private void BeginAbility(AttackAbility ability)
+    {
+        // Busy guard: if the boss is already channeling another ability, or mid-dash on its
+        // movement pattern, defer briefly rather than firing on top of it — self-healing, no
+        // queue to manage, and it keeps two telegraphs from ever overlapping on screen.
+        bool patternBusy = _pattern != Pattern.Chase && _phase != Phase.Idle;
+        if (_channeling || patternBusy || !EnsurePlayer())
+        {
+            RestartAbilityTimer(ability, AbilityRetryDelay);
+            return;
+        }
+
+        _channeling = true;
+        float windup = AbilityWindups[ability];
+        PlayTelegraph(windup);
+        SpawnFloatingLabel(AbilityLabels[ability], TelegraphTint, 22, new Vector2(-70f, HealthBarOffset - 30f));
+
+        var windupTimer = GetTree().CreateTimer(windup);
+        windupTimer.Timeout += () => ExecuteAbility(ability);
+    }
+
+    private void ExecuteAbility(AttackAbility ability)
+    {
+        if (!IsInstanceValid(this) || CurrentHp <= 0) return;   // died mid-windup
+
+        ResetTelegraph();
+
+        // SpinLaser is channeled (it runs for a duration via AdvanceSpinLaser, ticked from
+        // _PhysicsProcess) rather than instantaneous — it clears _channeling and restarts its own
+        // cooldown timer itself once the sweep finishes, so it returns early here instead of
+        // falling through to the shared instantaneous-ability cleanup below.
+        if (ability == AttackAbility.SpinLaser)
+        {
+            BeginSpinLaserExecute();
+            return;
+        }
+
+        switch (ability)
+        {
+            case AttackAbility.FanBarrage: ExecuteFanBarrage(); break;
+            case AttackAbility.MeteorRain: ExecuteMeteorRain(); break;
+            case AttackAbility.ShockwaveRing: ExecuteShockwaveRing(); break;
+            case AttackAbility.MineDrop: ExecuteMineDrop(); break;
+            case AttackAbility.SummonAdds: ExecuteSummonAdds(); break;
+        }
+
+        _channeling = false;
+        RestartAbilityTimer(ability, AbilityCooldowns[ability]);
+    }
+
+    // Five bullets fanned around the aimed direction rather than one — a burst attack distinct
+    // from the baseline single-target fire the boss already ticks on its own timer.
+    private const int FanBarrageBulletCount = 5;
+    private const float FanBarrageSpreadDegrees = 16f;
+
+    private void ExecuteFanBarrage()
+    {
+        if (EnemyBulletScene == null || !EnsurePlayer()) return;
+
+        Vector2 baseDir = (PlayerNode.GlobalPosition - GlobalPosition).Normalized();
+        int half = FanBarrageBulletCount / 2;
+        for (int i = -half; i <= half; i++)
+        {
+            var bullet = EnemyBulletScene.Instantiate<EnemyBullet>();
+            bullet.GlobalPosition = GlobalPosition;
+            bullet.Direction = baseDir.Rotated(Mathf.DegToRad(FanBarrageSpreadDegrees * i));
+            GetParent().AddChild(bullet);
+        }
+    }
+
+    // Scattered around the PLAYER (not the boss) so it's a real positioning threat rather than
+    // guaranteed to land on empty ground — reuses MissileZone.cs verbatim (fill-then-detonate
+    // telegraph), the exact same class the Missile Strike round event already spawns.
+    private const int MeteorCount = 3;
+    private const float MeteorScatterRadius = 150f;
+
+    private void ExecuteMeteorRain()
+    {
+        if (!EnsurePlayer()) return;
+        if (GetTree().CurrentScene is not Node2D parent) return;
+
+        for (int i = 0; i < MeteorCount; i++)
+        {
+            float angle = (float)(_rng.NextDouble() * Mathf.Tau);
+            float dist = (float)(_rng.NextDouble() * MeteorScatterRadius);
+            var zone = new MissileZone();
+            zone.AddToGroup("round_event_hazards");   // swept for free by RoundEventDirector.EndActiveEvent at round end
+            parent.AddChild(zone);
+            zone.GlobalPosition = PlayerNode.GlobalPosition + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * dist;
+        }
+    }
+
+    // A single big ring centered on the boss itself — the "don't stand next to me" answer to a
+    // player who just closes distance and facetanks. Long windup (0.9s) since it's otherwise
+    // undodgeable once it pops.
+    private const float ShockwaveRadius = 190f;
+
+    private void ExecuteShockwaveRing()
+    {
+        if (EnsurePlayer() && GlobalPosition.DistanceTo(PlayerNode.GlobalPosition) <= ShockwaveRadius
+            && PlayerNode is Player player)
+        {
+            player.TakeHit(GlobalPosition);
+        }
+
+        SpawnShockwaveVisual();
+    }
+
+    private void SpawnShockwaveVisual()
+    {
+        var parent = GetParent();
+        if (parent == null) return;
+
+        var visual = new Polygon2D();
+        var points = new Vector2[28];
+        for (int i = 0; i < points.Length; i++)
+        {
+            float angle = i / (float)points.Length * Mathf.Tau;
+            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * ShockwaveRadius;
+        }
+        visual.Polygon = points;
+        visual.Color = Palette.EnemyBullet;
+        visual.ZIndex = 5;
+        parent.AddChild(visual);
+        visual.GlobalPosition = GlobalPosition;
+
+        var tween = visual.CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(visual, "scale", Vector2.One, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(visual, "modulate:a", 0f, 0.4f);
+        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
+    }
+
+    // Scattered around the player like MeteorRain, but with a minimum clearance — a mine dropped
+    // directly underfoot would be undodgeable, the whole point of Mine.cs's pulse is to bait a step
+    // away from it. Reuses Scripts/Hazards/Mine.cs verbatim (same class the Campo Minado round
+    // event seeds the whole arena with).
+    private const int MineDropCount = 3;
+    private const float MineDropClearance = 90f;
+    private const float MineDropScatterRadius = 200f;
+
+    private void ExecuteMineDrop()
+    {
+        if (!EnsurePlayer()) return;
+        if (GetTree().CurrentScene is not Node2D parent) return;
+
+        for (int i = 0; i < MineDropCount; i++)
+        {
+            float angle = (float)(_rng.NextDouble() * Mathf.Tau);
+            float dist = MineDropClearance + (float)(_rng.NextDouble() * (MineDropScatterRadius - MineDropClearance));
+            var mine = new Mine();
+            mine.AddToGroup("round_event_hazards");
+            parent.AddChild(mine);
+            mine.GlobalPosition = PlayerNode.GlobalPosition + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * dist;
+        }
+    }
+
+    // Deliberately unscaled (round-1 Grunt stats) — these are meant as a brief crowding distraction
+    // during the boss fight, not full-strength threats. Loaded once via GD.Load, same convention
+    // Enemy.cs already uses for its own pickup scenes.
+    private static readonly PackedScene GruntScene = GD.Load<PackedScene>("res://Scenes/Enemy/EnemyGrunt.tscn");
+    private const int SummonAddsCount = 2;
+    private const float SummonAddsScatter = 60f;
+
+    private void ExecuteSummonAdds()
+    {
+        var parent = GetParent();
+        if (parent == null || GruntScene == null) return;
+
+        for (int i = 0; i < SummonAddsCount; i++)
+        {
+            float angle = (float)(_rng.NextDouble() * Mathf.Tau);
+            var grunt = GruntScene.Instantiate<Enemy>();
+            grunt.SelfScene = GruntScene;
+            parent.AddChild(grunt);
+            grunt.GlobalPosition = GlobalPosition + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * SummonAddsScatter;
+        }
+    }
+
+    // A rotating beam sweeping around the boss for its full Execute duration — the one ability
+    // that's channeled over time rather than instantaneous, so it gets its own per-frame advance
+    // (AdvanceSpinLaser, ticked from _PhysicsProcess) instead of firing-and-forgetting inside
+    // ExecuteAbility like every other ability above.
+    private Line2D _spinBeam;
+    private bool _spinLaserExecuting;
+    private bool _spinLaserHitPlayer;
+    private float _spinLaserAngle;
+    private float _spinLaserElapsed;
+    private const float SpinLaserRadius = 260f;
+    private const float SpinLaserDuration = 2.4f;
+    private const float SpinLaserRotations = 1.5f;
+    private const float SpinLaserHitToleranceDegrees = 9f;
+
+    private void BeginSpinLaserExecute()
+    {
+        if (_spinBeam == null)
+        {
+            _spinBeam = new Line2D();
+            _spinBeam.Width = 6f;
+            _spinBeam.DefaultColor = Palette.EnemyBullet;
+            _spinBeam.AddPoint(Vector2.Zero);
+            _spinBeam.AddPoint(new Vector2(SpinLaserRadius, 0f));
+            AddChild(_spinBeam);
+        }
+
+        _spinBeam.Visible = true;
+        _spinBeam.Rotation = 0f;
+        _spinLaserAngle = 0f;
+        _spinLaserElapsed = 0f;
+        _spinLaserHitPlayer = false;
+        _spinLaserExecuting = true;
+    }
+
+    private void AdvanceSpinLaser(float delta)
+    {
+        _spinLaserElapsed += delta;
+        float angularSpeed = Mathf.Tau * SpinLaserRotations / SpinLaserDuration;
+        _spinLaserAngle += angularSpeed * delta;
+        _spinBeam.Rotation = _spinLaserAngle;
+
+        // Boss.Rotation itself never changes (enemies don't turn to face anything — see
+        // Enemy.cs), so the beam's world-space angle is exactly _spinLaserAngle with no offset.
+        if (!_spinLaserHitPlayer && EnsurePlayer())
+        {
+            Vector2 toPlayer = PlayerNode.GlobalPosition - GlobalPosition;
+            if (toPlayer.Length() <= SpinLaserRadius)
+            {
+                float diff = Mathf.Wrap(_spinLaserAngle - toPlayer.Angle(), -Mathf.Pi, Mathf.Pi);
+                if (Mathf.Abs(diff) <= Mathf.DegToRad(SpinLaserHitToleranceDegrees) && PlayerNode is Player player)
+                {
+                    _spinLaserHitPlayer = true;
+                    player.TakeHit(GlobalPosition);
+                }
+            }
+        }
+
+        if (_spinLaserElapsed < SpinLaserDuration) return;
+
+        _spinLaserExecuting = false;
+        _spinBeam.Visible = false;
+        _channeling = false;
+        RestartAbilityTimer(AttackAbility.SpinLaser, AbilityCooldowns[AttackAbility.SpinLaser]);
+    }
+
+    // --- Phase 2 ---
+    //
+    // A one-time, randomly-chosen shakeup at 50% HP — literally "another ability" per the design
+    // brief: it plays the same telegraph+announcement beat as every attack ability above, then
+    // permanently changes something about the fight rather than dealing a one-off hit.
+    private bool _phase2Triggered;
+    private const float Phase2SpeedMultiplier = 1.35f;
+    private const float Phase2CooldownMultiplier = 0.6f;
+    private const int Phase2EffectCount = 3;
+
+    private void TryTriggerPhase2()
+    {
+        if (_phase2Triggered || CurrentHp * 2 > MaxHp) return;
+        _phase2Triggered = true;
+
+        PlayTelegraph(1.2f);
+        SpawnFloatingLabel("¡FURIA!", Palette.Warning, 26, new Vector2(-40f, HealthBarOffset - 46f));
+        if (GetTree().GetFirstNodeInGroup("danger_director") is DangerDirector director)
+            director.AnnounceThreat("¡EL JEFE SE ENFURECE!");
+
+        switch (_rng.Next(Phase2EffectCount))
+        {
+            case 0: ApplyPhase2Frenzy(); break;
+            case 1: ApplyPhase2ExtraAbility(); break;
+            default: ExecuteSummonAdds(); break;   // Oleada de Refuerzos: an immediate wave, no telegraph of its own
+        }
+    }
+
+    // Speeds the boss up and halves every currently active ability's cooldown. The halving only
+    // takes effect from each ability's NEXT Start() call — Godot's Timer.WaitTime doesn't retroactively
+    // shrink a countdown already in flight — which in practice means "abilities start coming twice as
+    // often starting from about now," close enough for an enrage effect that isn't meant to be exact.
+    private void ApplyPhase2Frenzy()
+    {
+        MoveSpeed *= Phase2SpeedMultiplier;
+        foreach (var timer in _abilityTimers.Values)
+            timer.WaitTime = Mathf.Max(0.05f, timer.WaitTime * Phase2CooldownMultiplier);
+    }
+
+    // Grants one more ability the boss didn't already roll — as close to "gains an ability" as this
+    // system can express. Falls back to the Frenzy effect if every ability is somehow already active
+    // (AbilityCount would have to exceed the pool size for that to happen).
+    private void ApplyPhase2ExtraAbility()
+    {
+        var candidates = new List<AttackAbility>();
+        foreach (var ability in AllAbilities)
+            if (!_activeAbilities.Contains(ability)) candidates.Add(ability);
+
+        if (candidates.Count == 0)
+        {
+            ApplyPhase2Frenzy();
+            return;
+        }
+
+        ActivateAbility(candidates[_rng.Next(candidates.Count)], 1.5f);
     }
 }

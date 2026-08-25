@@ -16,9 +16,11 @@ public partial class CharacterCreator : Control
 
     private string _pickedImagePath = "";
     private Timer _galleryPollTimer;
+    private PanelContainer _panel;
 
     public override void _Ready()
     {
+        _panel = GetNode<PanelContainer>("CenterContainer/Panel");
         _nameEdit = GetNode<LineEdit>("CenterContainer/Panel/Box/NameEdit");
         _descEdit = GetNode<TextEdit>("CenterContainer/Panel/Box/DescEdit");
         _preview = GetNode<TextureRect>("CenterContainer/Panel/Box/Top/Swatch/PreviewTexture");
@@ -26,9 +28,14 @@ public partial class CharacterCreator : Control
         _fileDialog = GetNode<FileDialog>("FileDialog");
         _saveButton = GetNode<Button>("CenterContainer/Panel/Box/SaveButton");
 
-        GetNode<Button>("CenterContainer/Panel/Box/Top/Side/ImageButton").Pressed += OnImageButtonPressed;
+        var imageButton = GetNode<Button>("CenterContainer/Panel/Box/Top/Side/ImageButton");
+        var cancelButton = GetNode<Button>("CenterContainer/Panel/Box/CancelButton");
+        imageButton.Pressed += OnImageButtonPressed;
         _saveButton.Pressed += Save;
-        GetNode<Button>("CenterContainer/Panel/Box/CancelButton").Pressed += () => Visible = false;
+        cancelButton.Pressed += Close;
+
+        foreach (var b in new[] { imageButton, _saveButton, cancelButton })
+            Juice.WireButtonFeedback(b);
 
         _fileDialog.FileSelected += OnFileSelected;
 
@@ -62,8 +69,11 @@ public partial class CharacterCreator : Control
         _preview.Texture = null;
         ShowError("");
         Visible = true;
+        Juice.ModalIn(_panel);
         _nameEdit.GrabFocus();
     }
+
+    private void Close() => Juice.ModalOut(_panel, () => Visible = false);
 
     private void OnImageButtonPressed()
     {
@@ -165,13 +175,18 @@ public partial class CharacterCreator : Control
             return;
         }
 
-        Visible = false;
+        Close();
         EmitSignal(SignalName.CharacterCreated, slug);
     }
 
+    // A shake + red flash instead of a bare Visible toggle — this is specifically feedback for a
+    // failed validation ("that name's taken", "pick an image first"), so it should read as "that
+    // didn't work" rather than just quietly changing text.
     private void ShowError(string message)
     {
         _errorLabel.Text = message;
         _errorLabel.Visible = message.Length > 0;
+        if (message.Length > 0)
+            Juice.Shake(_errorLabel, 6f, 0.3f, new Color(1f, 0.3f, 0.35f));
     }
 }

@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Player/Player.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/Bullet.tscn" id="3"]
@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/Player/Companion.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://Scenes/Missile.tscn" id="6"]
 [ext_resource type="Texture2D" path="res://Assets/Sprites/Characters/ship.svg" id="7"]
+[ext_resource type="PackedScene" path="res://Scenes/PlayerMine.tscn" id="8"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 16.0
@@ -21,6 +22,7 @@ BulletScene = ExtResource("3")
 MissileScene = ExtResource("6")
 OrbitBladeScene = ExtResource("4")
 CompanionScene = ExtResource("5")
+PlayerMineScene = ExtResource("8")
 
 [node name="ShieldAura" type="Polygon2D" parent="."]
 visible = false

@@ -13,6 +13,7 @@ public partial class Player : CharacterBody2D
     [Export] public float BulletSpeed = 500f;
     [Export] public PackedScene BulletScene;
     [Export] public PackedScene MissileScene;
+    [Export] public PackedScene PlayerMineScene;
     [Export] public PackedScene OrbitBladeScene;
     [Export] public PackedScene CompanionScene;
     [Export] public Vector2 ArenaHalfExtents = new(2200f, 1400f);
@@ -34,12 +35,24 @@ public partial class Player : CharacterBody2D
     // smaller life pool is less stack for DifficultyBalancer.GetSurvivabilityCatchUpMultiplier to
     // have to counteract (see GetSurvivabilityScore). Matches MaxShieldChargesCap below, and the
     // HUD's heart row is sized to exactly this many icons, same as the shield row.
-    private const int MaxLivesCap = 4;
+    // Public because the loadout panel prints this ceiling to the player. It used to hardcode its own
+    // "(máx 6)" against this being 6, and kept saying 6 after the cap dropped to 4 — i.e. the UI
+    // promised a ceiling the game would never allow. Reading the constant is what makes that
+    // class of drift impossible rather than merely fixed once.
+    public const int MaxLivesCap = 4;
 
     // Was 8, which was unreachable dead code: Barrier tiers are worth 1/2/3/4 and apply as
     // Max(current, value) rather than summing, so 4 was always the real ceiling. Now the constant says
     // what the game actually does — which matters more than before, since the shield row is on screen.
-    private const int MaxShieldChargesCap = 4;
+    // Public for the same reason as MaxLivesCap above.
+    public const int MaxShieldChargesCap = 4;
+
+    // Part of the same late-round survivability nerf as MaxLivesCap: from round 17 on, the passive
+    // Regeneración timer runs at half its purchased rate. ShieldRegenPerMinute itself is left
+    // untouched (it still drives the upgrade-comparison logic and the shop tooltip's raw "X/min"),
+    // this only slows down the timer that actually spends it.
+    private const int LateShieldRegenRound = 17;
+    private const float LateShieldRegenMultiplier = 0.5f;
     public const int MaxExtraFiringLinesCap = 5;
     private const float SideShotSpacing = 14f;
 
@@ -57,6 +70,7 @@ public partial class Player : CharacterBody2D
     public int ExtraFiringLines = 0;
     public int LaserLevel = 0;
     public int MissileLevel = 0;
+    public int MineLevel = 0;
     public int OndaLevel = 0;
     public int VendavalLevel = 0;
     public int BurnLevel = 0;
@@ -94,7 +108,10 @@ public partial class Player : CharacterBody2D
     private float _killStreakTimer;
     private const float KillStreakWindow = 2.0f;   // seconds between kills to maintain streak
     private const float KillStreakBonus = 0.1f;    // +10% per streak level
-    private const int KillStreakMax = 15;           // cap at ×2.5 bonus
+    // Public so the HUD's streak badge can show progress toward the cap rather than an open-ended
+    // number — the multiplier stops growing here, and a bar that fills to exactly this point is what
+    // makes that legible without spelling it out.
+    public const int KillStreakMax = 15;            // cap at ×2.5 bonus
 
     public int KillStreak => _killStreak;
     public float KillStreakMultiplier => 1f + Mathf.Min(_killStreak, KillStreakMax) * KillStreakBonus;
@@ -144,6 +161,18 @@ public partial class Player : CharacterBody2D
         (3.8f, 50, 85f),
         (3.2f, 75, 100f),
         (2.6f, 110, 120f),
+    };
+
+    // Level → (drop interval, blast damage, blast radius). Mina drops at the player's own position
+    // on a slow timer rather than being aimed — no "nothing in range" bail like Missile needs, it
+    // always fires once the cooldown clears (see the _PhysicsProcess block below). Costs/cadence
+    // mirror MissileTiers exactly: same class of AoE weapon, traded aim for placement instead.
+    private static readonly (float Interval, int Damage, float Radius)[] MineTiers =
+    {
+        (5.5f, 45, 55f),
+        (4.6f, 70, 65f),
+        (3.8f, 100, 75f),
+        (3.0f, 140, 85f),
     };
 
     // Level → (fire interval, damage, blast radius). Onda de Choque detonates in place around the
@@ -275,6 +304,7 @@ public partial class Player : CharacterBody2D
     // right after an empty tick had to wait out a whole extra interval before actually firing.
     public float LaserCooldownFraction { get; private set; }
     public float MissileCooldownFraction { get; private set; }
+    public float MineCooldownFraction { get; private set; }
     public float OndaCooldownFraction { get; private set; }
     public float VendavalCooldownFraction { get; private set; }
 
@@ -343,10 +373,17 @@ public partial class Player : CharacterBody2D
         _visualBaseScale = _visual.Scale;
 
         _shieldAura = GetNode<Polygon2D>("ShieldAura");
-        var pulse = CreateTween();
-        pulse.SetLoops();
-        pulse.TweenProperty(_shieldAura, "scale", Vector2.One * 1.1f, 0.6f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-        pulse.TweenProperty(_shieldAura, "scale", Vector2.One, 0.6f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+
+        // Skipped under reduced motion — the aura's mere presence already says "you have a shield
+        // charge"; the pulse is ambience on top of that, and it sits directly under the player's
+        // eyes for the whole run.
+        if (!DangerLevel.Reduced)
+        {
+            var pulse = CreateTween();
+            pulse.SetLoops();
+            pulse.TweenProperty(_shieldAura, "scale", Vector2.One * 1.1f, 0.6f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+            pulse.TweenProperty(_shieldAura, "scale", Vector2.One, 0.6f).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+        }
 
         SpawnFireRangeIndicator();
         StartIdleAnimations();
@@ -357,6 +394,10 @@ public partial class Player : CharacterBody2D
     // the invuln blink (which toggles _visual.Visible, not its scale), or the arena clamp.
     private void StartIdleAnimations()
     {
+        // Purely ambient — nothing here encodes state, so reduced motion drops both loops outright
+        // rather than substituting anything. The ship simply sits still.
+        if (DangerLevel.Reduced) return;
+
         var breathe = CreateTween();
         breathe.SetLoops();
         breathe.TweenProperty(_visual, "scale", _visualBaseScale * 1.06f, 0.9f)
@@ -430,6 +471,17 @@ public partial class Player : CharacterBody2D
                 MissileCooldownFraction = Mathf.Max(0f, MissileCooldownFraction - (float)delta / MissileTiers[MissileLevel - 1].Interval);
             if (MissileCooldownFraction <= 0f)
                 TryFireMissile();
+        }
+
+        // Unlike Missile, dropping a mine doesn't need a target in range — it's placed at the
+        // player's own position regardless, so (like Onda/Vendaval) it always fires once the
+        // cooldown clears.
+        if (MineLevel > 0)
+        {
+            if (MineCooldownFraction > 0f)
+                MineCooldownFraction = Mathf.Max(0f, MineCooldownFraction - (float)delta / MineTiers[MineLevel - 1].Interval);
+            if (MineCooldownFraction <= 0f)
+                DropMine();
         }
 
         // Onda de Choque/Vendaval are always centered on/in front of the player, so unlike
@@ -725,7 +777,7 @@ public partial class Player : CharacterBody2D
         BuildClass.Gunner => new[]
         {
             new BuildRequirement(UpgradeType.FireRate, "Cadencia", p => p.FireRate, 5f, Additive: true),
-            new BuildRequirement(UpgradeType.SideShot, "Disparo Lateral", p => p.ExtraFiringLines, 1f, Additive: true),
+            new BuildRequirement(UpgradeType.SideShot, "Disparo Paralelo", p => p.ExtraFiringLines, 1f, Additive: true),
         },
         BuildClass.Tank => new[]
         {
@@ -915,6 +967,26 @@ public partial class Player : CharacterBody2D
         _bulletsContainer.AddChild(missile);
     }
 
+    // Called every physics frame while MineLevel > 0 and the cooldown has fully cleared. No
+    // targeting to do — it drops right where the player is standing, same reasoning as Onda/Vendaval.
+    private void DropMine()
+    {
+        if (PlayerMineScene == null || _bulletsContainer == null) return;
+
+        MineCooldownFraction = 1f;
+        var (_, damage, radius) = MineTiers[MineLevel - 1];
+
+        var mine = PlayerMineScene.Instantiate<PlayerMine>();
+        mine.Damage = ApplyCrit(damage, out bool isCrit);
+        if (isCrit) mine.Modulate = Palette.CritBullet;
+        mine.Radius = radius;
+        mine.BurnDps = CurrentBurnDps;
+        mine.BurnDuration = CurrentBurnDuration;
+
+        _bulletsContainer.AddChild(mine);
+        mine.GlobalPosition = GlobalPosition;
+    }
+
     // Shared by the gun and the missile so every auto-weapon respects FireRange identically.
     private Node2D FindNearestEnemyInRange()
     {
@@ -1013,6 +1085,15 @@ public partial class Player : CharacterBody2D
             vendavalDps = damage / interval * critMult;
         }
 
+        // Same AoE-discount reasoning as missileDps — a mine's single blast can hit several enemies
+        // at once, so its nominal per-drop damage understates it just like Missile's does.
+        float mineDps = 0f;
+        if (MineLevel > 0)
+        {
+            var (interval, damage, _) = MineTiers[MineLevel - 1];
+            mineDps = damage / interval * 1.5f * critMult;
+        }
+
         // Ultimates bypass every stat term above entirely — Nova/Zona Lenta have no persistent
         // stat to read, and even Sobrecarga's temporary FireRate/BulletDamage doubling would only
         // get caught here if this happened to be sampled mid-buff. Modeled explicitly instead, as
@@ -1053,7 +1134,7 @@ public partial class Player : CharacterBody2D
 
         // The companion re-derives its own output from the player's live stats, so it's a flat
         // percentage bonus on top of everything rather than its own independent term.
-        float total = (gunDps + laserDps + missileDps + burnDps + orbitDps + ondaDps + vendavalDps) * (1f + CompanionStatPercent) + ultimateDps;
+        float total = (gunDps + laserDps + missileDps + burnDps + orbitDps + ondaDps + vendavalDps + mineDps) * (1f + CompanionStatPercent) + ultimateDps;
         return total / baselineDps;
     }
 
@@ -1517,6 +1598,9 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Vendaval:
                 VendavalLevel = Mathf.Max(VendavalLevel, (int)upgrade.Value);
                 break;
+            case UpgradeType.Mine:
+                MineLevel = Mathf.Max(MineLevel, (int)upgrade.Value);
+                break;
             case UpgradeType.Burn:
                 BurnLevel = Mathf.Max(BurnLevel, (int)upgrade.Value);
                 break;
@@ -1577,9 +1661,19 @@ public partial class Player : CharacterBody2D
             AddChild(_shieldRegenTimer);
             _shieldRegenTimer.Timeout += OnShieldRegenTimeout;
         }
-        _shieldRegenTimer.WaitTime = 60f / ShieldRegenPerMinute;
+        int round = GameManager.Instance?.RoundNumber ?? 1;
+        float effectiveRate = round >= LateShieldRegenRound
+            ? ShieldRegenPerMinute * LateShieldRegenMultiplier
+            : ShieldRegenPerMinute;
+        _shieldRegenTimer.WaitTime = 60f / effectiveRate;
         _shieldRegenTimer.Start();
     }
+
+    // Re-derives the timer's interval against the current round without touching ShieldRegenPerMinute
+    // itself. Needed because EnsureShieldRegenTimer otherwise only runs once, at purchase time — a run
+    // that buys Regeneración before round 17 would never feel the late-round slowdown without this
+    // being called again as rounds advance (see GameManager.StartNextRound).
+    public void RefreshShieldRegenRate() => EnsureShieldRegenTimer();
 
     private void OnShieldRegenTimeout()
     {
@@ -1640,6 +1734,8 @@ public partial class Player : CharacterBody2D
                 return (int)upgrade.Value > OndaLevel;
             case UpgradeType.Vendaval:
                 return (int)upgrade.Value > VendavalLevel;
+            case UpgradeType.Mine:
+                return (int)upgrade.Value > MineLevel;
             case UpgradeType.Burn:
                 return (int)upgrade.Value > BurnLevel;
             case UpgradeType.Ultimate:
@@ -1694,6 +1790,7 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Missile:
             case UpgradeType.ShockwaveAura:
             case UpgradeType.Vendaval:
+            case UpgradeType.Mine:
             case UpgradeType.Burn:
             case UpgradeType.Ultimate:
             case UpgradeType.Pierce:
@@ -1722,12 +1819,17 @@ public partial class Player : CharacterBody2D
     }
 
     // Wording for a disabled offer's button, shared by the shop and the level-up picker so they
-    // can't drift: "Adquirido" reads right for a one-off you already own, but not for a stat
-    // that's simply maxed out.
+    // can't drift. Three distinct reasons, three distinct sentences — "Adquirido" used to be the
+    // catch-all default, which meant it also answered for the level-based powers (Láser, Misil,
+    // Mina, Onda, Vendaval, Incendiario, Dron, Cuchillas). For those it was simply wrong: the
+    // player doesn't own *that* offer, they own an equal or better level of it, and being told
+    // "acquired" about something they never bought is the kind of small lie that erodes trust in
+    // every other label on the screen.
     public string GetUnavailableLabel(UpgradeData upgrade)
     {
         switch (upgrade.Type)
         {
+            // Stats with a hard ceiling: nothing is owned, the number simply can't go higher.
             case UpgradeType.FireRange:
             case UpgradeType.BulletDamage:
             case UpgradeType.FireRate:
@@ -1742,9 +1844,16 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Dodge:
             case UpgradeType.Fortune:
             case UpgradeType.Ricochet:
-                return "Al tope";
+                return Glossary.AtCap;
+
+            // Genuine one-offs — you either have it or you don't.
+            case UpgradeType.ExtraProjectile:
+            case UpgradeType.Ultimate:
+                return Glossary.Owned;
+
+            // Levelled powers: you hold this level or a higher one.
             default:
-                return "Adquirido";
+                return Glossary.OwnedBetter;
         }
     }
 
@@ -1792,38 +1901,42 @@ public partial class Player : CharacterBody2D
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                return $"Tenés: {FireRange:0} de rango (tope {MaxFireRange:0}) — {(helps ? "se suma" : "no suma (ya estás en el tope)")}";
+                return $"Tenés: {FireRange:0} de rango (tope {MaxFireRange:0}) — {(helps ? "se suma" : "no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.BulletDamage:
-                return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
+                return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : "no suma (ya tenés una {Glossary.Rarity} mejor)")}";
             case UpgradeType.FireRate:
-                return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
+                return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : "no suma (ya tenés una {Glossary.Rarity} mejor)")}";
             case UpgradeType.Heart:
-                return $"Tenés: {CurrentLives}/{MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "+1 al máximo y cura total" : "no suma (estás al tope y a full)")}";
+                return $"Tenés: {CurrentLives}/{MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "+1 al máximo y cura total" : "no suma ({Glossary.AtCapSentence} y con vidas llenas)")}";
             case UpgradeType.HitShield:
-                return $"Tenés: {MaxShieldCharges} cargas (tope {MaxShieldChargesCap}) — {(helps ? "se suma" : "no suma (ya estás a full)")}";
+                return $"Tenés: {MaxShieldCharges} cargas (tope {MaxShieldChargesCap}) — {(helps ? "se suma" : "no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.SideShot:
-                return $"Tenés: {ExtraFiringLines} líneas (tope {MaxExtraFiringLinesCap}) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: {ExtraFiringLines} líneas (tope {MaxExtraFiringLinesCap}) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.OrbitShield:
                 return $"Tenés: {OrbitCount} cuchillas (tope 4) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}";
             case UpgradeType.Companion:
                 return $"Tenés: {CompanionStatPercent * 100:0}% stats (tope 50%) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}";
             case UpgradeType.Laser:
-                return $"Tenés: Láser Nv{LaserLevel} (tope Nv4) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}";
+                return $"Tenés: Láser {Glossary.LevelPrefix}{LaserLevel} (tope {Glossary.LevelPrefix}4) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}";
             case UpgradeType.Missile:
                 return MissileLevel > 0
-                    ? $"Tenés: Misil Nv{MissileLevel} cada {MissileTiers[MissileLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    ? $"Tenés: Misil {Glossary.LevelPrefix}{MissileLevel} cada {MissileTiers[MissileLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés misiles todavía";
             case UpgradeType.ShockwaveAura:
                 return OndaLevel > 0
-                    ? $"Tenés: Onda de Choque Nv{OndaLevel} cada {OndaTiers[OndaLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    ? $"Tenés: Onda de Choque {Glossary.LevelPrefix}{OndaLevel} cada {OndaTiers[OndaLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés Onda de Choque todavía";
             case UpgradeType.Vendaval:
                 return VendavalLevel > 0
-                    ? $"Tenés: Vendaval Nv{VendavalLevel} cada {VendavalTiers[VendavalLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    ? $"Tenés: Vendaval {Glossary.LevelPrefix}{VendavalLevel} cada {VendavalTiers[VendavalLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés Vendaval todavía";
+            case UpgradeType.Mine:
+                return MineLevel > 0
+                    ? $"Tenés: Mina {Glossary.LevelPrefix}{MineLevel} cada {MineTiers[MineLevel - 1].Interval:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    : "No tenés minas todavía";
             case UpgradeType.Burn:
                 return BurnLevel > 0
-                    ? $"Tenés: Incendiario Nv{BurnLevel} ({BurnTiers[BurnLevel - 1].Dps:0}/seg) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
+                    ? $"Tenés: Incendiario {Glossary.LevelPrefix}{BurnLevel} ({BurnTiers[BurnLevel - 1].Dps:0}/seg) — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés quemadura todavía";
             case UpgradeType.Ultimate:
             {
@@ -1833,25 +1946,25 @@ public partial class Player : CharacterBody2D
                 return $"Ultimate equipada: {current} — {(helps ? "la reemplaza" : "ya es esta")}";
             }
             case UpgradeType.Pierce:
-                return $"Tenés: atraviesa {BulletPierce} (tope {MaxPierceCap}) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: atraviesa {BulletPierce} (tope {MaxPierceCap}) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.CritChance:
-                return $"Tenés: {CritChance:0}% crítico (tope {MaxCritChance:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: {CritChance:0}% crítico (tope {MaxCritChance:0}%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.CoinBonus:
-                return $"Tenés: +{CoinBonusPercent:0}% monedas (tope {MaxCoinBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: +{CoinBonusPercent:0}% monedas (tope {MaxCoinBonusPercent:0}%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.XpBonus:
-                return $"Tenés: +{XpBonusPercent:0}% experiencia (tope {MaxXpBonusPercent:0}%) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: +{XpBonusPercent:0}% experiencia (tope {MaxXpBonusPercent:0}%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.BulletKnockback:
-                return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés un tier mejor)")}";
+                return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés una {Glossary.Rarity} mejor)")}";
             case UpgradeType.ShieldRegen:
                 return ShieldRegenPerMinute > 0f
                     ? $"Tenés: 1 carga cada {60f / ShieldRegenPerMinute:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
                     : "No tenés regeneración de escudo todavía";
             case UpgradeType.Dodge:
-                return $"Tenés: {DodgeChance:0}% esquiva (tope 25%) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: {DodgeChance:0}% esquiva (tope 25%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.Fortune:
-                return $"Tenés: +{FortuneBonus:0}% fortuna (tope 25%) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: +{FortuneBonus:0}% fortuna (tope 25%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.Ricochet:
-                return $"Tenés: {RicochetCount} rebotes (tope 4) — {(helps ? "se suma" : "ya estás en el tope")}";
+                return $"Tenés: {RicochetCount} rebotes (tope 4) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.Thorns:
                 return ThornsDamage > 0f
                     ? $"Tenés: {ThornsDamage:0} daño de escudo voltáico — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"

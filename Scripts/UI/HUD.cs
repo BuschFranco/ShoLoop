@@ -42,12 +42,37 @@ public partial class HUD : Control
     private CooldownIcon _ultimateIcon;
     private CooldownIcon _ondaIcon;
     private CooldownIcon _vendavalIcon;
-    private Label _streakLabel;
+    private CooldownIcon _mineIcon;
+    // The streak used to be a single long right-aligned Label ("RACHA 9 · ×1.9 XP y monedas") floating
+    // roughly at screen centre — long enough to reach into the play area, and text-only for something
+    // that's meant to be read at a glance mid-fight. It's now a compact badge pinned under the round
+    // timer, in the same left column as everything else: the multiplier is the hero number, a bar
+    // shows how close the streak is to its cap, and the whole thing heats up in colour as it climbs.
+    private PanelContainer _streakPanel;
+    private Label _streakMultLabel;
+    private Label _streakCountLabel;
+    private ProgressBar _streakBar;
+    private StyleBoxFlat _streakPanelStyle;
+    private StyleBoxFlat _streakBarFillStyle;
     private int _lastStreak;
     private Tween _streakPulseTween;
     private Control _bossHealthBar;
     private ProgressBar _bossHpBar;
+    private Label _bossNameLabel;
     private Enemy _currentBoss;
+    private bool _bossBarWasVisible;
+
+    // Tracked so a heart/shield loss vs. gain can flash/pop the one icon that actually changed,
+    // instead of the row just snapping to the new totals with no feedback at all. -1 means "no
+    // baseline yet" (first call, right after subscribing) so that call never treats itself as a
+    // change.
+    private int _lastLivesCurrent = -1;
+    private int _lastShieldCurrent = -1;
+    private int _lastCoins = -1;
+
+    // First-visible tracking per cooldown icon, so a weapon unlocking mid-round gets a pop the
+    // instant its icon appears instead of just popping into existence.
+    private readonly Dictionary<CooldownIcon, bool> _cooldownWasVisible = new();
 
     public override void _Ready()
     {
@@ -96,18 +121,12 @@ public partial class HUD : Control
         _ultimateIcon = GetNode<CooldownIcon>("CooldownIcons/UltimateIcon");
         _ondaIcon = GetNode<CooldownIcon>("CooldownIcons/OndaIcon");
         _vendavalIcon = GetNode<CooldownIcon>("CooldownIcons/VendavalIcon");
+        _mineIcon = GetNode<CooldownIcon>("CooldownIcons/MineIcon");
         _bossHealthBar = GetNode<Control>("BossHealthBar");
         _bossHpBar = GetNode<ProgressBar>("BossHealthBar/BossHpBar");
+        _bossNameLabel = GetNode<Label>("BossHealthBar/BossNameLabel");
 
-        // Kill streak label — positioned center-right, below the round timer.
-        _streakLabel = new Label();
-        _streakLabel.Text = "";
-        _streakLabel.AddThemeFontSizeOverride("font_size", 20);
-        _streakLabel.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.15f));
-        _streakLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
-        _streakLabel.AddThemeConstantOverride("outline_size", 3);
-        _streakLabel.HorizontalAlignment = HorizontalAlignment.Right;
-        AddChild(_streakLabel);
+        BuildStreakBadge();
 
         // Build classes live in their own chip inside the stats panel (see UpdateStatsLabel), not as
         // a floating label below the top bar.
@@ -157,6 +176,8 @@ public partial class HUD : Control
 
         var pauseButton = GetNode<Button>("PauseButton");
         pauseButton.Pressed += OnPausePressed;
+        Juice.WireButtonFeedback(pauseButton);
+        Juice.WireButtonFeedback(_ultimateButton);
 
         // The .tscn's own offsets give TopBarPanel a fixed 200x200 box purely as a safe non-zero
         // fallback. ResetSize() (called here and every frame below) shrinks it to exactly fit its
@@ -229,9 +250,13 @@ public partial class HUD : Control
         // still moves it is the build chip appearing and wrapping to a second line.
         _roundTimerLabel.Position = _topBarPanel.Position + new Vector2(0f, _topBarPanel.Size.Y + 10f);
 
-        // Kill streak to the right of the round timer, same vertical level.
-        _streakLabel.Position = _topBarPanel.Position + new Vector2(150f, _topBarPanel.Size.Y + 10f);
-        _streakLabel.Size = new Vector2(200f, 30f);
+        // Stacked directly under the round timer and flush with the panel's left edge, so the whole
+        // HUD stays one left-hand column. It used to be offset +150px horizontally, which put it near
+        // the middle of the screen — over the arena, competing with the thing the player is aiming at.
+        // Chained off the timer's live size rather than a fixed offset, same reasoning as the timer's
+        // own positioning above.
+        _streakPanel.Position = _roundTimerLabel.Position + new Vector2(0f, _roundTimerLabel.Size.Y + 6f);
+        _streakPanel.ResetSize();
 
         UpdateCooldownIcons();
         UpdateUltimateUi();
@@ -245,7 +270,12 @@ public partial class HUD : Control
         if (GameManager.Instance.IsRoundStarting)
         {
             _countdownLabel.Visible = true;
-            _countdownLabel.Text = Mathf.CeilToInt(GameManager.Instance.RoundStartTimeRemaining).ToString();
+            string countdownText = Mathf.CeilToInt(GameManager.Instance.RoundStartTimeRemaining).ToString();
+            if (_countdownLabel.Text != countdownText)
+            {
+                _countdownLabel.Text = countdownText;
+                Juice.ValuePop(_countdownLabel, 1.3f, 0.3f);
+            }
             _roundTimerLabel.Text = "Preparate...";
             ResetRoundTimerLook();
             return;
@@ -286,31 +316,108 @@ public partial class HUD : Control
     // countdown, and for an entire boss round, since both paths return before ever reaching it.
     private void UpdateKillStreak()
     {
-        if (_player != null && _player.KillStreak >= 3)
+        if (_player == null || _player.KillStreak < 3)
         {
-            _streakLabel.Text = $"RACHA DE {_player.KillStreak} (×{_player.KillStreakMultiplier:0.0})";
-            _streakLabel.Visible = true;
-            // Color progresivo: blanco → rojo intenso según racha
-            float t = Mathf.Min(_player.KillStreak / 40f, 1f);
-            _streakLabel.Modulate = new Color(1f, Mathf.Lerp(1f, 0.15f, t), Mathf.Lerp(1f, 0f, t));
-
-            // Pulse animation when streak increases.
-            if (_player.KillStreak > _lastStreak)
-            {
-                _streakPulseTween?.Kill();
-                _streakPulseTween = CreateTween();
-                _streakPulseTween.TweenProperty(_streakLabel, "scale", new Vector2(1.4f, 1.4f), 0.1f)
-                    .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
-                _streakPulseTween.TweenProperty(_streakLabel, "scale", Vector2.One, 0.15f)
-                    .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-            }
-            _lastStreak = _player.KillStreak;
-        }
-        else
-        {
-            _streakLabel.Visible = false;
+            _streakPanel.Visible = false;
             _lastStreak = 0;
+            return;
         }
+
+        int streak = _player.KillStreak;
+
+        _streakMultLabel.Text = $"×{_player.KillStreakMultiplier:0.0}";
+        _streakCountLabel.Text = $"RACHA {streak}";
+        _streakBar.Value = Mathf.Min(streak, Player.KillStreakMax);
+        _streakPanel.Visible = true;
+
+        // Heats up toward the cap rather than toward an arbitrary 40 (the old divisor), so the colour
+        // reaches full intensity exactly when the multiplier stops growing.
+        float t = Mathf.Min(streak / (float)Player.KillStreakMax, 1f);
+        Color heat = Palette.CoinPickup.Lerp(Palette.Warning, t);
+        _streakMultLabel.AddThemeColorOverride("font_color", heat);
+        _streakPanelStyle.BorderColor = new Color(heat, 0.9f);
+        _streakBarFillStyle.BgColor = heat;
+
+        if (streak > _lastStreak)
+            Juice.ValuePop(_streakPanel, 1.18f, 0.25f);
+
+        _lastStreak = streak;
+    }
+
+    // Built in code rather than authored in HUD.tscn to match how the streak already worked (it was a
+    // code-created Label) and so the two styleboxes below can be recoloured live as the streak heats up.
+    private void BuildStreakBadge()
+    {
+        _streakPanelStyle = new StyleBoxFlat();
+        _streakPanelStyle.BgColor = new Color(0.043f, 0.024f, 0.078f, 0.82f);
+        _streakPanelStyle.SetBorderWidthAll(2);
+        _streakPanelStyle.SetCornerRadiusAll(8);
+        _streakPanelStyle.SetContentMarginAll(6f);
+        _streakPanelStyle.ContentMarginLeft = 10f;
+        _streakPanelStyle.ContentMarginRight = 10f;
+
+        _streakPanel = new PanelContainer();
+        _streakPanel.AddThemeStyleboxOverride("panel", _streakPanelStyle);
+        _streakPanel.MouseFilter = MouseFilterEnum.Ignore;
+        _streakPanel.Visible = false;
+        AddChild(_streakPanel);
+
+        var box = new VBoxContainer();
+        box.MouseFilter = MouseFilterEnum.Ignore;
+        box.AddThemeConstantOverride("separation", 2);
+        _streakPanel.AddChild(box);
+
+        var row = new HBoxContainer();
+        row.MouseFilter = MouseFilterEnum.Ignore;
+        row.AddThemeConstantOverride("separation", 8);
+        box.AddChild(row);
+
+        // The multiplier is what the streak actually *does*, so it's the big number; the raw count is
+        // supporting detail. The old label led with "RACHA 9" and buried the ×1.9 behind a separator.
+        _streakMultLabel = new Label();
+        _streakMultLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Subtitle);
+        _streakMultLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _streakMultLabel.AddThemeConstantOverride("outline_size", 3);
+        _streakMultLabel.VerticalAlignment = VerticalAlignment.Center;
+        row.AddChild(_streakMultLabel);
+
+        _streakCountLabel = new Label();
+        _streakCountLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        _streakCountLabel.AddThemeColorOverride("font_color", new Color(0.78f, 0.83f, 0.9f));
+        _streakCountLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
+        _streakCountLabel.AddThemeConstantOverride("outline_size", 2);
+        _streakCountLabel.VerticalAlignment = VerticalAlignment.Center;
+        row.AddChild(_streakCountLabel);
+
+        // Fills as the streak approaches Player.KillStreakMax, i.e. the point where the multiplier
+        // stops growing. That's the one piece of the mechanic the player could never see before.
+        var barBg = new StyleBoxFlat();
+        barBg.BgColor = new Color(0.102f, 0.0588f, 0.1686f, 0.9f);
+        barBg.SetCornerRadiusAll(3);
+
+        _streakBarFillStyle = new StyleBoxFlat();
+        _streakBarFillStyle.SetCornerRadiusAll(3);
+
+        _streakBar = new ProgressBar();
+        _streakBar.CustomMinimumSize = new Vector2(0, 6);
+        _streakBar.ShowPercentage = false;
+        _streakBar.MaxValue = Player.KillStreakMax;
+        _streakBar.MouseFilter = MouseFilterEnum.Ignore;
+        _streakBar.AddThemeStyleboxOverride("background", barBg);
+        _streakBar.AddThemeStyleboxOverride("fill", _streakBarFillStyle);
+        box.AddChild(_streakBar);
+
+        // What the multiplier applies to, on its own short line. Inline it was "×1.9 XP y monedas",
+        // which is what made the old one-line version wide enough to reach into the arena — stacked,
+        // the same words cost height the badge already has and no width at all.
+        var unitLabel = new Label();
+        unitLabel.Text = "XP y monedas";
+        unitLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        unitLabel.AddThemeColorOverride("font_color", new Color(0.68f, 0.72f, 0.8f));
+        unitLabel.AddThemeColorOverride("font_outline_color", Colors.Black);
+        unitLabel.AddThemeConstantOverride("outline_size", 2);
+        unitLabel.MouseFilter = MouseFilterEnum.Ignore;
+        box.AddChild(unitLabel);
     }
 
     private Tween _roundTimerPulseTween;
@@ -336,25 +443,54 @@ public partial class HUD : Control
     {
         if (_player == null) return;
 
-        _laserIcon.Visible = _player.LaserLevel > 0;
+        SetCooldownVisible(_laserIcon, _player.LaserLevel > 0, "Láser");
         _laserIcon.CooldownFraction = _player.LaserCooldownFraction;
 
-        _missileIcon.Visible = _player.MissileLevel > 0;
+        SetCooldownVisible(_missileIcon, _player.MissileLevel > 0, "Misil");
         _missileIcon.CooldownFraction = _player.MissileCooldownFraction;
 
-        _shieldRegenIcon.Visible = _player.ShieldRegenPerMinute > 0f;
+        SetCooldownVisible(_shieldRegenIcon, _player.ShieldRegenPerMinute > 0f, "Regeneración");
         _shieldRegenIcon.CooldownFraction = _player.ShieldRegenCooldownFraction;
 
-        _ondaIcon.Visible = _player.OndaLevel > 0;
+        SetCooldownVisible(_ondaIcon, _player.OndaLevel > 0, "Onda de Choque");
         _ondaIcon.CooldownFraction = _player.OndaCooldownFraction;
 
-        _vendavalIcon.Visible = _player.VendavalLevel > 0;
+        SetCooldownVisible(_vendavalIcon, _player.VendavalLevel > 0, "Vendaval");
         _vendavalIcon.CooldownFraction = _player.VendavalCooldownFraction;
 
+        SetCooldownVisible(_mineIcon, _player.MineLevel > 0, "Mina");
+        _mineIcon.CooldownFraction = _player.MineCooldownFraction;
+
         bool hasUltimate = _player.EquippedUltimate != null;
-        _ultimateIcon.Visible = hasUltimate;
+        SetCooldownVisible(_ultimateIcon, hasUltimate, "Ultimate");
         if (hasUltimate)
             _ultimateIcon.CooldownFraction = _player.UltimateCooldownRemaining / _player.UltimateCooldownDuration;
+    }
+
+    // Announces the ability by name the first time its icon appears. The icon itself is a single
+    // letter with no legend on screen, so without this the player's first encounter with a new
+    // ability is an unexplained glyph materialising in the corner. Saying it once, at the moment it
+    // unlocks, is what makes the letter mean something afterwards — and the pause menu's loadout
+    // panel repeats the glyph→name pairing for anyone who missed it.
+    private void SetCooldownVisible(CooldownIcon icon, bool visible, string abilityName)
+    {
+        bool wasVisible = _cooldownWasVisible.TryGetValue(icon, out var prev) && prev;
+        icon.Visible = visible;
+
+        if (visible && !wasVisible)
+        {
+            Juice.ValuePop(icon, 1.5f, 0.3f);
+
+            // Skipped on the very first pass, when every already-owned icon "appears" at once —
+            // that's the HUD initialising, not the player unlocking anything.
+            if (_cooldownWasVisible.Count > 0)
+            {
+                Juice.FloatingLabel(this, abilityName, icon.GlobalPosition + new Vector2(0f, -22f),
+                    Palette.Accent, Palette.FontSize.Caption, driftY: -18f, lifetime: 1.4f);
+            }
+        }
+
+        _cooldownWasVisible[icon] = visible;
     }
 
     // Polled the same way _currentBoss/_topBarPanel are — no HP-changed signal exists on Enemy,
@@ -365,16 +501,36 @@ public partial class HUD : Control
             _currentBoss = GetTree().GetFirstNodeInGroup("boss") as Enemy;
 
         bool bossAlive = _currentBoss != null && IsInstanceValid(_currentBoss);
-        _bossHealthBar.Visible = bossAlive;
+
+        // Fade only on the appear/disappear edge — fromScale 1f since a health bar scaling up/down
+        // reads oddly, it just wants the fade. Not a scale-punch modal like everything else.
+        if (bossAlive != _bossBarWasVisible)
+        {
+            if (bossAlive)
+                Juice.ModalIn(_bossHealthBar, 0.25f, 1f);
+            else
+                Juice.ModalOut(_bossHealthBar, null, 0.25f, 1f);
+            _bossBarWasVisible = bossAlive;
+        }
+
         if (!bossAlive) return;
 
         _bossHpBar.MaxValue = _currentBoss.MaxHp;
-        _bossHpBar.Value = _currentBoss.CurrentHp;
+        Juice.BarFill(_bossHpBar, _currentBoss.CurrentHp, 0.25f);
+
+        // A boss round replaces the round timer with a bare "¡JEFE!", so this bar is the player's
+        // only sense of how far along the fight is — and the label above it was a hardcoded "JEFE"
+        // that repeated what the timer already said and added nothing. A percentage turns the bar
+        // from a shape into a readable number.
+        int pct = _currentBoss.MaxHp > 0
+            ? Mathf.Clamp(Mathf.CeilToInt(_currentBoss.CurrentHp * 100f / _currentBoss.MaxHp), 0, 100)
+            : 0;
+        _bossNameLabel.Text = $"JEFE · {pct}%";
     }
 
-    // One heart per life slot, filled/unfilled to show current vs. lost. There are six nodes because
-    // MaxLivesCap is six — no text fallback any more, which is what the old three-icon version degraded
-    // to as soon as a single Corazón was bought.
+    // One heart per life slot, filled/unfilled to show current vs. lost. There's one node per point of
+    // Player.MaxLivesCap, so the row never needs a text fallback — which is what the old three-icon
+    // version degraded to as soon as a single Corazón was bought.
     private void OnLivesChanged(int current, int max)
     {
         for (int i = 0; i < _heartIcons.Length; i++)
@@ -383,6 +539,23 @@ public partial class HUD : Control
             _heartIcons[i].Filled = i < current;
             _heartIcons[i].QueueRedraw();
         }
+
+        if (_lastLivesCurrent >= 0 && current != _lastLivesCurrent)
+        {
+            if (current < _lastLivesCurrent)
+            {
+                int lostIndex = current;
+                if (lostIndex >= 0 && lostIndex < _heartIcons.Length)
+                    Juice.Shake(_heartIcons[lostIndex], 5f, 0.3f, new Color(1f, 0.25f, 0.35f));
+            }
+            else
+            {
+                int gainedIndex = current - 1;
+                if (gainedIndex >= 0 && gainedIndex < _heartIcons.Length)
+                    Juice.ValuePop(_heartIcons[gainedIndex], 1.5f, 0.3f);
+            }
+        }
+        _lastLivesCurrent = current;
     }
 
     // Mirrors the lives row exactly. The whole row hides when the player owns no Barrier, same as the
@@ -396,6 +569,23 @@ public partial class HUD : Control
             _shieldIcons[i].Filled = i < current;
             _shieldIcons[i].QueueRedraw();
         }
+
+        if (_lastShieldCurrent >= 0 && current != _lastShieldCurrent)
+        {
+            if (current < _lastShieldCurrent)
+            {
+                int lostIndex = current;
+                if (lostIndex >= 0 && lostIndex < _shieldIcons.Length)
+                    Juice.Shake(_shieldIcons[lostIndex], 5f, 0.3f, new Color(0.6f, 0.8f, 1f));
+            }
+            else
+            {
+                int gainedIndex = current - 1;
+                if (gainedIndex >= 0 && gainedIndex < _shieldIcons.Length)
+                    Juice.ValuePop(_shieldIcons[gainedIndex], 1.5f, 0.3f);
+            }
+        }
+        _lastShieldCurrent = current;
     }
 
     // Polled rather than pushed: none of these five have a change event. Damage/fire rate/crit/range only
@@ -405,9 +595,20 @@ public partial class HUD : Control
     {
         if (_player == null) return;
 
+        // Spelled out rather than abbreviated. "CAD" appeared nowhere else in the game — not in the
+        // pause menu (which says "Cadencia"), not in the shop (which sells "Fuego Rápido") — so the
+        // one number that proved a purchase had worked was labelled with a word the player had never
+        // seen. Same for CRIT/RANGO/BAJAS, each of which had two or three other names elsewhere.
+        //
+        // Two stats per line rather than three, because this label is the widest thing in the panel
+        // and therefore the only thing setting its width — the whole top bar was being stretched
+        // well past the portrait/hearts row by one long line, leaving dead space beside everything
+        // else. Spelling the names out (correctly) made that worse, so the fix is the wrap, not a
+        // return to abbreviations.
         string stats =
-            $"DAÑO {_player.BulletDamage} · CAD {_player.FireRate:0.0}/s · CRIT {_player.CritChance:0}%\n" +
-            $"RANGO {_player.FireRange:0} · BAJAS {GameManager.Instance.EnemiesKilled}";
+            $"{Glossary.Damage} {_player.BulletDamage} · {Glossary.FireRate} {_player.FireRate:0.0}/s\n" +
+            $"{Glossary.Crit} {_player.CritChance:0}% · {Glossary.Range} {_player.FireRange:0}\n" +
+            $"{Glossary.Kills} {GameManager.Instance.EnemiesKilled}";
 
         _statsLabel.Text = stats;
 
@@ -444,26 +645,39 @@ public partial class HUD : Control
     // name keeps its place from run to run. The names themselves come from BuildCatalog, the same
     // source the builds menu and the loadout panel read, so the three can't drift apart.
 
-    // A short white strobe on the whole chip, so a build unlocking mid-fight registers even with the
+    // A brief highlight on the whole chip, so a build unlocking mid-fight registers even with the
     // player's eyes on the arena rather than the top bar. Modulate only: the chip lives in a
     // VBoxContainer, and scaling a Control there would visually overlap its neighbours without the
     // layout accounting for it.
+    //
+    // This was three flashes at a 0.25s period — 4 Hz — peaking at an overbright 2.2x that blew past
+    // WorldEnvironment's glow threshold and bloomed hard. Three flashes inside a ~0.75s window is at
+    // WCAG 2.3.1's general threshold, fired unprompted during combat. It's now a single, slower,
+    // non-overbright pulse: still the brightest thing the chip ever does, but not a strobe.
+    // DangerLevel.AlarmLegFloor already applies exactly this reasoning to the alarm bars.
     private void PlayBuildFlare()
     {
         _buildFlareTween?.Kill();
-        _buildFlareTween = CreateTween();
 
-        for (int i = 0; i < 3; i++)
+        // Reduced motion drops the animation entirely rather than softening it — the chip's text and
+        // border already say a build unlocked; the flare is pure emphasis.
+        if (DangerLevel.Reduced)
         {
-            _buildFlareTween.TweenProperty(_buildPanel, "modulate", new Color(2.2f, 2.2f, 2.2f), 0.09f);
-            _buildFlareTween.TweenProperty(_buildPanel, "modulate", Colors.White, 0.16f);
+            _buildPanel.Modulate = Colors.White;
+            return;
         }
+
+        _buildFlareTween = CreateTween();
+        _buildFlareTween.TweenProperty(_buildPanel, "modulate", new Color(1.5f, 1.5f, 1.5f), 0.22f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+        _buildFlareTween.TweenProperty(_buildPanel, "modulate", Colors.White, 0.42f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
     }
 
     private void OnXpChanged(int xp, int xpToNext)
     {
         _xpBar.MaxValue = xpToNext;
-        _xpBar.Value = xp;
+        Juice.BarFill(_xpBar, xp);
     }
 
     private void OnLevelUp(int level)
@@ -478,26 +692,9 @@ public partial class HUD : Control
     // to lay it out as part of the stat list instead of letting it float freely over everything.
     private void OnLevelsGained(int count)
     {
-        var label = new Label();
-        label.Text = $"+{count}";
-        label.AddThemeColorOverride("font_color", Palette.LevelPopup);
-        label.AddThemeColorOverride("font_outline_color", Colors.Black);
-        label.AddThemeConstantOverride("outline_size", 2);
-        label.AddThemeFontSizeOverride("font_size", 16);
-        label.MouseFilter = MouseFilterEnum.Ignore;
-        label.ZIndex = 20;
-        AddChild(label);
-        label.GlobalPosition = _levelLabel.GlobalPosition + new Vector2(_levelLabel.Size.X + 6f, 0f);
-        label.Scale = Vector2.One * 1.6f;
-
-        var tween = label.CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(label, "scale", Vector2.One, 0.25f)
-            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(label, "position", label.Position + new Vector2(0f, -20f), 0.7f)
-            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(label, "modulate:a", 0f, 0.5f).SetDelay(0.35f);
-        tween.Chain().TweenCallback(Callable.From(() => label.QueueFree()));
+        Juice.FloatingLabel(this, $"+{count}", _levelLabel.GlobalPosition + new Vector2(_levelLabel.Size.X + 6f, 0f),
+            Palette.LevelPopup, Palette.FontSize.Body);
+        Juice.ValuePop(_levelLabel, 1.4f, 0.25f);
     }
 
     private void OnRoundChanged(int round)
@@ -508,6 +705,9 @@ public partial class HUD : Control
     private void OnCoinsChanged(int coins)
     {
         _coinsLabel.Text = $"Monedas: {coins}";
+        if (_lastCoins >= 0 && coins > _lastCoins)
+            Juice.ValuePop(_coinsLabel, 1.25f, 0.2f);
+        _lastCoins = coins;
     }
 
     private void OnScoreChanged(int score)
@@ -519,6 +719,7 @@ public partial class HUD : Control
         {
             _scoreLabel.Text = $"Puntaje: {score} (+{delta})";
             _scoreDeltaTimer.Start();
+            Juice.ValuePop(_scoreLabel, 1.25f, 0.2f);
         }
         else
         {

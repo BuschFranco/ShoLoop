@@ -55,7 +55,7 @@ public partial class BossBanner : Control
     public void Announce(int round)
     {
         _label.Text = $"¡RONDA DE JEFE {round}!";
-        Modulate = new Color(1f, 1f, 1f, 1f);
+        Modulate = new Color(1f, 1f, 1f, 0f);
 
         // Slides in from the left as the banner appears, then rides the banner's own fade out.
         _stripes.Position = new Vector2(-120f, 0f);
@@ -64,6 +64,7 @@ public partial class BossBanner : Control
             .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
 
         var tween = CreateTween();
+        tween.TweenProperty(this, "modulate:a", 1f, 0.2f);
         tween.TweenInterval(2f);
         tween.TweenProperty(this, "modulate:a", 0f, 0.6f);
     }

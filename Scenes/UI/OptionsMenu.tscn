@@ -72,24 +72,24 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="Box" type="VBoxContainer" parent="CenterContainer/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 4
 
 [node name="Title" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = "OPCIONES"
 horizontal_alignment = 1
 
 [node name="JoystickLabel" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 text = "Opacidad del joystick: 100%"
 
 [node name="JoystickSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 min_value = 0.0
 max_value = 100.0
@@ -99,17 +99,21 @@ value = 100.0
 [node name="JoystickHint" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "En 0% el joystick es invisible pero sigue funcionando."
 autowrap_mode = 2
 
+[node name="SepJoystick" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+
 [node name="UltimateButtonLabel" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 text = "Opacidad del botón Ultimate: 100%"
 
 [node name="UltimateButtonSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 min_value = 0.0
 max_value = 100.0
@@ -119,21 +123,21 @@ value = 100.0
 [node name="UltimateButtonHint" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "En 0% el botón es invisible pero sigue funcionando."
 autowrap_mode = 2
 
 [node name="Sep" type="Control" parent="CenterContainer/Panel/Box"]
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 
 [node name="CameraDistanceLabel" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 text = "Zoom de cámara: 100%"
 
 [node name="CameraDistanceSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 min_value = 800
 max_value = 2400
@@ -142,13 +146,17 @@ value = 2000
 [node name="CameraDistanceHint" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "Menos% = más zoom. 100% = default."
 autowrap_mode = 2
 
+[node name="SepCamera" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+
 [node name="OrientationLabel" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 text = "Orientación"
 
 [node name="OrientationRow" type="HBoxContainer" parent="CenterContainer/Panel/Box"]
@@ -182,13 +190,40 @@ button_group = SubResource("ButtonGroup_orientation")
 text = "Vertical"
 
 [node name="Sep2" type="Control" parent="CenterContainer/Panel/Box"]
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+
+[node name="ReducedMotionLabel" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Accesibilidad"
+
+[node name="ReducedMotionButton" type="Button" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_selected")
+toggle_mode = true
+text = "Movimiento reducido"
+
+[node name="ReducedMotionHint" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 13
+text = "Quita destellos, sacudidas y animaciones que se repiten. No cambia la dificultad."
+autowrap_mode = 2
+
+[node name="Sep3" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 
 [node name="CloseButton" type="Button" parent="CenterContainer/Panel/Box"]
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")

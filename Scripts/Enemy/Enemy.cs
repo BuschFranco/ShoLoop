@@ -129,7 +129,40 @@ public partial class Enemy : CharacterBody2D
         glow.Modulate = GetEliteColor(EliteModifier);
         glow.ZIndex = -1;
         AddChild(glow);
+
+        CreateEliteMarker();
     }
+
+    // A glyph over the enemy naming its modifier, because the aura's colour was the ONLY thing
+    // distinguishing the five kinds — and Explosive (orange) versus Fast (yellow) are nearly the same
+    // hue under common colour-vision deficiency, made worse by the WorldEnvironment's bloom washing
+    // both toward white. Explosive means "killing this next to you hurts you", so guessing wrong on
+    // that one costs a life. Now the colour is reinforcement rather than the whole signal.
+    private void CreateEliteMarker()
+    {
+        var marker = new Label();
+        marker.Text = GetEliteMarker(EliteModifier);
+        marker.AddThemeColorOverride("font_color", Colors.White);
+        marker.AddThemeColorOverride("font_outline_color", Colors.Black);
+        marker.AddThemeConstantOverride("outline_size", 4);
+        marker.AddThemeFontSizeOverride("font_size", 16);
+        marker.ZIndex = 12;
+
+        // Offset off HealthBarOffset like the damage numbers do, so it clears each enemy's own visual
+        // radius rather than sitting on top of a big one and floating away from a small one.
+        marker.Position = new Vector2(-6f, HealthBarOffset - 20f);
+        AddChild(marker);
+    }
+
+    private static string GetEliteMarker(EliteModifier modifier) => modifier switch
+    {
+        EliteModifier.Vampiric => "V",
+        EliteModifier.Shielded => "S",
+        EliteModifier.Explosive => "!",   // the one that punishes killing it up close
+        EliteModifier.Fast => "»",
+        EliteModifier.Regenerating => "+",
+        _ => "*",
+    };
 
     private const float EliteGlowScale = 1.15f;
 
@@ -255,6 +288,12 @@ public partial class Enemy : CharacterBody2D
     // the field with pickups.
     private const int LateDropRound = 11;
     private const float LateDropChance = 0.0015f;
+
+    // Part of the same late-round survivability nerf as MaxLivesCap/LateShieldRegenRound: shields
+    // taper a second time from round 17 on, on top of the round-11 taper above, before drying up
+    // entirely at NoShieldDropRound. Hearts are untouched — this is shield-specific.
+    private const int VeryLateShieldDropRound = 17;
+    private const float VeryLateShieldDropChance = LateDropChance * 0.5f;
 
     // Deliberately far higher than any other drop rate: it's the only thing unrewarded boss-round chaff
     // gives, and it exists so a long boss fight is winnable by attrition rather than a slow loss.
@@ -843,7 +882,9 @@ public partial class Enemy : CharacterBody2D
         float heartChance = isLateRound ? LateDropChance : HeartDropChance;
         float shieldChance = round >= NoShieldDropRound
             ? 0f
-            : (isLateRound ? LateDropChance : ShieldDropChance);
+            : round >= VeryLateShieldDropRound
+                ? VeryLateShieldDropChance
+                : (isLateRound ? LateDropChance : ShieldDropChance);
 
         bool isEarlyRound = round < EarlyDropRound;
         float xpChance = isEarlyRound ? EarlyXpCoinDropChance : XpPickupDropChance;

@@ -19,13 +19,13 @@
 [ext_resource type="Script" path="res://Scripts/Obstacle.cs" id="17"]
 [ext_resource type="Script" path="res://Scripts/Util/CameraRig.cs" id="18"]
 [ext_resource type="Script" path="res://Scripts/ArenaBounds.cs" id="19"]
-[ext_resource type="PackedScene" path="res://Scenes/UI/RoundSummary.tscn" id="20"]
 [ext_resource type="Script" path="res://Scripts/DangerDirector.cs" id="21"]
 [ext_resource type="Script" path="res://Scripts/UI/DangerOverlay.cs" id="22"]
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemon.tscn" id="23"]
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonBrute.tscn" id="24"]
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonStalker.tscn" id="25"]
 [ext_resource type="Script" path="res://Scripts/RoundEventDirector.cs" id="26"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ConfirmDialog.tscn" id="27"]
 
 [sub_resource type="Environment" id="Environment_neon"]
 background_mode = 3
@@ -236,15 +236,15 @@ layer = 15
 
 [node name="Shop" parent="ShopLayer" instance=ExtResource("7")]
 
-[node name="RoundSummaryLayer" type="CanvasLayer" parent="."]
-layer = 7
-
-[node name="RoundSummary" parent="RoundSummaryLayer" instance=ExtResource("20")]
-
 [node name="GameOverLayer" type="CanvasLayer" parent="."]
 layer = 20
 
 [node name="GameOverScreen" parent="GameOverLayer" instance=ExtResource("6")]
+
+[node name="ConfirmLayer" type="CanvasLayer" parent="."]
+layer = 30
+
+[node name="ConfirmDialog" parent="ConfirmLayer" instance=ExtResource("27")]
 
 [node name="Camera2D" type="Camera2D" parent="."]
 enabled = true

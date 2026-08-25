@@ -20,6 +20,7 @@ public partial class DangerOverlay : Control
     private Tween _pulseTween;
     private float _danger;
     private bool _bossAlert;
+    private bool _barsWasVisible;
 
     public override void _Ready()
     {
@@ -89,7 +90,27 @@ public partial class DangerOverlay : Control
         float effective = _bossAlert ? 1f : _danger;
         bool visible = _bossAlert || _danger >= DangerLevel.AlarmThreshold;
 
-        _bars.Visible = visible;
+        // Faded via SelfModulate rather than Modulate — Modulate's RGB is already owned by the
+        // trough/peak pulse below, so a second tween fighting it over the same property would
+        // just get overwritten every time this pulse re-fires. SelfModulate multiplies on top of
+        // that independently, so the appear/disappear fade never touches the pulse colour.
+        if (visible != _barsWasVisible)
+        {
+            if (visible)
+            {
+                _bars.SelfModulate = new Color(1f, 1f, 1f, 0f);
+                _bars.Visible = true;
+                _bars.CreateTween().TweenProperty(_bars, "self_modulate:a", 1f, 0.2f);
+            }
+            else
+            {
+                var fadeOut = _bars.CreateTween();
+                fadeOut.TweenProperty(_bars, "self_modulate:a", 0f, 0.2f);
+                fadeOut.TweenCallback(Callable.From(() => _bars.Visible = false));
+            }
+            _barsWasVisible = visible;
+        }
+
         if (!visible) return;
 
         float trough = DangerLevel.AlarmTrough(effective);

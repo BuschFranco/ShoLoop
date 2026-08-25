@@ -59,7 +59,12 @@ public partial class CooldownIcon : Control
         var font = GetThemeDefaultFont();
         int fontSize = 14;
         Vector2 textSize = font.GetStringSize(Label, HorizontalAlignment.Center, -1f, fontSize);
-        DrawString(font, center - textSize / 2f + new Vector2(0f, textSize.Y * 0.35f), Label,
-            HorizontalAlignment.Center, -1f, fontSize, Colors.White);
+        Vector2 textPos = center - textSize / 2f + new Vector2(0f, textSize.Y * 0.35f);
+
+        // Outlined, unlike every other DrawString in the project — this letter is the ONLY thing
+        // identifying which ability the icon belongs to, and it sits over the live arena. A white
+        // glyph on top of a bright cyan or pink explosion simply disappears without this.
+        DrawStringOutline(font, textPos, Label, HorizontalAlignment.Center, -1f, fontSize, 4, Colors.Black);
+        DrawString(font, textPos, Label, HorizontalAlignment.Center, -1f, fontSize, Colors.White);
     }
 }

@@ -14,6 +14,12 @@ public partial class VirtualJoystick : Control
     private Vector2 _origin;
     private Vector2 _knobOffset = Vector2.Zero;
 
+    // The knob's drawn position trails the raw input by a short lerp instead of snapping to it —
+    // purely cosmetic. GetVector() below still reads _knobOffset directly, so steering input stays
+    // instant; only the visual has any lag.
+    private Vector2 _knobVisualOffset = Vector2.Zero;
+    private const float KnobFollowSpeed = 22f;
+
     public override void _Ready()
     {
         AddToGroup("virtual_joystick");
@@ -64,9 +70,12 @@ public partial class VirtualJoystick : Control
         {
             _touchIndex = -1;
             _knobOffset = Vector2.Zero;
-            UpdateKnob();
+            UpdateKnob(immediate: true);
             Visible = false;
         }
+
+        _knobVisualOffset = _knobVisualOffset.Lerp(_knobOffset, Mathf.Min(1f, (float)delta * KnobFollowSpeed));
+        _knob.Position = _knobCenter + _knobVisualOffset;
     }
 
     private void HandlePress(int index, bool pressed, Vector2 position)
@@ -80,13 +89,13 @@ public partial class VirtualJoystick : Control
             // Center the joystick on the touch point.
             GlobalPosition = position - new Vector2(BoxSize / 2f, BoxSize / 2f);
             Visible = true;
-            UpdateKnob();
+            UpdateKnob(immediate: true);
         }
         else if (!pressed && index == _touchIndex)
         {
             _touchIndex = -1;
             _knobOffset = Vector2.Zero;
-            UpdateKnob();
+            UpdateKnob(immediate: true);
             Visible = false;
         }
     }
@@ -136,12 +145,13 @@ public partial class VirtualJoystick : Control
         }
 
         _knobOffset = delta;
-        UpdateKnob();
     }
 
-    private void UpdateKnob()
+    private void UpdateKnob(bool immediate = false)
     {
-        _knob.Position = _knobCenter + _knobOffset;
+        if (immediate)
+            _knobVisualOffset = _knobOffset;
+        _knob.Position = _knobCenter + _knobVisualOffset;
     }
 
     public Vector2 GetVector()

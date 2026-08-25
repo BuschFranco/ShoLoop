@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://Scripts/UI/RewardCard.cs" id="1"]
 
 [node name="RewardCard" type="PanelContainer"]
-custom_minimum_size = Vector2(0, 118)
+custom_minimum_size = Vector2(0, 126)
 mouse_filter = 0
 script = ExtResource("1")
 
@@ -20,7 +20,7 @@ mouse_filter = 2
 layout_mode = 2
 mouse_filter = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 text = "COMÚN"
@@ -28,7 +28,7 @@ text = "COMÚN"
 [node name="BestBadge" type="Label" parent="Body/TopRow"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(1, 0.624, 0.953, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
@@ -48,6 +48,8 @@ layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.72, 0.76, 0.84, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
 autowrap_mode = 2
 text = "Qué ganás"
 
@@ -59,14 +61,16 @@ mouse_filter = 2
 layout_mode = 2
 mouse_filter = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.55, 0.58, 0.66, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.68, 0.71, 0.79, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
 autowrap_mode = 2
 
 [node name="VerdictChip" type="Label" parent="Body/StackRow"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 vertical_alignment = 1
@@ -78,16 +82,16 @@ mouse_filter = 2
 theme_override_constants/separation = 10
 
 [node name="ActionButton" type="Button" parent="Body/BottomRow"]
-custom_minimum_size = Vector2(112, 40)
+custom_minimum_size = Vector2(112, 48)
 layout_mode = 2
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 16
 text = "Comprar"
 
 [node name="PriceLabel" type="Label" parent="Body/BottomRow"]
 layout_mode = 2
 mouse_filter = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 15
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 horizontal_alignment = 2

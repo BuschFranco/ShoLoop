@@ -106,7 +106,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = "ELEGÍ TU PILOTO"
 horizontal_alignment = 1
 
@@ -119,7 +119,7 @@ alignment = 1
 custom_minimum_size = Vector2(48, 100)
 layout_mode = 2
 size_flags_vertical = 4
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 20
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
@@ -155,7 +155,7 @@ stretch_mode = 5
 custom_minimum_size = Vector2(48, 100)
 layout_mode = 2
 size_flags_vertical = 4
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 20
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
@@ -171,7 +171,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 26
 text = "Equilibrado"
 horizontal_alignment = 1
 
@@ -212,10 +212,10 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="CreateButton" type="Button" parent="CenterContainer/Panel/Box/Actions"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 15
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
@@ -224,7 +224,7 @@ text = "+ Crear piloto"
 
 [node name="DeleteButton" type="Button" parent="CenterContainer/Panel/Box/Actions"]
 visible = false
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 14

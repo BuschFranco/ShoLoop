@@ -36,6 +36,10 @@ public static class Palette
     public static readonly Color OndaBlast = new("c65bff", 0.45f);
     // Fierce orange-red, distinct from every other blast colour, for Vendaval's directional shove.
     public static readonly Color VendavalBlast = new("ff4b2b", 0.5f);
+    // Amber, distinct from Vendaval's redder orange and from CoinPickup's warmer gold — reads as a
+    // hazard marker (arming/armed rings) as much as a blast colour, since a Mine sits visible on
+    // the floor for a while before it goes off.
+    public static readonly Color MineBlast = new("ffa72b", 0.55f);
 
     // --- Pickups ---
     // World drops from enemies, distinct from the reward-shop rewards of the same name.
@@ -115,4 +119,21 @@ public static class Palette
     public static readonly Color RewardPanelBorder = Accent;          // cyan — free level-up picks
     public static readonly Color ShopPanelBorder = new("ff4fd8");     // magenta — spending coins
     public static readonly Color UltimatePanelBorder = new("ffe066"); // gold — the rare post-boss pick
+
+    // --- Typography ---
+    // Five roles, picked from the sizes already scattered across the .tscn files (11-72px) rather
+    // than invented from scratch — Number was already exactly 40 in a couple of places and Title
+    // already 32-36 for modal/screen headers, so both just become the canonical value instead of
+    // shifting anything. Each screen re-points its own labels to the nearest role as part of that
+    // screen's own pass, not in one mass find-replace — see the UX pass plan.
+    // Excluded on purpose: HUD's pre-round countdown digit (72px) — that's a full-screen digit, not
+    // a label among labels, so it stays its own one-off rather than being forced into this scale.
+    public static class FontSize
+    {
+        public const int Caption = 13;   // fine print, badges, tier chips, stack info
+        public const int Body = 16;       // standard body text, descriptions, list rows
+        public const int Subtitle = 20;   // section headers, character/reward names
+        public const int Title = 32;      // screen/modal titles
+        public const int Number = 40;     // the one "read this number" hero moment (e.g. final score)
+    }
 }

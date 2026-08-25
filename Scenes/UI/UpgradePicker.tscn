@@ -36,7 +36,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 20
 text = "¡SUBISTE DE NIVEL! Elige una mejora"
 horizontal_alignment = 1
 autowrap_mode = 2
@@ -50,6 +50,8 @@ theme_override_font_sizes/font_size = 13
 horizontal_alignment = 1
 text = "Elección gratuita — no gastás monedas"
 
-[node name="CardsContainer" type="VBoxContainer" parent="CenterContainer/Panel/VBoxContainer"]
+[node name="CardsContainer" type="GridContainer" parent="CenterContainer/Panel/VBoxContainer"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 1

@@ -89,7 +89,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.624, 0.953, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = "CREAR PILOTO"
 horizontal_alignment = 1
 
@@ -135,12 +135,12 @@ text = "Elegir imagen"
 [node name="Hint" type="Label" parent="CenterContainer/Panel/Box/Top/Side"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.68, 0.78, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 text = "Se recorta en círculo automáticamente."
 autowrap_mode = 3
 
 [node name="NameEdit" type="LineEdit" parent="CenterContainer/Panel/Box"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 placeholder_text = "Nombre"
@@ -155,8 +155,10 @@ wrap_mode = 1
 [node name="ErrorLabel" type="Label" parent="CenterContainer/Panel/Box"]
 visible = false
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.22, 0.38, 1)
-theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(1, 0.35, 0.45, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 autowrap_mode = 3
 

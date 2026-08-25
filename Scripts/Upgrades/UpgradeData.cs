@@ -27,6 +27,7 @@ public enum UpgradeType
     Fortune,
     Ricochet,
     Thorns,
+    Mine,
 }
 
 public enum RewardTier
@@ -119,8 +120,9 @@ public class UpgradeData
             new("Sabiduría I", "+20% XP", UpgradeType.XpBonus, RewardTier.Common, 20f, cost: 18),
             new("Onda de Choque I", "Onda cada 6s (20 daño, radio 65)", UpgradeType.ShockwaveAura, RewardTier.Common, 1f, cost: 20),
             new("Esquiva I", "5% esquiva", UpgradeType.Dodge, RewardTier.Common, 5f, cost: 16),
-            new("Fortuna I", "+3% Rare/Epic/Legendary", UpgradeType.Fortune, RewardTier.Common, 3f, cost: 14),
+            new("Fortuna I", "+3% Raro/Épico/Legendario", UpgradeType.Fortune, RewardTier.Common, 3f, cost: 14),
             new("Rebote I", "1 rebote", UpgradeType.Ricochet, RewardTier.Common, 1f, cost: 18),
+            new("Mina I", "Mina cada 5.5s (45 daño, radio 55)", UpgradeType.Mine, RewardTier.Common, 1f, cost: 24),
         },
         [RewardTier.Rare] = new List<UpgradeData>
         {
@@ -130,7 +132,7 @@ public class UpgradeData
             new("Cuchilla Orbital II", "2 cuchillas orbitales", UpgradeType.OrbitShield, RewardTier.Rare, 2f, cost: 32),
             new("Escudo II", "+2 escudo", UpgradeType.HitShield, RewardTier.Rare, 2f, cost: 24),
             new("Dron II", "Dron al 35%", UpgradeType.Companion, RewardTier.Rare, 35f, cost: 22),
-            new("Disparo Lateral", "+1 línea lateral (máx 5)", UpgradeType.SideShot, RewardTier.Rare, 1f, cost: 22),
+            new("Disparo Paralelo", "+1 línea paralela (máx 5)", UpgradeType.SideShot, RewardTier.Rare, 1f, cost: 22),
             new("Láser II", "Láser cada 3.2s (20 daño, todos)", UpgradeType.Laser, RewardTier.Rare, 2f, cost: 34),
             new("Perforación II", "+1 perforación", UpgradeType.Pierce, RewardTier.Rare, 1f, cost: 26),
             new("Crítico II", "+12% crítico (x2)", UpgradeType.CritChance, RewardTier.Rare, 12f, cost: 20),
@@ -140,15 +142,16 @@ public class UpgradeData
             new("Incendiario II", "Quema 10/s por 3s", UpgradeType.Burn, RewardTier.Rare, 2f, cost: 32),
             new("Onda de Choque II", "Onda cada 5s (35 daño, radio 78)", UpgradeType.ShockwaveAura, RewardTier.Rare, 2f, cost: 32),
             new("Esquiva II", "10% esquiva", UpgradeType.Dodge, RewardTier.Rare, 10f, cost: 28),
-            new("Fortuna II", "+5% Rare/Epic/Legendary", UpgradeType.Fortune, RewardTier.Rare, 5f, cost: 24),
+            new("Fortuna II", "+5% Raro/Épico/Legendario", UpgradeType.Fortune, RewardTier.Rare, 5f, cost: 24),
             new("Rebote II", "2 rebotes", UpgradeType.Ricochet, RewardTier.Rare, 2f, cost: 30),
+            new("Mina II", "Mina cada 4.6s (70 daño, radio 65)", UpgradeType.Mine, RewardTier.Rare, 2f, cost: 38),
         },
         [RewardTier.Epic] = new List<UpgradeData>
         {
             new("Alcance de Disparo III", "+200 alcance", UpgradeType.FireRange, RewardTier.Epic, 200f, cost: 28),
             new("Fuego Rápido III", "+1.8 cadencia", UpgradeType.FireRate, RewardTier.Epic, 1.8f, cost: 28),
             new("Balas Afiladas III", "+9 daño", UpgradeType.BulletDamage, RewardTier.Epic, 9f, cost: 28),
-            new("Disparo Doble", "+2 proyectivos extra", UpgradeType.ExtraProjectile, RewardTier.Epic, cost: 30),
+            new("Disparo en Diagonal", "+2 proyectiles en diagonal", UpgradeType.ExtraProjectile, RewardTier.Epic, cost: 30),
             new("Cuchilla Orbital III", "3 cuchillas orbitales", UpgradeType.OrbitShield, RewardTier.Epic, 3f, cost: 46),
             new("Escudo III", "+3 escudo", UpgradeType.HitShield, RewardTier.Epic, 3f, cost: 36),
             new("Dron III", "Dron al 45%", UpgradeType.Companion, RewardTier.Epic, 45f, cost: 34),
@@ -162,8 +165,9 @@ public class UpgradeData
             new("Sabiduría II", "+50% XP", UpgradeType.XpBonus, RewardTier.Epic, 50f, cost: 44),
             new("Onda de Choque III", "Onda cada 4s (55 daño, radio 92)", UpgradeType.ShockwaveAura, RewardTier.Epic, 3f, cost: 46),
             new("Esquiva III", "15% esquiva", UpgradeType.Dodge, RewardTier.Epic, 15f, cost: 42),
-            new("Fortuna III", "+7% Rare/Epic/Legendary", UpgradeType.Fortune, RewardTier.Epic, 7f, cost: 38),
+            new("Fortuna III", "+7% Raro/Épico/Legendario", UpgradeType.Fortune, RewardTier.Epic, 7f, cost: 38),
             new("Rebote III", "3 rebotes", UpgradeType.Ricochet, RewardTier.Epic, 3f, cost: 46),
+            new("Mina III", "Mina cada 3.8s (100 daño, radio 75)", UpgradeType.Mine, RewardTier.Epic, 3f, cost: 54),
 
             // --- Shop-exclusive from here ---
             new("Ultimate: Pulso Nova", "Daño masivo a todos los cercanos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Nova),
@@ -181,7 +185,7 @@ public class UpgradeData
             new("Cuchilla Orbital IV", "4 cuchillas orbitales", UpgradeType.OrbitShield, RewardTier.Legendary, 4f, cost: 60),
             new("Escudo IV", "+4 escudo", UpgradeType.HitShield, RewardTier.Legendary, 4f, cost: 48),
             new("Dron IV", "Dron al 50%", UpgradeType.Companion, RewardTier.Legendary, 50f, cost: 50),
-            new("Disparo Lateral", "+2 líneas laterales (máx 5)", UpgradeType.SideShot, RewardTier.Legendary, 2f, cost: 55),
+            new("Disparo Paralelo", "+2 líneas paralelas (máx 5)", UpgradeType.SideShot, RewardTier.Legendary, 2f, cost: 55),
             new("Láser IV", "Láser cada 1.8s (50 daño, todos)", UpgradeType.Laser, RewardTier.Legendary, 4f, cost: 65),
             new("Perforación IV", "+3 perforación", UpgradeType.Pierce, RewardTier.Legendary, 3f, cost: 55),
             new("Crítico IV", "+25% crítico (x2)", UpgradeType.CritChance, RewardTier.Legendary, 25f, cost: 48),
@@ -191,8 +195,9 @@ public class UpgradeData
             new("Incendiario IV", "Quema 24/s por 4s", UpgradeType.Burn, RewardTier.Legendary, 4f, cost: 62),
             new("Onda de Choque IV", "Onda cada 3.2s (80 daño, radio 105)", UpgradeType.ShockwaveAura, RewardTier.Legendary, 4f, cost: 62),
             new("Esquiva IV", "25% esquiva", UpgradeType.Dodge, RewardTier.Legendary, 25f, cost: 58),
-            new("Fortuna IV", "+10% Rare/Epic/Legendary", UpgradeType.Fortune, RewardTier.Legendary, 10f, cost: 52),
+            new("Fortuna IV", "+10% Raro/Épico/Legendario", UpgradeType.Fortune, RewardTier.Legendary, 10f, cost: 52),
             new("Rebote IV", "4 rebotes", UpgradeType.Ricochet, RewardTier.Legendary, 4f, cost: 64),
+            new("Mina IV", "Mina cada 3.0s (140 daño, radio 85)", UpgradeType.Mine, RewardTier.Legendary, 4f, cost: 72),
 
             // --- Shop-exclusive from here ---
             new("Corazón", "+1 vida máxima, cura todo", UpgradeType.Heart, RewardTier.Legendary, 1f, cost: 60, source: RewardSource.Shop),

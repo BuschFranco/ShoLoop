@@ -19,12 +19,26 @@ Four tiers, each with a color used everywhere a reward is displayed (`RewardTier
 
 | Tier | Base | PerRound | Min | Max |
 |---|---|---|---|---|
-| Common | 65% | −3.5%/round | 10% | 65% |
-| Rare | 27% | +0.3%/round | 15% | 35% |
-| Epic | 7% | +1.4%/round | 5% | 35% |
-| Legendary | 1% | +1.3%/round | 0% | 25% |
+| Common | 80 | −2.8/round | 28 | 80 |
+| Rare | 19 | +0.9/round | 19 | 36 |
+| Epic | 0.5 | +1.1/round | 0 | 28 |
+| Legendary | −2.5 | +0.85/round | 0 | 18 |
 
-Rough result: round 1 ≈ 65/27/7/1%, round 10 ≈ 35/31/21/13%, round 20 ≈ 10/32/33/25%. Common's share shrinks, everything else grows, gradually and capped — no tier ever hits 0% or 100%.
+Normalized result:
+
+| Round | Common | Rare | Epic | Legendary | Epic+Leg |
+|---|---|---|---|---|---|
+| 1 | 80.4% | 19.1% | 0.5% | 0.0% | **0.5%** |
+| 3 | 76.0% | 21.2% | 2.8% | 0.0% | 2.8% |
+| 5 | 70.8% | 23.3% | 5.0% | 0.9% | 6.0% |
+| 10 | 56.2% | 27.8% | 10.7% | 5.3% | 16.0% |
+| 20 | 28.3% | 36.3% | 21.6% | 13.8% | 35.4% |
+
+**Why Legendary's Base is negative**: the curve has to climb into positive territory before the tier can be rolled at all, so Legendary is *mathematically impossible* until round 4 rather than merely unlikely. That's a stronger guarantee than a small Min would give, and it costs nothing — `RoundCurve.Evaluate` already clamps at `Min = 0`.
+
+These opened at `65/27/7/1` before, i.e. an **8% shot at Epic-or-better on every card**. Per card that reads reasonable; in aggregate it wasn't. A picker shows 3 cards at once, so the real question is "chance of at least one Epic+ in a draw" — that was **22%**, and a first round with several level-ups puts 12-15 cards in front of the player. Round-1 Epics stopped being a jackpot and became the expected outcome, and handing out top-tier rewards before the player has a build to improve flattens the whole progression: there's nothing left to climb toward. The same per-draw figure is now **1.5%**.
+
+Late game is not poorer for it — the ramps are steeper, so the change moves *when* the good rolls happen rather than removing them.
 
 ### Picking rewards: `UpgradeData.PickRandomTiered(count, round, source)`
 
@@ -85,6 +99,7 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Ultimate *(shop)* | `Ultimate` | — | — | one of 3 kinds (80💰) | — | see [Ultimates](#ultimates) |
 | Shield Regen *(shop)* | `ShieldRegen` | — | — | 1/12s (55💰) | 1/7.5s (75💰) | best tier taken |
 | Vendaval *(shop)* | `Vendaval` | — | — | 4.5s / 90 dmg / r260, knockback 380 (75💰) | 3.6s / 140 / r320, knockback 460 (115💰) | Nv2 |
+| Mina | `Mine` | 5.5s / 45 dmg / r55 (24💰) | 4.6s / 70 / r65 (38💰) | 3.8s / 100 / r75 (54💰) | 3.0s / 140 / r85 (72💰) | Nv4 |
 
 See [player.md](player.md) for what each `UpgradeType` actually does mechanically. Every hard cap below is a named constant in [Player.cs](../Scripts/Player/Player.cs) — that's the one file to touch to retune any of them.
 
@@ -135,15 +150,17 @@ CurrentLives = MaxLives;                            // always a full heal
 
 It's disabled only when you're at `MaxLivesCap` **and** already on full lives — until then it always does something, either raising the ceiling or undoing damage.
 
-### Take-the-best-ever: Orbit Blade, Drone (Companion), Laser, Missile, Burn, Onda de Choque, Vendaval
+### Take-the-best-ever: Orbit Blade, Drone (Companion), Laser, Missile, Burn, Onda de Choque, Vendaval, Mine
 
 `OrbitCount = Max(OrbitCount, upgrade.Value)` and `CompanionStatPercent = Max(CompanionStatPercent, upgrade.Value / 100)`. Each tier's number is already an absolute target (e.g. "4 blades", "50% of your stats"), not a delta — so re-picking a lower-or-equal tier than what you already have is a genuine no-op. The [shop](economy.md) disables any offer that would be a no-op, so you never spend coins on it by accident.
 
-`Laser`, `Missile`, `Burn`, `ShockwaveAura` (Onda de Choque), and `Vendaval` all work the same way — `Level = Max(Level, upgrade.Value)` against a per-tier lookup table (`LaserTiers` / `MissileTiers` / `BurnTiers` / `OndaTiers` / `VendavalTiers`), since every tier is strictly better than the last so there's nothing to sum. Details of the first two in [player.md](player.md#missile-misil); burn's enemy-side state is in [enemies.md](enemies.md#burn-incendiario).
+`Laser`, `Missile`, `Burn`, `ShockwaveAura` (Onda de Choque), `Vendaval`, and `Mine` all work the same way — `Level = Max(Level, upgrade.Value)` against a per-tier lookup table (`LaserTiers` / `MissileTiers` / `BurnTiers` / `OndaTiers` / `VendavalTiers` / `MineTiers`), since every tier is strictly better than the last so there's nothing to sum. Details of the first two in [player.md](player.md#missile-misil); burn's enemy-side state is in [enemies.md](enemies.md#burn-incendiario).
 
 **Onda de Choque** fires in place around the player on the same "poll a cooldown fraction every physics frame" pattern as Laser/Missile (no repeating `Timer`, so there's no icon-flicker on an empty retry) — except it never has an empty retry to begin with, since it's centered on the player rather than needing a target in range, so it simply always fires the instant its cooldown clears. Deliberately weaker per-tick and much shorter-ranged than Missile (radius tops out at 75 vs. Missile's 120) since it costs nothing to aim.
 
 **Vendaval** is shop-exclusive and only ever offered at Epic/Legendary (2 tiers, not 4) — it's meant to be a rarer, more decisive purchase than the Common-through-Legendary rewards. It fires a damaging cone in front of the player, aimed at whatever direction the player's ship is currently facing (`Visual.Rotation`, the same value `UpdateFacing` already drives — including its "holds last facing while stationary" behavior, so the cone still has a direction even if you're standing still), and additionally calls `Enemy.ApplyKnockback` on every enemy it hits, shoving them radially out and away from the player. That knockback is the point of the reward: enough burst damage plus a strong forward-and-out shove that it visibly "clears a path" through a crowd, rather than being read as just another damage source.
+
+**Mine** is the one weapon in this family that doesn't detonate the instant its cooldown clears — it drops [`PlayerMine`](../Scripts/Projectile/PlayerMine.cs) (a `Node2D`, not the reward's own `Area2D` bullet the way Missile is) at the player's current position, same "no targeting needed" reasoning as Onda de Choque. The mine sits disarmed for 0.6s, then explodes the instant any enemy comes within its radius, or after a 9s lifetime if nothing ever does. Named `PlayerMine` rather than `Mine` specifically to avoid colliding with [`Scripts/Hazards/Mine.cs`](../Scripts/Hazards/Mine.cs) — the unrelated, hostile, permanently-placed mine from the Campo Minado round event; the two share a theme and nothing else.
 
 `Laser` specifically: `LaserLevel = Max(LaserLevel, upgrade.Value)` (`upgrade.Value` is the tier level, 1–4), and `Player.EnsureLaserTimer()` re-reads `LaserLevel` from a fixed `LaserTiers` lookup array to set the firing `Timer`'s interval, per-tick damage, and max targets per zap. Every tier is a strictly-better version of the same ability (faster + harder-hitting), so there's nothing to sum — same "take the best" shape as Orbit Blade/Drone. Tier 1 additionally caps a single zap at 5 enemies (the closest 5 in range); tiers 2–4 hit everyone in range uncapped.
 

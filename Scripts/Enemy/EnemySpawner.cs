@@ -223,7 +223,7 @@ public partial class EnemySpawner : Node2D
     // Boss rounds keep spawning, but only Grunts and only a fraction as many as a normal round would.
     // The chaff exists to crowd the player's movement while the boss is the actual threat — so it
     // bypasses ChooseEnemyScene entirely rather than rolling the normal composition, which keeps the
-    // boss the sole Special/elite on the field (and keeps RoundSummary's "élite / jefes" line reading
+    // boss the sole Special/elite on the field (and keeps the round recap's "especiales" count reading
     // exactly 1, since that counter tallies every non-Common category).
     private const float BossRoundCrowdMult = 0.20f;
     private const float BossRoundIntervalMult = 2f;

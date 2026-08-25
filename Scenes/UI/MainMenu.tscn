@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/UI/OptionsMenu.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/BuildsMenu.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/CharacterSelectMenu.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ConfirmDialog.tscn" id="5"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
 content_margin_left = 14.0
@@ -93,7 +94,7 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.15, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 20
 text = "Mejor puntaje: 0"
 horizontal_alignment = 1
 
@@ -141,8 +142,9 @@ theme_override_constants/separation = 10
 alignment = 1
 
 [node name="StartButton" type="Button" parent="VBoxContainer/ButtonsRow" unique_id=748975174]
-custom_minimum_size = Vector2(150, 52)
+custom_minimum_size = Vector2(170, 56)
 layout_mode = 2
+theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 18
@@ -179,5 +181,9 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="CharacterSelectMenu" parent="." instance=ExtResource("4")]
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ConfirmDialog" parent="." instance=ExtResource("5")]
 grow_horizontal = 2
 grow_vertical = 2

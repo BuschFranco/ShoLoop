@@ -317,12 +317,12 @@ text = "Puntaje: 0"
 [node name="StatsLabel" type="Label" parent="TopBarPanel/TopBar"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.62, 0.68, 0.78, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
-text = "DAÑO 10 · CAD 3.0/s · CRIT 0%
-RANGO 220 · BAJAS 0"
+text = "Daño 10 · Cadencia 3.0/s · Crítico 0%
+Alcance 220 · Bajas 0"
 
 [node name="BuildPanel" type="PanelContainer" parent="TopBarPanel/TopBar"]
 visible = false
@@ -397,6 +397,14 @@ mouse_filter = 2
 script = ExtResource("3")
 icon_color = Color(1, 0.294, 0.169, 1)
 label = "V"
+
+[node name="MineIcon" type="Control" parent="CooldownIcons"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3")
+icon_color = Color(1, 0.655, 0.169, 1)
+label = "N"
 
 [node name="BossHealthBar" type="VBoxContainer" parent="."]
 visible = false

@@ -203,6 +203,25 @@ This required a small refactor in `Enemy.cs` to give `Boss` a seam to override m
 
 A **teleport/blink** pattern was considered and deliberately left out: without an in-flight dodge window it doesn't fit this game's "deliberately dodgeable" telegraph philosophy, and it would need extra safety work (arena-bounds clamp + obstacle-overlap check on the landing spot) that Charge/Lunge don't. Worth adding later as a third `Phase`-driven case once a use for it comes up.
 
+### Attack abilities (rolled as a set, independent of the movement pattern)
+
+A second, independent axis of variety on top of the single movement `Pattern` above: `Boss.RollAbilities()` shuffles the full `AttackAbility` pool and activates `AbilityCount` (2) distinct entries at spawn, each on its own repeating `Timer` with a staggered initial delay so they don't all come due at once. Abilities that weren't rolled simply never get a timer — they can't fire at all for that boss. Every ability follows the same Windup (telegraph tint + floating label) → Execute shape Charge/Lunge already use, and a shared `_channeling` flag freezes movement and blocks every other ability from firing at the same time, so only one special thing is ever telegraphed on screen at once:
+
+- **Ráfaga en Abanico** (`FanBarrage`) — fires 5 `EnemyBullet`s in a 16°-stepped fan around the aimed direction, instead of the boss's single inherited shot.
+- **Lluvia de Meteoros** (`MeteorRain`) — spawns 3 [`MissileZone`](../Scripts/Hazards/MissileZone.cs) fill-then-detonate circles scattered around the *player's* current position (reused verbatim from the Missile Strike round event).
+- **Onda Devastadora** (`ShockwaveRing`) — a single ring centered on the boss itself (190px radius), long 0.9s windup since it's otherwise undodgeable once it pops — the answer to a player who just closes distance and facetanks.
+- **Campo Minado** (`MineDrop`) — drops 3 [`Mine`](../Scripts/Hazards/Mine.cs) hazards (same class the Campo Minado round event seeds the whole arena with) scattered around the player, with a minimum clearance so none land directly underfoot.
+- **Refuerzos** (`SummonAdds`) — spawns 2 unscaled `EnemyGrunt.tscn` near the boss as a brief crowding distraction, not a real threat on their own.
+- **Rayo Giratorio** (`SpinLaser`) — the one channeled ability: a `Line2D` beam (260px) sweeps 1.5 full rotations around the boss over 2.4s, hit-testing the player's angle every physics frame via `AdvanceSpinLaser` rather than firing once — the only ability with per-frame execute logic instead of an instantaneous payload.
+
+### Phase 2 (one-time, random, at 50% HP)
+
+`TryTriggerPhase2()` (checked every physics frame) fires once when `CurrentHp` first crosses half of `MaxHp`: it plays a bigger telegraph pulse, a "¡FURIA!" callout, and routes through `DangerDirector.AnnounceThreat` for a screen-wide "¡EL JEFE SE ENFURECE!" — then applies exactly one randomly-chosen effect, treated as "gaining another ability" the same way the design brief asked for:
+
+- **Furia** — `MoveSpeed × 1.35` and every currently active ability's cooldown halved (takes effect from each ability's next `Start()`, not retroactively — `Timer.WaitTime` doesn't shrink a countdown already in flight).
+- **Refuerzo de Habilidad** — activates one more `AttackAbility` the boss didn't already roll, exactly like `RollAbilities()` does at spawn, just one ability and mid-fight.
+- **Oleada de Refuerzos** — an immediate, untelegraphed `ExecuteSummonAdds()` call, as a direct reaction to crossing the threshold rather than on its own cooldown.
+
 ## Fixed boss health bar (HUD)
 
 The Boss no longer carries the floating in-world health bar Special enemies get (see below) — it gets its own fixed bar pinned to the top-center of the HUD instead (`HUD.tscn`'s `BossHealthBar`), styled in gold (`Palette.BossHealthBarFill`) rather than the floating bar's magenta, and much thicker (22px vs. 4px) so it reads as a dedicated instrument, not a bigger version of the same sliver. `EnemySpawner.SpawnOne` adds the spawned Boss to a `"boss"` group; `HUD._Process` polls `GetTree().GetFirstNodeInGroup("boss")` every frame the same way it already polls for `_topBarPanel` sizing, shows the bar and syncs it to `CurrentHp`/`MaxHp` while a live boss reference exists, and hides it the instant that reference goes invalid (i.e. the boss died) — no HP-changed or death signal needed.

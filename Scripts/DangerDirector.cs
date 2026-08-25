@@ -76,7 +76,11 @@ public partial class DangerDirector : Node
         // onto the entry lerp: SetLoops() replays the *whole* tween, so a chained version would replay
         // the entry lerp every cycle and stall the heartbeat with a dead 1.5s hold each beat. The first
         // leg doubles as the transition in from whatever colour the backdrop currently holds.
-        if (DangerLevel.HeartbeatActive(danger))
+        // Reduced motion holds the flat danger colour instead of breathing. This is a full-viewport
+        // loop with nowhere to look away to, so it's skipped entirely rather than slowed — the
+        // backdrop still reaches its max-danger tone via the plain lerp below, so the escalation
+        // still reads, it just stops moving.
+        if (DangerLevel.HeartbeatActive(danger) && !DangerLevel.Reduced)
         {
             _backdropTween.SetLoops();
             _backdropTween.TweenProperty(backdrop, "color", DangerLevel.BackdropHeartbeatColor(), DangerLevel.HeartbeatLegDuration)

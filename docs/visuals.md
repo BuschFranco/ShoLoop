@@ -285,7 +285,7 @@ obvious at a glance.
   the player picks one explicitly, the device doesn't auto-rotate under them mid-run). Has no
   visible effect on desktop; it's what actually rotates the physical screen on Android.
 - No bespoke portrait layout exists for any menu. Every screen (`HUD`, `Shop`, `PauseMenu`,
-  `UpgradePicker`, `RoundSummary`, `GameOverScreen`, `MainMenu`) is anchored by corner/edge/center
+  `UpgradePicker`, `GameOverScreen`, `MainMenu`) is anchored by corner/edge/center
   rather than absolute position, so swapping the base size reflows all of them into a narrower,
   taller canvas without needing a second authored version of each scene. The widest fixed-pixel
   panel is the character select at 600px, which still clears the 648px portrait width — but only
@@ -341,25 +341,30 @@ re-validates resolved/useless/afford on every call, so it needs no extra guard; 
 `OnChoicePressed` doesn't re-validate, so `OnOptionGuiInput` checks a parallel `_useless[]` array
 before forwarding the tap.
 
-**`RoundSummary` no longer competes for the same screen real-estate as those modals.** Two
-separate bugs compounded here:
+**The round recap is part of the shop, not a competing window.** This went through three rounds
+of fixes before the layering problem was recognised as the wrong problem to be solving:
 
-1. It used to sit vertically centered and offset left — positioned to just clear a landscape-only
-   Shop, which broke the moment Portrait (a much narrower canvas) became the default and the two
-   boxes started overlapping outright, text interleaving with text. It's now pinned below the
-   HUD's own top-left stats panel instead — repositioned every frame off `TopBarPanel`'s live
-   size, same as `RoundTimerLabel` — so it starts out of the vertically-centered band any
-   interstitial modal appears in.
-2. Even after that, tall content (5+ stat lines, or a Shop with long wrapped reward descriptions)
-   could still make the two boxes' *heights* meet in the middle. Setting a `z_index` on
-   `RoundSummary`'s Control did **nothing** for this, because `RoundSummary`/`Shop`/`UpgradePicker`
-   each live on their own `CanvasLayer` (`RoundSummaryLayer`/`ShopLayer`/`UpgradeLayer` in
-   `Arena.tscn`) — `z_index` only orders siblings *within* the same layer; cross-layer stacking is
-   decided entirely by each `CanvasLayer`'s own `layer` number. `RoundSummaryLayer` was `layer =
-   17`, **above** `ShopLayer` (15) and `UpgradeLayer` (10) — the opposite of what was intended, so
-   it drew fully opaque on top of whichever modal was open. It's now `layer = 7` (below every
-   modal layer, above the base HUD/BossBanner layers), so a geometric overlap now means it renders
-   *behind* the modal's own `Dim` and gets genuinely dimmed instead of interleaving with it.
+1. The recap panel first sat vertically centered and offset left — positioned to just clear a
+   landscape-only Shop, which broke the moment Portrait (a much narrower canvas) became the
+   default and the two boxes started overlapping outright, text interleaving with text.
+2. Setting a `z_index` on it did **nothing**, because the recap/`Shop`/`UpgradePicker` each lived
+   on their own `CanvasLayer` — `z_index` only orders siblings *within* a layer; cross-layer
+   stacking is decided entirely by each `CanvasLayer`'s own `layer` number. Its layer was `17`,
+   **above** `ShopLayer` (15), the opposite of what was intended, so it drew fully opaque on top of
+   whichever modal was open. Dropping it to `layer = 7` put it below every modal instead.
+3. Which surfaced the real issue: below the shop, it was invisible. The shop panel is **nearly
+   full-height** (~574px of a 648px landscape viewport), so there was never a placement where a
+   second box could coexist with it. The recap was only ever glimpsed for the frame or two while
+   the shop faded out — reading as a window that opened and closed by itself.
+
+The recap is now rendered **inside** the shop panel (`Shop.ShowRoundRecap`, reading
+`GameManager.LastRoundRecap`): the shop's title becomes "RONDA N COMPLETADA" and a summary line
+sits above the coin balance. Same information, in the window where the coins it reports get spent,
+with no second layer to place. `RoundSummary.cs`/`.tscn` and `RoundSummaryLayer` are gone.
+
+The general lesson worth keeping: when two elements keep fighting over the same screen space
+across several attempted fixes, the constraint is usually that there *isn't* space for two — and
+the answer is to merge them, not to keep re-deriving the stacking order.
 
 ## Round timer
 

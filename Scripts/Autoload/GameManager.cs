@@ -308,12 +308,25 @@ public partial class GameManager : Node
     // Single entry point for "the round is over", from either the timer or a boss kill. Puts the
     // recap on screen up front so it's already visible behind the level-up / Ultimate / shop
     // modals, then hands off to the queue. StartNextRound is what takes it back down.
+    // What the round just produced. Snapshotted here rather than recomputed later because the deltas
+    // are against _roundStart* values that StartNextRound resets — by the time the shop opens (after
+    // any level-up pickers have been resolved) the originals are still intact, but tying the numbers
+    // to the moment the round actually ended keeps them correct regardless of how long the
+    // interstitial chain takes.
+    public readonly record struct RoundRecap(int Round, int Kills, int EliteKills, int Coins, int Score, int Levels);
+
+    public RoundRecap LastRoundRecap { get; private set; }
+
     private void BeginRoundEnd()
     {
         _pendingRoundEnd = true;
 
-        var summary = GetTree().GetFirstNodeInGroup("round_summary") as RoundSummary;
-        summary?.ShowSummary(
+        // The recap used to be its own floating panel on its own CanvasLayer, shown here and left up
+        // through the whole interstitial chain. In practice the shop is nearly full-height, so the
+        // recap sat entirely behind it and was only ever glimpsed during the shop's fade-out — two
+        // windows fighting for the same space to show one moment's worth of information. It's now
+        // rendered inside the shop panel itself, which is also where the coins it reports get spent.
+        LastRoundRecap = new RoundRecap(
             RoundNumber,
             EnemiesKilled - _roundStartKills,
             SpecialEnemiesKilled - _roundStartEliteKills,
@@ -381,13 +394,12 @@ public partial class GameManager : Node
 
         // The recap has been up since the round ended, through every modal. This is the point the
         // player has finished choosing everything, so it comes down as the countdown begins.
-        var summary = GetTree().GetFirstNodeInGroup("round_summary") as RoundSummary;
-        summary?.HideSummary();
         SnapshotRoundStart();
 
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
         player?.HealFullLives();
         player?.RefillShield();
+        player?.RefreshShieldRegenRate();
         player?.ResetKillStreak();
 
         // Pickups are no longer swept at round end (see EndRound), so anything left on the field gets
@@ -686,12 +698,36 @@ public partial class GameManager : Node
         config.Save(SettingsFilePath);
     }
 
+    // Reduced motion. The actual flag lives on DangerLevel (which is where the consumers already read
+    // it from and which knows nothing about the scene tree); this is the persisted, user-facing half.
+    // It existed as a hardcoded `false` with a comment saying it was there so wiring a toggle later
+    // would be one line rather than a refactor — this is that line being cashed in.
+    public bool ReducedMotion { get; private set; }
+
+    public void SetReducedMotion(bool enabled)
+    {
+        ReducedMotion = enabled;
+        DangerLevel.Reduced = enabled;
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, "reduced_motion", enabled);
+        config.Save(SettingsFilePath);
+    }
+
     private void LoadSettings()
     {
         var config = new ConfigFile();
         if (config.Load(SettingsFilePath) != Error.Ok) return;
         JoystickOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "joystick_opacity", 1f), 0f, 1f);
         UltimateButtonOpacity = Mathf.Clamp((float)config.GetValue(SettingsSection, "ultimate_button_opacity", 1f), 0f, 1f);
+
+        // Pushed straight onto DangerLevel here rather than waiting for a screen to apply it: the
+        // consumers are static and scene-independent, so the flag has to be correct from boot, before
+        // any UI exists to set it.
+        ReducedMotion = (bool)config.GetValue(SettingsSection, "reduced_motion", false);
+        DangerLevel.Reduced = ReducedMotion;
+
         // The selection used to be stored as an index into the built-in cast. Fall back to it when
         // the slug key is absent, so an existing settings.cfg keeps whoever it had picked instead of
         // silently resetting to Equilibrado.
@@ -748,6 +784,16 @@ public partial class GameManager : Node
         config.Save(RecordsFilePath);
     }
 
+    // Leaving a run early on purpose. Records the score first, then resets — abandoning used to call
+    // ResetRun directly, and since RegisterFinalScore only ever ran from NotifyPlayerDied, the entire
+    // run's result was discarded with no warning and no way to get it back. A run you walked away
+    // from still happened, so it still counts toward the high score and the records list.
+    public void AbandonRun()
+    {
+        RegisterFinalScore();
+        ResetRun();
+    }
+
     public void ResetRun()
     {
         Xp = 0;
@@ -774,8 +820,6 @@ public partial class GameManager : Node
         _roundStartTimer?.Stop();
         SnapshotRoundStart();
 
-        var summary = GetTree().GetFirstNodeInGroup("round_summary") as RoundSummary;
-        summary?.HideSummary();
 
         Resume();
     }

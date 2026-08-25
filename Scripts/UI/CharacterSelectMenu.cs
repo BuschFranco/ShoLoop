@@ -44,16 +44,27 @@ public partial class CharacterSelectMenu : Control
     private Button _confirmButton;
     private Button _deleteButton;
     private CharacterCreator _creator;
+    private PanelContainer _panel;
+    private Control _carouselPreview;
+    private VBoxContainer _identity;
+
+    // Guards against a rapid-fire double-press queuing a second crossfade on top of one still in
+    // flight — the two would fight over the same nodes' Position/Modulate.
+    private bool _isTransitioning;
 
     public void Open()
     {
         RebuildOrder(GameManager.Instance.SelectedCharacter);
+        Juice.ModalIn(_panel);
         Visible = true;
     }
 
     public override void _Ready()
     {
+        _panel = GetNode<PanelContainer>("CenterContainer/Panel");
+        _carouselPreview = GetNode<Control>("CenterContainer/Panel/Box/Carousel/Preview");
         _previewTexture = GetNode<TextureRect>("CenterContainer/Panel/Box/Carousel/Preview/Swatch/PreviewTexture");
+        _identity = GetNode<VBoxContainer>("CenterContainer/Panel/Box/Identity");
         _nameLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/NameLabel");
         _descScroll = GetNode<ScrollContainer>("CenterContainer/Panel/Box/Identity/DescScroll");
         _descLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/DescScroll/DescLabel");
@@ -63,21 +74,31 @@ public partial class CharacterSelectMenu : Control
         _deleteButton = GetNode<Button>("CenterContainer/Panel/Box/Actions/DeleteButton");
         _creator = GetNode<CharacterCreator>("CharacterCreator");
 
-        GetNode<Button>("CenterContainer/Panel/Box/Carousel/LeftButton").Pressed += () => Step(-1);
-        GetNode<Button>("CenterContainer/Panel/Box/Carousel/RightButton").Pressed += () => Step(1);
-        GetNode<Button>("CenterContainer/Panel/Box/Actions/CreateButton").Pressed += () => _creator.Open();
+        var leftButton = GetNode<Button>("CenterContainer/Panel/Box/Carousel/LeftButton");
+        var rightButton = GetNode<Button>("CenterContainer/Panel/Box/Carousel/RightButton");
+        var createButton = GetNode<Button>("CenterContainer/Panel/Box/Actions/CreateButton");
+        var cancelButton = GetNode<Button>("CenterContainer/Panel/Box/CancelButton");
+
+        leftButton.Pressed += () => Step(-1);
+        rightButton.Pressed += () => Step(1);
+        createButton.Pressed += () => _creator.Open();
         _deleteButton.Pressed += DeleteFramed;
         _confirmButton.Pressed += Confirm;
-        GetNode<Button>("CenterContainer/Panel/Box/CancelButton").Pressed += () => Visible = false;
+        cancelButton.Pressed += () => Juice.ModalOut(_panel, () => Visible = false);
+
+        foreach (var b in new[] { leftButton, rightButton, createButton, _deleteButton, _confirmButton, cancelButton })
+            Juice.WireButtonFeedback(b);
 
         // Land on the character that was just created rather than making the player hunt for it at
         // the end of the carousel.
-        _creator.CharacterCreated += RebuildOrder;
+        _creator.CharacterCreated += slug => RebuildOrder(slug, animate: true);
 
         RebuildOrder(GameManager.Instance.SelectedCharacter);
     }
 
-    private void RebuildOrder(string slugToFrame)
+    private void RebuildOrder(string slugToFrame) => RebuildOrder(slugToFrame, animate: false);
+
+    private void RebuildOrder(string slugToFrame, bool animate)
     {
         var all = CharacterCatalog.All;
         _order = new string[all.Length];
@@ -85,13 +106,76 @@ public partial class CharacterSelectMenu : Control
 
         _index = System.Array.IndexOf(_order, slugToFrame);
         if (_index < 0) _index = 0;
-        RefreshPreview();
+
+        if (animate)
+            CrossfadeSwap(RefreshPreview, 1);
+        else
+            RefreshPreview();
     }
 
     private void Step(int direction)
     {
+        if (_isTransitioning) return;
         _index = (_index + direction + _order.Length) % _order.Length;
-        RefreshPreview();
+        CrossfadeSwap(RefreshPreview, direction);
+    }
+
+    // The actual "carousel" motion: the currently framed character's preview/name/description/perk
+    // slide+fade out in the direction of travel, the data swap happens while nothing is visible, and
+    // the new character's content slides+fades in from the opposite side.
+    //
+    // _perkPanel is deliberately fade-only, no position/slide: its Y sits below _identity in the
+    // same VBoxContainer, and FitDescriptionHeight (called by swap() below) starts its own tween
+    // resizing the description box — which, for a much longer/shorter description than the outgoing
+    // character's, moves _perkPanel's true rest Y over the following ~0.15s. A position tween here
+    // targeting the Y captured *before* that resize would fight it and could win the race, freezing
+    // the perk box at a stale height's position — overlapping the description for exactly the
+    // "some characters" case this was reported for. Preview/Identity don't have this problem: nothing
+    // above either of them ever resizes, so their rest Y never moves.
+    private void CrossfadeSwap(System.Action swap, int direction)
+    {
+        _isTransitioning = true;
+        var slideTargets = new[] { _carouselPreview, (Control)_identity };
+        float slide = 36f * (direction < 0 ? -1f : 1f);
+
+        // Captured once, before anything moves. The out-tween leaves each target sitting at
+        // restPos + slide, not back at restPos — reading .Position again afterward (an earlier bug)
+        // returned that departed value, so the in-tween's "final" target quietly baked in one
+        // slide's worth of permanent offset every single step, compounding further each time the
+        // carousel was stepped again.
+        var restPositions = new Vector2[slideTargets.Length];
+        for (int i = 0; i < slideTargets.Length; i++) restPositions[i] = slideTargets[i].Position;
+
+        var outTween = CreateTween();
+        outTween.SetParallel(true);
+        for (int i = 0; i < slideTargets.Length; i++)
+        {
+            var t = slideTargets[i];
+            outTween.TweenProperty(t, "position", restPositions[i] + new Vector2(slide, 0f), 0.11f)
+                .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.In);
+            outTween.TweenProperty(t, "modulate:a", 0f, 0.11f);
+        }
+        outTween.TweenProperty(_perkPanel, "modulate:a", 0f, 0.11f);
+
+        outTween.Chain().TweenCallback(Callable.From(() =>
+        {
+            swap();
+
+            var inTween = CreateTween();
+            inTween.SetParallel(true);
+            for (int i = 0; i < slideTargets.Length; i++)
+            {
+                var t = slideTargets[i];
+                t.Position = restPositions[i] - new Vector2(slide, 0f);
+                t.Modulate = new Color(1f, 1f, 1f, 0f);
+                inTween.TweenProperty(t, "position", restPositions[i], 0.16f)
+                    .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+                inTween.TweenProperty(t, "modulate:a", 1f, 0.16f);
+            }
+            _perkPanel.Modulate = new Color(1f, 1f, 1f, 0f);
+            inTween.TweenProperty(_perkPanel, "modulate:a", 1f, 0.16f);
+            inTween.Chain().TweenCallback(Callable.From(() => _isTransitioning = false));
+        }));
     }
 
     private void RefreshPreview()
@@ -104,9 +188,13 @@ public partial class CharacterSelectMenu : Control
         _previewTexture.Texture = CharacterCatalog.Texture(info);
         _previewTexture.Modulate = info.Color;
 
-        _nameLabel.Text = info.Name;
+        // Marks the pilot the run would currently start with. The carousel silently *opened* on this
+        // one, but nothing said so — step once and there was no way back to "which was I using"
+        // except memory, and the confirm button read identically either way.
+        bool isEquipped = info.Slug == GameManager.Instance.SelectedCharacter;
+        _nameLabel.Text = isEquipped ? $"{info.Name}  ·  ACTUAL" : info.Name;
         _descLabel.Text = info.Description ?? "";
-        _confirmButton.Text = $"Elegir a {info.Name}";
+        _confirmButton.Text = isEquipped ? $"Jugar con {info.Name}" : $"Elegir a {info.Name}";
 
         // IsNullOrWhiteSpace, not != "": CharacterInfo is a struct, so a character that never sets
         // PerkText arrives with null — which is every custom character, since CustomCharacterStore
@@ -129,31 +217,61 @@ public partial class CharacterSelectMenu : Control
     // answer doesn't depend on whether layout has run yet.
     private void FitDescriptionHeight(string text)
     {
+        Vector2 target;
         if (text.Length == 0)
         {
-            _descScroll.CustomMinimumSize = Vector2.Zero;
-            return;
+            target = Vector2.Zero;
+        }
+        else
+        {
+            var font = _descLabel.GetThemeFont("font") ?? _descLabel.GetThemeDefaultFont();
+            int fontSize = _descLabel.GetThemeFontSize("font_size");
+
+            // One line of slack: GetMultilineStringSize measures glyph extents, and without it a
+            // descender on the last line gets clipped by the scroll area's edge.
+            float lineHeight = font.GetHeight(fontSize);
+            float needed = font.GetMultilineStringSize(text, HorizontalAlignment.Left,
+                               DescriptionTextWidth, fontSize).Y + lineHeight;
+            target = new Vector2(0, Mathf.Min(needed, MaxDescriptionHeight));
         }
 
-        var font = _descLabel.GetThemeFont("font") ?? _descLabel.GetThemeDefaultFont();
-        int fontSize = _descLabel.GetThemeFontSize("font_size");
-
-        // One line of slack: GetMultilineStringSize measures glyph extents, and without it a
-        // descender on the last line gets clipped by the scroll area's edge.
-        float lineHeight = font.GetHeight(fontSize);
-        float needed = font.GetMultilineStringSize(text, HorizontalAlignment.Left,
-                           DescriptionTextWidth, fontSize).Y + lineHeight;
-
-        _descScroll.CustomMinimumSize = new Vector2(0, Mathf.Min(needed, MaxDescriptionHeight));
+        // Eased instead of snapped, so switching between a short and a long description doesn't
+        // jump the panel's height in one frame — mostly invisible in practice since this runs while
+        // the identity block is faded out mid-crossfade, but still smooth for any caller that isn't.
+        _descScroll.CreateTween().TweenProperty(_descScroll, "custom_minimum_size", target, 0.15f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 
         // Back to the top, or arriving from a long description leaves the next one already scrolled
         // past its own first line.
         _descScroll.ScrollVertical = 0;
     }
 
+    // Confirmed because CustomCharacterStore.Delete doesn't just drop a config entry — it also
+    // RemoveAbsolute's the portrait file, which for a custom pilot is a photo the player imported
+    // from their own gallery. Unrecoverable, and the button sat unguarded in the same row as the
+    // benign "+ Crear piloto".
     private void DeleteFramed()
     {
         var info = CharacterCatalog.Get(_order[_index]);
+        if (!info.IsCustom) return;
+
+        var dialog = GetTree().GetFirstNodeInGroup("confirm_dialog") as ConfirmDialog;
+        if (dialog == null)
+        {
+            PerformDelete(info.Slug);
+            return;
+        }
+
+        dialog.Ask(
+            $"¿Borrar a {info.Name}?",
+            "Se borra el piloto y también la imagen que elegiste para él. No se puede deshacer.",
+            "Borrar",
+            () => PerformDelete(info.Slug));
+    }
+
+    private void PerformDelete(string slug)
+    {
+        var info = CharacterCatalog.Get(slug);
         if (!info.IsCustom) return;
 
         CustomCharacterStore.Delete(info.Slug);
@@ -163,7 +281,7 @@ public partial class CharacterSelectMenu : Control
         if (GameManager.Instance.SelectedCharacter == info.Slug)
             GameManager.Instance.SetSelectedCharacter(CharacterCatalog.DefaultSlug);
 
-        RebuildOrder(GameManager.Instance.SelectedCharacter);
+        RebuildOrder(GameManager.Instance.SelectedCharacter, animate: true);
     }
 
     private void Confirm()

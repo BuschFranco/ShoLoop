@@ -34,29 +34,66 @@ layout_mode = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/HBox/Panel"]
 layout_mode = 2
+theme_override_constants/separation = 4
 
 [node name="Title" type="Label" parent="CenterContainer/HBox/Panel/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.4902, 0.9922, 0.9961, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
 horizontal_alignment = 1
 text = "PAUSA"
 
+[node name="TitleSpacer" type="Control" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
 [node name="StatsLabel" type="Label" parent="CenterContainer/HBox/Panel/VBoxContainer"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.78, 0.83, 0.9, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
 autowrap_mode = 2
 
-[node name="ResumeButton" type="Button" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+[node name="ResumeSpacer" type="Control" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 18)
 layout_mode = 2
+
+[node name="ResumeButton" type="Button" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
 text = "Reanudar"
 
-[node name="MenuButton" type="Button" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+[node name="MenuSpacer" type="Control" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 14)
 layout_mode = 2
-text = "Menu Principal"
+
+[node name="MenuButton" type="Button" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(1, 0.55, 0.62, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+text = "Abandonar partida"
+
+[node name="CameraSpacer" type="Control" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
 
 [node name="CameraDistanceLabel" type="Label" parent="CenterContainer/HBox/Panel/VBoxContainer"]
 layout_mode = 2
-text = "Distancia Cámara: 2000"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+text = "Zoom de cámara: 100%"
 
 [node name="CameraDistanceSlider" type="HSlider" parent="CenterContainer/HBox/Panel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 min_value = 800
 max_value = 2400

@@ -2,10 +2,32 @@ namespace ShooterLoop;
 
 public static class RewardTierRoller
 {
-    private static readonly RoundCurve Common = new(65f, -3.5f, 10f, 65f);
-    private static readonly RoundCurve Rare = new(27f, 0.3f, 15f, 35f);
-    private static readonly RoundCurve Epic = new(7f, 1.4f, 5f, 35f);
-    private static readonly RoundCurve Legendary = new(1f, 1.3f, 0f, 25f);
+    // The early rounds are deliberately almost pure Common/Rare.
+    //
+    // These used to open at 65/27/7/1, i.e. an 8% shot at Epic-or-better on *every card*. That reads
+    // as fine per card and is far too generous in aggregate: a picker shows 3 cards at once, and a
+    // first round with several level-ups puts 12-15 cards in front of the player, so a round-1 Epic
+    // stopped being a jackpot and became the expected outcome. Handing out top-tier rewards before
+    // the player has any build to improve also flattens the whole progression — there's nothing left
+    // to climb toward.
+    //
+    // Epic now opens at 0.5% (14x rarer) and Legendary is mathematically impossible until round 4,
+    // because its Base is negative and clamps at 0 — the curve has to climb into positive territory
+    // before the tier exists at all. Both then ramp faster than before, so the late game is no poorer
+    // for it; the change moves *when* the good rolls happen, it doesn't remove them.
+    private static readonly RoundCurve Common = new(80f, -2.8f, 28f, 80f);
+    private static readonly RoundCurve Rare = new(19f, 0.9f, 19f, 36f);
+    private static readonly RoundCurve Epic = new(0.5f, 1.1f, 0f, 28f);
+    private static readonly RoundCurve Legendary = new(-2.5f, 0.85f, 0f, 18f);
+
+    // Explicit order for the cumulative roll below. RollTier used to walk the weights Dictionary
+    // directly, which made correctness depend on Dictionary preserving insertion order — it happens
+    // to, but nothing guarantees it, and if the order ever came out differently the cumulative
+    // comparison would silently hand back the wrong tier for every roll.
+    private static readonly RewardTier[] RollOrder =
+    {
+        RewardTier.Common, RewardTier.Rare, RewardTier.Epic, RewardTier.Legendary,
+    };
 
     public static Dictionary<RewardTier, float> GetWeights(int round, float fortuneBonus = 0f)
     {
@@ -29,10 +51,15 @@ public static class RewardTierRoller
     {
         double roll = rng.NextDouble();
         double cumulative = 0;
-        foreach (var kv in weights)
+
+        // Walked in RollOrder (rarest last) rather than in whatever order the Dictionary yields —
+        // see the comment on RollOrder. Common-first also means the overwhelmingly likely outcome
+        // is decided on the first comparison.
+        foreach (var tier in RollOrder)
         {
-            cumulative += kv.Value;
-            if (roll <= cumulative) return kv.Key;
+            if (!weights.TryGetValue(tier, out float weight)) continue;
+            cumulative += weight;
+            if (roll <= cumulative) return tier;
         }
         return RewardTier.Common;
     }

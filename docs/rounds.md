@@ -22,21 +22,21 @@ A boss round doesn't use the timer at all — see [Boss Rounds](#boss-rounds) be
 
 ## The round recap
 
-`BeginRoundEnd()` is the single entry point for "the round is over" — called from both `OnRoundTimeout()` and a boss kill. It puts [`RoundSummary`](../Scripts/UI/RoundSummary.cs) on screen *first*, then hands off to `ResolveNextInterstitial()`.
+`BeginRoundEnd()` is the single entry point for "the round is over" — called from both `OnRoundTimeout()` and a boss kill. It snapshots the round's numbers into `GameManager.LastRoundRecap`, then hands off to `ResolveNextInterstitial()`.
 
-The recap therefore stays visible for the whole interstitial chain — level-up picks, the first-boss Ultimate choice, and the shop — so the round's numbers are still in front of you while you decide what to spend them on. `StartNextRound()` takes it down, which is exactly the moment the "get ready" countdown begins.
+**The recap is rendered inside the shop panel**, as its title plus a summary line above the coin balance — not as a window of its own. It shows coins earned, score earned, enemies killed, and (only when they actually happened, so neither reads as a permanent "0") elite kills and levels gained. Every one of those counters on `GameManager` is **cumulative for the run**, so the recap diffs against a snapshot taken by `SnapshotRoundStart()` at the start of each round (and in `ResetRun`) — which is also why the numbers are captured at `BeginRoundEnd()` rather than recomputed when the shop finally opens.
 
-It shows enemies killed, elite/boss kills, coins earned, score earned, and levels gained (that last line only when it actually happened, so it doesn't read as a permanent "0"). Every one of those counters on `GameManager` is **cumulative for the run**, so the recap diffs against a snapshot taken by `SnapshotRoundStart()` at the start of each round (and in `ResetRun`).
+### Why it isn't its own window any more
 
-Two placement details worth knowing:
-- It sits on its own `CanvasLayer` at **layer 17 — above the shop's 15**, because the shop draws a full-screen dim that would otherwise grey the recap out.
-- Being above the shop means it would also sit on top of the shop's buttons, so `RoundSummary` sets `MouseFilter = Ignore` on itself and every child in the scene. It's purely decorative and must never swallow a click meant for a Buy button.
+It used to be a separate `RoundSummary` panel on its own `CanvasLayer`, shown at round end and deliberately left up through the whole interstitial chain so the round's numbers stayed in front of you while you decided what to spend them on. The intent was right and the execution couldn't deliver it: the shop panel is **nearly full-height** (~574px of a 648px landscape viewport), so the recap sat entirely behind it. In practice it was only ever glimpsed for the frame or two while the shop faded out — which read as a window opening and closing by itself, and got worse the more visible the recap's own styling became.
+
+Folding it into the shop puts the same information in the one place the player is already looking, in the same window where the coins it reports get spent, with no second layer to fight over the screen. `Shop.ShowRoundRecap()` reads `LastRoundRecap` on open.
 
 ## Starting the next round
 
 Pressing "Next Round" in the shop calls `GameManager.StartNextRound()`, which:
 1. Increments `RoundNumber` and fires `RoundChanged` (HUD updates the "Round N" label).
-2. Hides the [round recap](#the-round-recap) and re-snapshots the per-round counters.
+2. Re-snapshots the per-round counters (the recap goes away with the shop panel that hosts it).
 3. Fully heals the player's lives (`Player.HealFullLives()`) **and** tops their shield charges back to 100% (`Player.RefillShield()`). Every round starts at full health and full shield regardless of how banged-up you were at the end of the previous one.
 4. Unpauses (`GameManager.Resume()`) — but does **not** yet spawn anything.
 5. Starts a 3-second "get ready" countdown (`_roundStartTimer`, `RoundStartDelay = 3f`, exposed as `GameManager.RoundStartTimeRemaining`/`IsRoundStarting`). `HUD._Process` checks `IsRoundStarting` first, ahead of the boss-round check, and shows the remaining seconds in a dedicated **`CountdownLabel`** — 72px, yellow, centered on screen — while the small top-bar timer just reads "Preparate...". The countdown originally lived in that corner label alone and was effectively invisible there.
@@ -51,7 +51,7 @@ The player can move around freely during the 3s countdown (the game is already u
 Every 5th round (5, 10, 15, ...) is a Boss Round: `GameManager.IsBossRound => RoundNumber % 5 == 0`.
 
 - The Boss only appears once the 3s "get ready" countdown elapses (see above); a red **"¡RONDA DE JEFE N!"** banner (`BossBanner.cs`/`.tscn`, in its own `CanvasLayer`) announces the round right as it spawns, without pausing gameplay, fading out after ~2 seconds. The banner now also carries a row of hazard chevrons along its top edge, and the Boss's arrival kicks a short camera shake — see [visuals.md](visuals.md#danger-escalation).
-- The spawner keeps running, but **only spawns Grunts, and roughly a fifth as many as a normal round would**. `ConfigureForBossRound` clears the board (any stragglers from the previous round were already cleared by `EndRound()` anyway), then sets `_forcedSpawnScene = EnemyScene` so `OnSpawnTimeout` bypasses `ChooseEnemyScene()` entirely, and scales the interval/burst/cap by `BossRoundIntervalMult`/`BossRoundCrowdMult`. The chaff is there to crowd the player's movement while the Boss remains the only real threat — and keeping it Common-only means the Boss stays the sole non-Common on the field, so `RoundSummary`'s "De élite / jefes" line still reads exactly 1.
+- The spawner keeps running, but **only spawns Grunts, and roughly a fifth as many as a normal round would**. `ConfigureForBossRound` clears the board (any stragglers from the previous round were already cleared by `EndRound()` anyway), then sets `_forcedSpawnScene = EnemyScene` so `OnSpawnTimeout` bypasses `ChooseEnemyScene()` entirely, and scales the interval/burst/cap by `BossRoundIntervalMult`/`BossRoundCrowdMult`. The chaff is there to crowd the player's movement while the Boss remains the only real threat — and keeping it Common-only means the Boss stays the sole non-Common on the field, so the recap's "especiales" count still reads exactly 1.
 
   Resulting chaff cap (plus the Boss): ~9 at round 5, ~13 at round 10 and ~14 from round 15 on. The `+1` in that calculation is the Boss's own slot — it joins the `enemies` group too, and the cap is enforced by counting that group.
 

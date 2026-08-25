@@ -118,10 +118,14 @@ public partial class RewardCard : PanelContainer
         int coins = GameManager.Instance?.Coins ?? 0;
         bool affordable = coins >= cost.Value;
 
-        // The surcharge is shown as a suffix on the price rather than buried mid-sentence the way it
-        // used to be. The wealth-inflation multiplier stays invisible, as before — it applies to every
-        // offer equally, so surfacing it wouldn't help anyone choose between them.
-        string suffix = surcharge > 0 ? $" (+{surcharge})" : "";
+        // The surcharge is labelled, not just appended. It used to render as a bare "(+7)", which a
+        // player has no way to tell apart from a tax, a rarity fee or a typo — the actual cause is
+        // that they've already bought this family of reward before (GetShopSurchargeMultiplier), and
+        // naming it is what turns a mystery number into a rule they can plan around.
+        //
+        // The wealth-inflation multiplier stays invisible, as before — it applies to every offer on
+        // screen equally, so surfacing it wouldn't help anyone choose between them.
+        string suffix = surcharge > 0 ? $" (+{surcharge} por repetir)" : "";
         _priceLabel.Text = $"{cost.Value}{suffix} monedas";
         _priceLabel.AddThemeColorOverride("font_color", affordable ? PriceAffordable : PriceTooExpensive);
     }
@@ -153,15 +157,33 @@ public partial class RewardCard : PanelContainer
         SetAction(verb, true);
     }
 
+    // How far an unavailable offer's decorative half is dimmed. Applied per-node rather than to the
+    // whole card: Modulate cascades, so dimming the root took the action button's own text down with
+    // it — and that text is precisely the string explaining *why* the card is unavailable ("Faltan
+    // 37", "Al tope"). The card ended up hiding its own explanation, and at 0.55 over an already-muted
+    // grey the stack line fell under 3:1 contrast.
+    private static readonly Color UnavailableDim = new(1f, 1f, 1f, 0.5f);
+
     private void SetAction(string text, bool interactive)
     {
         _actionButton.Text = text;
         _actionButton.Disabled = !interactive;
         _interactive = interactive;
 
-        // Dimming the whole card, not just the button, so an unavailable offer stops competing for
-        // attention with the ones the player can actually take.
-        Modulate = interactive ? Colors.White : new Color(1f, 1f, 1f, 0.55f);
+        // The card as a whole stays at full opacity; only the parts that carry no reason are dimmed,
+        // so an unavailable offer still recedes next to the ones the player can actually take.
+        Modulate = Colors.White;
+        Color dim = interactive ? Colors.White : UnavailableDim;
+
+        _tierChip.Modulate = dim;
+        _nameLabel.Modulate = dim;
+        _descLabel.Modulate = dim;
+        _priceLabel.Modulate = dim;
+
+        // Left at full: between them these say what's wrong and how far off the player is.
+        _actionButton.Modulate = Colors.White;
+        _stackLabel.Modulate = Colors.White;
+        _verdictChip.Modulate = Colors.White;
     }
 
     private void ConfigureBestBadge(bool isBest)
@@ -175,6 +197,12 @@ public partial class RewardCard : PanelContainer
         // to a badge plus a slow breathe gives each piece of information its own channel instead of
         // making them fight over one property.
         _bestBadge.Modulate = Colors.White;
+
+        // Reduced motion: the badge stays, fully lit and static. It's a permanent loop sitting on
+        // text the player is reading in order to decide, which makes it the worst-placed of the
+        // game's looping animations even though it's also one of the gentlest.
+        if (DangerLevel.Reduced) return;
+
         _badgeTween = _bestBadge.CreateTween();
         _badgeTween.SetLoops();
         _badgeTween.TweenProperty(_bestBadge, "modulate:a", 0.45f, 0.7f)
