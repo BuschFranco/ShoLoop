@@ -189,6 +189,12 @@ public partial class GameManager : Node
     public float EventRewardMultiplier = 1f;
     private Timer _slowTimer;
 
+    // Set once per round by EnemySpawner.EvaluateStatCurves from DifficultyBalancer's survivability
+    // catch-up, and read by Player.TakeHit — living here (rather than a direct EnemySpawner<->Player
+    // reference) matches how EnemySpeedMultiplier above already brokers a difficulty signal between
+    // systems that otherwise don't know about each other.
+    public float SurvivabilityCatchUpMultiplier = 1f;
+
     public void ApplyTemporarySlow(float multiplier, float duration)
     {
         EnemySpeedMultiplier = multiplier;
@@ -763,6 +769,7 @@ public partial class GameManager : Node
         _roundTimer.Start();
         EnemySpeedMultiplier = 1f;
         EventRewardMultiplier = 1f;
+        SurvivabilityCatchUpMultiplier = 1f;
         _slowTimer?.Stop();
         _roundStartTimer?.Stop();
         SnapshotRoundStart();

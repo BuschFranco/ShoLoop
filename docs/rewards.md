@@ -129,7 +129,7 @@ Heart used to exist at all four tiers (+1/+2/+3/+3 max lives) and followed the B
 With only one tier, "max tracks the best tier ever picked" became meaningless (every pick *is* the same tier), so the rule is simply:
 
 ```csharp
-MaxLives = Mathf.Min(MaxLives + 1, MaxLivesCap);   // additive, capped at 10
+MaxLives = Mathf.Min(MaxLives + 1, MaxLivesCap);   // additive, capped at 4
 CurrentLives = MaxLives;                            // always a full heal
 ```
 

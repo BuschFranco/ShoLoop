@@ -54,7 +54,7 @@ public partial class HUD : Control
         _roundLabel = GetNode<Label>("TopBarPanel/TopBar/RoundLabel");
         _roundTimerLabel = GetNode<Label>("RoundTimerLabel");
         _levelLabel = GetNode<Label>("TopBarPanel/TopBar/LevelLabel");
-        // One icon per point of the real caps (MaxLivesCap 6, MaxShieldChargesCap 4), so neither row ever
+        // One icon per point of the real caps (MaxLivesCap 4, MaxShieldChargesCap 4), so neither row ever
         // needs a text fallback. The old code fell back to "Vidas: 4/4" the moment a single Corazón was
         // bought, because it only had three heart nodes.
         _heartIcons = new[]
@@ -63,8 +63,6 @@ public partial class HUD : Control
             GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart2"),
             GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart3"),
             GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart4"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart5"),
-            GetNode<HeartIcon>("TopBarPanel/TopBar/StatusRow/Meters/LivesRow/Heart6"),
         };
         _shieldRow = GetNode<Control>("TopBarPanel/TopBar/StatusRow/Meters/ShieldRow");
         _shieldIcons = new[]

@@ -37,7 +37,15 @@ public partial class EnemySpawner : Node2D
     // Holding at 0.66 rather than tapering forever matters: MaxConcurrentCurve keeps adding +4/round
     // underneath, so once the taper bottoms out at round 18 (the same round commons hit zero) the
     // count naturally resumes climbing again, with no separate re-climb mechanism needed.
-    private static readonly RoundCurve LateCrowdMultCurve = new(1.3825f, -0.0425f, 0.66f, 1f);
+    //
+    // The taper used to stay clamped at its Max (1.0, i.e. no relief at all) through round 10, only
+    // starting to bite at round 11 — which left rounds 6-10 with nothing easing the crowd while
+    // MaxConcurrentCurve/BurstCountCurve/SpawnIntervalCurve were all still climbing hard and the
+    // rounds 1-3 onboarding cushion had long since worn off. Base/PerRound moved so the decline
+    // starts at round 5 (round 6 is the first round that actually sees relief) instead of round 10,
+    // reaching the same 0.66 floor about a round earlier as a side effect — late game is
+    // essentially untouched, the fix is entirely in the round 6-11 window.
+    private static readonly RoundCurve LateCrowdMultCurve = new(1.112f, -0.028f, 0.66f, 1f);
     private static readonly RoundCurve SpecialChanceCurve = new(0.05f, 0.05f, 0.05f, 0.6f);    // chance a spawn is a special enemy
     private static readonly RoundCurve RareChanceCurve = new(0.15f, 0.02f, 0.15f, 0.35f);      // chance a spawn (that isn't hidden/special) is rare
     private const float HiddenChance = 0.05f;                                                   // flat 5% per user request, not round-scaled
@@ -79,7 +87,15 @@ public partial class EnemySpawner : Node2D
     // Round 1 is nothing but Grunts: at 0 the Hidden/Special/Rare rolls all fail and ChooseEnemyScene
     // falls through to EnemyScene. The opening round is the player's first look at the game and used to
     // throw ~13.5% Rare, 5% Hidden and 5% Specials at them before they'd learned what a Grunt does.
-    private static readonly float[] EarlyRoundVarietyMult = { 0f, 1f, 1f };
+    //
+    // Extended past round 3 with a second, gentler dip covering rounds 6-11: by round 6 alone
+    // SpecialChanceCurve/RareChanceCurve are already at 30%/25% with nothing easing them (the crowd
+    // taper above didn't kick in until round 11 either), so this is the same onboarding-cushion
+    // mechanism reused for a second rough patch rather than a new one. Round 12 onward falls through
+    // to the table's implicit 1x default, same as round 4/5 already did before this changed.
+    //
+    //                                     r1  r2  r3  r4  r5   r6    r7    r8   r9   r10   r11
+    private static readonly float[] EarlyRoundVarietyMult = { 0f, 1f, 1f, 1f, 1f, 0.75f, 0.65f, 0.6f, 0.6f, 0.65f, 0.75f };
 
     private static float EarlyRoundMult(float[] table, int round)
     {
@@ -184,6 +200,17 @@ public partial class EnemySpawner : Node2D
         _catchUpMult = player != null
             ? DifficultyBalancer.GetCatchUpMultiplier(player.GetOffensivePower(), round)
             : 1f;
+
+        // Symmetric counterpart for a defensively-stacked build: GetOffensivePower reads such a
+        // build as approximately zero power, so the correction above never touches it even though
+        // it can be nearly unkillable. Published to GameManager rather than applied here, since the
+        // actual counter-pressure (a hit occasionally costing 2 lives/shield charges instead of 1)
+        // lives in Player.TakeHit, which has no reference to this spawner.
+        if (player != null && GameManager.Instance != null)
+        {
+            GameManager.Instance.SurvivabilityCatchUpMultiplier =
+                DifficultyBalancer.GetSurvivabilityCatchUpMultiplier(player.GetSurvivabilityScore(), round);
+        }
 
         _hpMult = HpMultCurve.Evaluate(round) * _catchUpMult;
         _dmgMult = DmgMultCurve.Evaluate(round) * _catchUpMult;

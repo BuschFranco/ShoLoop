@@ -30,10 +30,11 @@ public partial class Player : CharacterBody2D
     // outgrows the visible screen stops being a meaningful stat, since you can't see what you're
     // shooting at anyway. This is the number that actually binds.
     private const float MaxFireRange = 450f;
-    // 6 rather than 10: the HUD now shows lives as a row of icons, and ten of them is more width than a
-    // portrait screen has to spare. Reaching 10 also meant buying the Legendary shop-only Corazón seven
-    // separate times, which no real run did.
-    private const int MaxLivesCap = 6;
+    // 4, not 6: lowered as part of closing the late-round "practically invincible" problem — a
+    // smaller life pool is less stack for DifficultyBalancer.GetSurvivabilityCatchUpMultiplier to
+    // have to counteract (see GetSurvivabilityScore). Matches MaxShieldChargesCap below, and the
+    // HUD's heart row is sized to exactly this many icons, same as the shield row.
+    private const int MaxLivesCap = 4;
 
     // Was 8, which was unreachable dead code: Barrier tiers are worth 1/2/3/4 and apply as
     // Max(current, value) rather than summing, so 4 was always the real ceiling. Now the constant says
@@ -590,26 +591,42 @@ public partial class Player : CharacterBody2D
             }
         }
 
-        if (CurrentShieldCharges > 0)
+        // How many points of the shield/life pool this hit actually spends. Normally 1; a heavily
+        // defensively-stacked build (see GetSurvivabilityScore) can have this read 2 once
+        // DifficultyBalancer's survivability catch-up kicks in — the counter-pressure for a build
+        // that dodge/Tank/shield have made nearly unkillable, since raising enemy damage can't touch
+        // that (every hit in this game costs a flat life/shield charge, never a variable amount).
+        int cost = ComputeHitCost();
+        for (int i = 0; i < cost; i++)
         {
-            CurrentShieldCharges--;
-            RaiseShieldChanged();
-            _blinkShieldInstead = true;
-        }
-        else
-        {
-            // Tank class passive: 25% chance to shrug off the hit without losing a life.
-            if (IsClassActive(BuildClass.Tank) && _dodgeRng.NextDouble() < 0.25)
+            if (CurrentShieldCharges > 0)
             {
-                _blinkShieldInstead = false;
-                _invulnTimer = InvulnDuration;
-                _blinkTimer = 0f;
-                return;
+                CurrentShieldCharges--;
+                RaiseShieldChanged();
+                _blinkShieldInstead = true;
             }
-            _blinkShieldInstead = false;
-            LoseLife();
+            else
+            {
+                // Tank class passive: 25% chance to shrug off this point for free. Rolled per point
+                // rather than once per hit — a cost-2 hit is conceptually "hit twice", and two
+                // separate TakeHit calls would already give Tank two independent rolls today, so
+                // this isn't a bonus, it's the same rule applied consistently.
+                if (IsClassActive(BuildClass.Tank) && _dodgeRng.NextDouble() < TankShrugChance)
+                {
+                    _blinkShieldInstead = false;
+                    continue;
+                }
+                _blinkShieldInstead = false;
+                LoseLife();
+                if (CurrentLives <= 0) break;
+            }
         }
 
+        // Invuln + knockback apply once per hit event, not per cost point — and now apply even if
+        // every point got shrugged by Tank. That's a small, deliberate change from before (a
+        // shrugged hit used to return early and skip both): something still physically touched the
+        // player, so it should still knock them back and open the i-frame window, the same as a
+        // dodge does not (a dodge means nothing touched you at all).
         _invulnTimer = InvulnDuration;
         _blinkTimer = 0f;
 
@@ -1040,6 +1057,29 @@ public partial class Player : CharacterBody2D
         return total / baselineDps;
     }
 
+    // Same contract as GetOffensivePower (a ratio against a round-1 baseline of exactly 1.0), but
+    // for tankiness rather than damage — feeds DifficultyBalancer.GetSurvivabilityCatchUpMultiplier.
+    // This exists because a defensively-stacked build (dodge + Tank's free shrug + shield + regen)
+    // reads as approximately zero offensive power, so GetOffensivePower's correction never touches
+    // it — it can become nearly unkillable with no adaptive response at all. Deliberately
+    // approximate, same spirit as GetOffensivePower: detecting an order-of-magnitude stack, not
+    // simulating combat exactly.
+    private const float TankShrugChance = 0.25f;    // must match the literal in TakeHit's Tank branch
+    private const float SurvivabilityBaseline = 3f; // MaxLives=3, no shield/dodge/Tank/regen
+
+    public float GetSurvivabilityScore()
+    {
+        float dodgeMult = 1f / Mathf.Max(0.01f, 1f - DodgeChance / 100f);
+        float tankMult = IsClassActive(BuildClass.Tank) ? 1f / Mathf.Max(0.01f, 1f - TankShrugChance) : 1f;
+
+        // Lives + shield charges are the absorbable pool; dodge/Tank stretch it by making each point
+        // absorb more incoming hits before it's actually spent.
+        float pool = (MaxLives + MaxShieldCharges) * dodgeMult * tankMult;
+
+        // Regen isn't part of the pool, it refills it — added rather than multiplied in.
+        return (pool + ShieldRegenPerMinute) / SurvivabilityBaseline;
+    }
+
     // Nominal duration for the two time-based Ultimates before the anti-permanent-uptime cap in
     // GetUltimateEffectDuration() below.
     private const float UltimateEffectDurationBase = 6f;
@@ -1320,6 +1360,23 @@ public partial class Player : CharacterBody2D
     private readonly Random _critRng = new();
     private readonly Random _dodgeRng = new();
     private const float CritMultiplier = 2f;
+
+    // Runs GameManager.SurvivabilityCatchUpMultiplier down into an integer 1-or-2 cost per landed
+    // hit, via a deterministic accumulator rather than a second layer of RNG stacked on top of
+    // Dodge/Tank — a 1.5x multiplier means "every other hit costs double", not a noisy coin flip.
+    private float _hitCostAccumulator = 0f;
+
+    private int ComputeHitCost()
+    {
+        float mult = GameManager.Instance?.SurvivabilityCatchUpMultiplier ?? 1f;
+        _hitCostAccumulator += mult - 1f;
+        if (_hitCostAccumulator >= 1f)
+        {
+            _hitCostAccumulator -= 1f;
+            return 2;
+        }
+        return 1;
+    }
 
     // Rolled per hit, not per volley/tick — same reasoning as burn being applied per hit rather
     // than per pickup. Shared by every weapon (bullets, laser, blades, missiles, the drone) so a
