@@ -1,6 +1,11 @@
 <Project Sdk="Godot.NET.Sdk/4.7.1">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- net9.0, not net8.0: Godot 4.7.1's prebuilt Android export template for C# only supports
+         net9.0, and refuses the export outright otherwise ("la plantilla de exportación solo
+         soporta 'net9.0'"). The alternative was a Gradle custom build, which needs the Android
+         build template plus the .NET android workload — more moving parts for the same result.
+         Desktop exports are unaffected; they build from this same target. -->
+    <TargetFramework>net9.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>ShooterLoop</RootNamespace>
   </PropertyGroup>

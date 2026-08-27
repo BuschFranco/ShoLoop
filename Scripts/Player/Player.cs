@@ -1901,15 +1901,15 @@ public partial class Player : CharacterBody2D
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                return $"Tenés: {FireRange:0} de rango (tope {MaxFireRange:0}) — {(helps ? "se suma" : "no suma ({Glossary.AtCapSentence})")}";
+                return $"Tenés: {FireRange:0} de rango (tope {MaxFireRange:0}) — {(helps ? "se suma" : $"no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.BulletDamage:
-                return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : "no suma (ya tenés una {Glossary.Rarity} mejor)")}";
+                return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : $"no suma (ya tenés una de mejor {Glossary.Rarity})")}";
             case UpgradeType.FireRate:
-                return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : "no suma (ya tenés una {Glossary.Rarity} mejor)")}";
+                return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : $"no suma (ya tenés una de mejor {Glossary.Rarity})")}";
             case UpgradeType.Heart:
-                return $"Tenés: {CurrentLives}/{MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "+1 al máximo y cura total" : "no suma ({Glossary.AtCapSentence} y con vidas llenas)")}";
+                return $"Tenés: {CurrentLives}/{MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "+1 al máximo y cura total" : $"no suma ({Glossary.AtCapSentence} y con vidas llenas)")}";
             case UpgradeType.HitShield:
-                return $"Tenés: {MaxShieldCharges} cargas (tope {MaxShieldChargesCap}) — {(helps ? "se suma" : "no suma ({Glossary.AtCapSentence})")}";
+                return $"Tenés: {MaxShieldCharges} cargas (tope {MaxShieldChargesCap}) — {(helps ? "se suma" : $"no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.SideShot:
                 return $"Tenés: {ExtraFiringLines} líneas (tope {MaxExtraFiringLinesCap}) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.OrbitShield:
@@ -1954,7 +1954,7 @@ public partial class Player : CharacterBody2D
             case UpgradeType.XpBonus:
                 return $"Tenés: +{XpBonusPercent:0}% experiencia (tope {MaxXpBonusPercent:0}%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.BulletKnockback:
-                return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : "no suma (ya tenés una {Glossary.Rarity} mejor)")}";
+                return $"Tenés: +{BulletKnockback:0} empuje (tope {MaxBulletKnockbackBonus:0}) — {(helps ? "se suma" : $"no suma (ya tenés una de mejor {Glossary.Rarity})")}";
             case UpgradeType.ShieldRegen:
                 return ShieldRegenPerMinute > 0f
                     ? $"Tenés: 1 carga cada {60f / ShieldRegenPerMinute:0.#}s — {(helps ? "mejora" : "no mejora (ya tenés igual o mejor)")}"
