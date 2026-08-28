@@ -47,10 +47,10 @@ public partial class RewardCard : PanelContainer
         _tierChip = GetNode<Label>("Body/TopRow/TierChip");
         _bestBadge = GetNode<Label>("Body/TopRow/BestBadge");
         _nameLabel = GetNode<Label>("Body/NameLabel");
-        _descLabel = GetNode<Label>("Body/DescLabel");
-        _stackLabel = GetNode<Label>("Body/StackRow/StackLabel");
-        _verdictChip = GetNode<Label>("Body/StackRow/VerdictChip");
-        _priceLabel = GetNode<Label>("Body/BottomRow/PriceLabel");
+        _descLabel = GetNode<Label>("Body/DescBox/DescLabel");
+        _stackLabel = GetNode<Label>("Body/StackBox/StackRow/StackLabel");
+        _verdictChip = GetNode<Label>("Body/StackBox/StackRow/VerdictChip");
+        _priceLabel = GetNode<Label>("Body/BottomRow/PriceBox/PriceLabel");
         _actionButton = GetNode<Button>("Body/BottomRow/ActionButton");
         _flare = GetNode<ColorRect>("Flare");
 

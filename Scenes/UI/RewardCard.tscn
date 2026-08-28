@@ -43,21 +43,44 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 text = "Nombre"
 
-[node name="DescLabel" type="Label" parent="Body"]
+[node name="DescBox" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 38)
+clip_contents = true
 layout_mode = 2
+mouse_filter = 2
+
+[node name="DescLabel" type="Label" parent="Body/DescBox"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.72, 0.76, 0.84, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 autowrap_mode = 2
+vertical_alignment = 0
 text = "Qué ganás"
 
-[node name="StackRow" type="HBoxContainer" parent="Body"]
+[node name="StackBox" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 38)
+clip_contents = true
 layout_mode = 2
 mouse_filter = 2
 
-[node name="StackLabel" type="Label" parent="Body/StackRow"]
+[node name="StackRow" type="HBoxContainer" parent="Body/StackBox"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="StackLabel" type="Label" parent="Body/StackBox/StackRow"]
 layout_mode = 2
 mouse_filter = 2
 size_flags_horizontal = 3
@@ -66,8 +89,9 @@ theme_override_colors/font_color = Color(0.68, 0.71, 0.79, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 autowrap_mode = 2
+vertical_alignment = 0
 
-[node name="VerdictChip" type="Label" parent="Body/StackRow"]
+[node name="VerdictChip" type="Label" parent="Body/StackBox/StackRow"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 13
@@ -87,13 +111,25 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Comprar"
 
-[node name="PriceLabel" type="Label" parent="Body/BottomRow"]
+[node name="PriceBox" type="Control" parent="Body/BottomRow"]
+custom_minimum_size = Vector2(140, 48)
+clip_contents = true
 layout_mode = 2
-mouse_filter = 2
 size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="PriceLabel" type="Label" parent="Body/BottomRow/PriceBox"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 theme_override_font_sizes/font_size = 15
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
+autowrap_mode = 2
 horizontal_alignment = 2
 vertical_alignment = 1
 text = "0"

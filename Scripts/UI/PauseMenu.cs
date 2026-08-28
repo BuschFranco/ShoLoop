@@ -148,8 +148,8 @@ public partial class PauseMenu : Control
 
     // Doesn't resume immediately — counts down first so the player has a beat to get ready instead
     // of gameplay picking back up on the same frame they tapped the button. The pause/loadout panels
-    // stay up underneath (only the buttons disable) so the countdown reads as "about to resume" rather
-    // than replacing the whole menu.
+    // close first (rather than staying up underneath) so the countdown reads against the gameplay
+    // you're about to drop back into, not a menu that's still on screen.
     private void OnResumePressed()
     {
         if (_resuming) return;
@@ -159,6 +159,7 @@ public partial class PauseMenu : Control
         _lastCountdownSecond = -1;
         _resumeButton.Disabled = true;
         _menuButton.Disabled = true;
+        Juice.ModalOut(_hbox);
         _resumeCountdownLabel.Visible = true;
         UpdateResumeCountdownLabel();
     }

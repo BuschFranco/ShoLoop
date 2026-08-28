@@ -70,6 +70,7 @@ public partial class RoundEventDirector : Node
         if (GameManager.Instance != null)
         {
             GameManager.Instance.EnemySpeedMultiplier = 1f;
+            GameManager.Instance.BaseEnemySpeedMultiplier = 1f;
             GameManager.Instance.EventRewardMultiplier = 1f;
         }
 
@@ -85,9 +86,10 @@ public partial class RoundEventDirector : Node
     private void StartFrenzy()
     {
         // Reuses the same field the Zona Lenta ultimate drives, which is what makes it apply to enemies
-        // spawned mid-round too. Consequence worth knowing: firing that ultimate during a Frenzy round
-        // cancels the speed-up for its duration, then its own timer restores the multiplier to 1 rather
-        // than back to Frenzy's value — an acceptable trade for not duplicating the whole mechanism.
+        // spawned mid-round too. BaseEnemySpeedMultiplier records Frenzy's speed-up as the multiplier to
+        // return to, so firing that ultimate mid-Frenzy still cancels the speed-up for its duration, but
+        // its own timer now restores back to Frenzy's value instead of a normal round's 1x.
+        GameManager.Instance.BaseEnemySpeedMultiplier = FrenzySpeedMultiplier;
         GameManager.Instance.EnemySpeedMultiplier = FrenzySpeedMultiplier;
         GameManager.Instance.EventRewardMultiplier = FrenzyRewardMultiplier;
     }

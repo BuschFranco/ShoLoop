@@ -135,9 +135,10 @@ public partial class UpgradePicker : Control
             int index = i;
             var card = CardScene.Instantiate<RewardCard>();
 
-            // Even column widths — without it the grid sizes each cell to its own content and the
-            // three cards come out at three different widths.
+            // Even column widths and row heights — without this the grid sizes each cell to its own
+            // content, so cards with longer descriptions come out both wider and taller than the rest.
             card.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            card.SizeFlagsVertical = SizeFlags.ExpandFill;
             _cardsContainer.AddChild(card);
             // cost: null is what makes the card show GRATIS instead of a price.
             card.Configure(choices[i], cost: null, surcharge: 0, highlight[i], "Elegir", alreadyTaken: false,

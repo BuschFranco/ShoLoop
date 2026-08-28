@@ -190,8 +190,10 @@ public partial class Shop : Control
 
             // Splits the row evenly across however many columns the orientation asked for. Without
             // this the grid sizes each cell to its own content, so three cards with different-length
-            // descriptions come out at three different widths.
+            // descriptions come out at three different widths — and, same reasoning, three different
+            // heights, since a longer description wraps to more lines than a shorter one.
             card.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            card.SizeFlagsVertical = SizeFlags.ExpandFill;
             _cardsContainer.AddChild(card);
             card.Activated += () => OnBuyPressed(index);
             _cards.Add(card);
@@ -305,7 +307,12 @@ public partial class Shop : Control
         // Either everything is bought/maxed, or what's left is out of reach. Safe to decide here because
         // the tree is paused while the shop is open: no coins can come in, and buying only ever lowers
         // the balance (and raises that type's surcharge), so neither state can un-fire.
-        if (allResolved || !AnyPendingAffordable())
+        //
+        // Still doesn't close if the player can afford a Reload, though — a fresh roll is another real
+        // option on screen, and auto-closing out from under someone who was about to reroll for a
+        // better offer is the exact "closing itself in the player's face" this was written to avoid.
+        bool canReload = GameManager.Instance.Coins >= _reloadCost;
+        if ((allResolved || !AnyPendingAffordable()) && !canReload)
         {
             _closing = true;
             OnContinuePressed();
