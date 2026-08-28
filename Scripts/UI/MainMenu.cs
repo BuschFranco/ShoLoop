@@ -18,6 +18,18 @@ public partial class MainMenu : Control
         var highScoreLabel = GetNode<Label>("VBoxContainer/HighScoreLabel");
         highScoreLabel.Text = $"Mejor puntaje: {GameManager.LoadHighScore()}";
 
+        // Read from the live instance, not a static file re-read like the high score above — Núcleos
+        // is already loaded into GameManager.Instance at boot. CharacterSelectMenu is an overlay
+        // *child* of this menu, not a scene swap, so MainMenu's own Visible never toggles while it's
+        // open — the refresh has to hook the overlay's visibility instead, so spending Núcleos in
+        // there and hitting Cancel updates the balance shown underneath.
+        var nucleosLabel = GetNode<Label>("VBoxContainer/NucleosLabel");
+        nucleosLabel.Text = $"Núcleos: {GameManager.Instance.MetaCurrency}";
+        characterSelect.VisibilityChanged += () =>
+        {
+            if (!characterSelect.Visible) nucleosLabel.Text = $"Núcleos: {GameManager.Instance.MetaCurrency}";
+        };
+
         var options = GetNode<OptionsMenu>("OptionsMenu");
         optionsButton.Pressed += options.Open;
 

@@ -46,6 +46,7 @@ public partial class GameOverScreen : Control
         {
             $"Ronda {gm.RoundNumber}   Nv {gm.Level}   {Glossary.Kills}: {gm.EnemiesKilled}",
             $"Monedas: {gm.Coins}",
+            $"+{gm.LastRunNucleosEarned} Núcleos (total: {gm.MetaCurrency})",
         };
 
         if (player != null)

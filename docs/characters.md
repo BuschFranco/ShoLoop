@@ -24,6 +24,7 @@ ordered by what you're most likely to be here to do.
 | `juan` | Juan | — | — |
 | `nico_l` | Nico L | 1% for an enemy to die on approach | `EnemySuicideChance` |
 | `juli` | Juli | Enemies turn green, −10% HP | `EnemyTint` / `EnemyHpMultiplier` |
+| `secreto1`/`2`/`3` | Piloto Secreto I/II/III | — (cosmetic, real perk TBD) | locked — see below |
 
 Plus however many the player has created — see [Custom characters](#custom-characters).
 
@@ -32,9 +33,10 @@ so a portrait with no perk arguments is mechanically identical to Equilibrado.
 
 ## Editing a character
 
-Everything about a built-in lives in one entry in `CharacterCatalog.BuiltIns`. The six portraits go
-through the `Portrait(...)` helper, which holds the defaults so that nine near-identical initialisers
-don't become nine places for a multiplier to get typo'd into being non-cosmetic.
+Everything about a built-in lives in one entry in `CharacterCatalog.BuiltIns`. Every portrait — the six
+amigos plus the three locked "Secreto" slots — goes through the `Portrait(...)` helper, which holds
+the defaults so that a dozen near-identical initialisers don't become a dozen places for a multiplier
+to get typo'd into being non-cosmetic.
 
 **Rename, or change the text:** edit the strings in that entry. `Description` is the flavour
 paragraph; `PerkText` is the one-sentence mechanical claim. They render in two separate boxes, and
@@ -57,6 +59,37 @@ select screen builds its list from `CharacterCatalog.All`, so it picks the new o
 
 **Remove a character:** delete the entry and the PNG. A saved selection pointing at it resolves back
 to `BuiltIns[0]` via `Get()`, so nobody ends up stuck on a character that no longer exists.
+
+## Locked characters & Núcleos
+
+Three slots (`secreto1`/`2`/`3`) are gated behind [Núcleos](economy.md#núcleos--gamemanagermetacurrency),
+the game's persistent, cross-run currency — the first thing it's spendable on. The gate is two fields
+on `CharacterInfo`, both defaulting to "unlocked" so nothing existing is affected by adding a new one:
+
+```csharp
+public bool RequiresUnlock { get; init; }   // false by default — every existing entry is unaffected
+public int UnlockCost { get; init; }
+```
+
+**`CharacterCatalog` only knows whether a slug *can* be locked, never whether the player has actually
+unlocked it** — that's player save state, and it lives on `GameManager` (`UnlockedCharacters`, a
+`HashSet<string>`), not in the static catalog. `CharacterCatalog.IsUnlocked(info)` is the one place
+that combines the two — always go through it rather than checking `RequiresUnlock` alone.
+
+**Locking a new character:** pass `requiresUnlock: true, unlockCost: N` to `Portrait(...)`. Every
+existing call omits both, so nothing already in the cast becomes locked by accident — this is
+opt-in per entry, not a default that had to be overridden six times.
+
+**In the carousel** (`CharacterSelectMenu`), a locked character's portrait dims to 55% alpha (the same
+"disabled" convention `RewardCard` uses) but its name/description/perk still show in full — seeing
+what you're saving up for is the point. `ConfirmButton` and `UnlockButton` are mutually exclusive for
+whichever character is framed; pressing Unlock spends via `GameManager.TryUnlockCharacter` and
+refreshes in place, without closing the carousel or auto-selecting the newly-unlocked pilot.
+
+**The three `secreto` slots are deliberately unfinished** — cosmetic-only placeholders with a "?"
+portrait, meant to be filled in exactly like the six amigos originally were: swap the PNG with
+`tools/prep_character_sprite.py`, then add a real `Description`/`PerkText` to the catalog entry.
+Nothing about the unlock plumbing needs to change when that happens.
 
 ## Perks: how they reach the game
 

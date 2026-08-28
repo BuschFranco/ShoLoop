@@ -741,6 +741,45 @@ public partial class Player : CharacterBody2D
         TryActivate(BuildClass.Hunter);
     }
 
+    // Every additional PAIR of distinct Legendary-tier types owned triggers one more fusion, not just
+    // the first time the player crosses 2 — a deeply-built run can cross several pairs. Tracked as a
+    // count of fusions already granted rather than a HashSet, since the trigger itself has no
+    // identity to key on (unlike BuildClass, there's no fixed catalog of "which fusion" to guard).
+    private int _legendaryFusionsGranted = 0;
+
+    private void CheckLegendaryFusion()
+    {
+        int legendaryCount = 0;
+        foreach (var tier in _ownedTiers.Values)
+            if (tier == RewardTier.Legendary) legendaryCount++;
+
+        // A while, not an if: a single ApplyUpgrade call could in principle cross more than one
+        // threshold (it can't today since only one tier changes per call, but the loop costs nothing
+        // and removes the assumption). Each iteration re-reads the owned set fresh, since the
+        // ApplyUpgrade call inside can itself raise legendaryCount further.
+        while (legendaryCount / 2 > _legendaryFusionsGranted)
+        {
+            var ownedLegendaries = new HashSet<UpgradeType>();
+            foreach (var kv in _ownedTiers)
+                if (kv.Value == RewardTier.Legendary) ownedLegendaries.Add(kv.Key);
+
+            var bonus = UpgradeData.PickRandomLegendaryExcluding(ownedLegendaries);
+            if (bonus == null) break;   // every fusable type already at Legendary — nothing left to grant
+
+            _legendaryFusionsGranted++;
+            ApplyUpgrade(bonus);   // re-enters this method; the while-condition above accounts for that
+
+            var parent = GetParent();
+            if (parent != null)
+                Juice.FloatingLabel(parent, "¡FUSIÓN LEGENDARIA!", GlobalPosition + new Vector2(-70f, -60f),
+                    Palette.CoinPickup, fontSize: 20, driftY: -30f, holdBeforeFade: 0.6f, lifetime: 1.1f);
+
+            legendaryCount = 0;
+            foreach (var tier in _ownedTiers.Values)
+                if (tier == RewardTier.Legendary) legendaryCount++;
+        }
+    }
+
     private void TryActivate(BuildClass cls)
     {
         if (_activeClasses.Contains(cls)) return;
@@ -1545,7 +1584,13 @@ public partial class Player : CharacterBody2D
 
     public void ApplyUpgrade(UpgradeData upgrade)
     {
-        _ownedTiers[upgrade.Type] = upgrade.Tier;
+        // Only ever raises the recorded tier, never lowers it. Used to overwrite unconditionally —
+        // buying a Common of a type you already had at Legendary (legitimate; see the stacking rules
+        // in docs/rewards.md) would silently "forget" the Legendary here even though the stat itself
+        // keeps using the higher tier bucket underneath. BuildCatalog's Loadout hint already relied on
+        // this being accurate, and CheckLegendaryFusion below now does too.
+        if (!_ownedTiers.TryGetValue(upgrade.Type, out var existingTier) || upgrade.Tier > existingTier)
+            _ownedTiers[upgrade.Type] = upgrade.Tier;
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
@@ -1647,6 +1692,7 @@ public partial class Player : CharacterBody2D
                 break;
         }
         CheckBuildClass();
+        CheckLegendaryFusion();
     }
 
     // Shield regen (shop-only Regeneración). Stored as charges-per-minute so "higher is better"

@@ -69,6 +69,15 @@ public readonly struct CharacterInfo
 
     // Player-created, therefore deletable and loaded from disk at runtime rather than compiled in.
     public bool IsCustom { get; init; }
+
+    // Gated behind GameManager's persistent Núcleos currency (see docs/economy.md). Struct default is
+    // false, so every existing built-in and every custom character — neither of which ever sets this
+    // — is unaffected; only entries that explicitly opt in via Portrait(requiresUnlock: true) are ever
+    // locked. CharacterCatalog itself doesn't know whether a given slug HAS been unlocked — that's
+    // player save state, owned by GameManager.UnlockedCharacters — this field only says whether it
+    // ever NEEDS to be.
+    public bool RequiresUnlock { get; init; }
+    public int UnlockCost { get; init; }
 }
 
 // The playable cast: a fixed built-in list plus whatever the player has created, picked at the
@@ -168,6 +177,23 @@ public static class CharacterCatalog
             perkText: "Su presencia convierte a los enemigos en vegetarianos: se tornan verdes y "
             + "-10% de salud.",
             enemyHp: 0.9f, enemyTint: new Color("9bff4d")),
+
+        // Locked behind Núcleos (see GameManager.MetaCurrency/TryUnlockCharacter). Placeholder "?"
+        // portraits and cosmetic-only for now, same as Juan — the slot is meant to be filled in later
+        // exactly like the six above were: swap the PNG with tools/prep_character_sprite.py, then add
+        // a real Description/perk here. Costs step up (30/50/75) so the first unlock lands in 2-3 runs
+        // at NucleosPerRound=1 and the third takes 6-8 — a first guess, retune after playtesting.
+        Portrait("secreto1", "Piloto Secreto I",
+            "Un piloto misterioso. Desbloqueálo para descubrir quién es.",
+            requiresUnlock: true, unlockCost: 30),
+
+        Portrait("secreto2", "Piloto Secreto II",
+            "Un piloto misterioso. Desbloqueálo para descubrir quién es.",
+            requiresUnlock: true, unlockCost: 50),
+
+        Portrait("secreto3", "Piloto Secreto III",
+            "Un piloto misterioso. Desbloqueálo para descubrir quién es.",
+            requiresUnlock: true, unlockCost: 75),
     };
 
     // The portrait entries differ only in their text, their slug and (for a few) one perk value, so
@@ -177,7 +203,8 @@ public static class CharacterCatalog
         string slug, string name, string description, string perkText = null,
         float moveSpeed = 1f, float bulletDamage = 1f, float coinDropBonus = 0f,
         float enemyHp = 1f, Color? enemyTint = null,
-        float enemyHackChance = 0f, float enemySuicideChance = 0f) => new()
+        float enemyHackChance = 0f, float enemySuicideChance = 0f,
+        bool requiresUnlock = false, int unlockCost = 0) => new()
     {
         Slug = slug,
         Name = name,
@@ -190,6 +217,8 @@ public static class CharacterCatalog
         EnemyTint = enemyTint,
         EnemyHackChance = enemyHackChance,
         EnemySuicideChance = enemySuicideChance,
+        RequiresUnlock = requiresUnlock,
+        UnlockCost = unlockCost,
         Color = Colors.White,
         SpritePath = $"res://Assets/Sprites/Characters/{slug}.png",
     };
@@ -217,6 +246,12 @@ public static class CharacterCatalog
         _all = null;
         _textures.Clear();
     }
+
+    // Single source of truth for "can this actually be picked right now" — combines the catalog's
+    // static RequiresUnlock with GameManager's player-specific save state, so callers never have to
+    // remember to check both.
+    public static bool IsUnlocked(CharacterInfo info) =>
+        !info.RequiresUnlock || GameManager.Instance.UnlockedCharacters.Contains(info.Slug);
 
     public static CharacterInfo Get(string slug)
     {

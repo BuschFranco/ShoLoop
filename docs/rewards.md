@@ -187,6 +187,38 @@ Crit and Pierce also feed `Player.GetOffensivePower()` as real damage multiplier
 
 `_hasExtraProjectile = true`. Boolean, Epic-only, no tiers. Also shop-"Owned"-gated once acquired.
 
+## Legendary fusion
+
+Every additional **pair** of distinct Legendary-tier types owned grants one bonus Legendary — automatic,
+no modal, just a "¡FUSIÓN LEGENDARIA!" flare (`Juice.FloatingLabel`) over the player. Structurally the
+same shape as `Player.CheckBuildClass()`'s build-class activation (poll a declarative condition after
+every `ApplyUpgrade`, one-shot, guarded so it can't re-fire on its own) — `Player.CheckLegendaryFusion()`,
+called right after it.
+
+1. **Count.** `_ownedTiers.Values.Count(t => t == RewardTier.Legendary)` — how many distinct
+   `UpgradeType`s currently sit at Legendary. `RewardTier`'s declaration order (`Common < Rare < Epic
+   < Legendary`) is what makes tier comparisons like this valid.
+2. **Threshold.** `legendaryCount / 2 > _legendaryFusionsGranted` — the 2nd distinct Legendary triggers
+   the first fusion, the 4th triggers a second, and so on. A `while`, not an `if`: a single grant can
+   itself raise `legendaryCount` (see below), so the loop re-checks rather than assuming one bonus per
+   call is the ceiling.
+3. **Content.** `UpgradeData.PickRandomLegendaryExcluding(ownedLegendaryTypes)` — a free Legendary of a
+   type the player doesn't already have at that tier. Reuses the existing, already-balanced tier
+   values instead of inventing a new stat or effect, and is what makes it visually distinct from a
+   normal pick without being a new balance lever. Returns `null` (fusion simply stops firing) once
+   every fusable type is already at Legendary — `Ultimate` has no Legendary tier at all, so it's never
+   a candidate.
+4. **Grant.** The bonus goes through the normal `ApplyUpgrade(bonus)` — same stacking rules as any
+   other pickup, and it's what re-triggers `CheckLegendaryFusion` for step 2's `while` to catch.
+
+**The bug this depends on having fixed:** `_ownedTiers[type] = tier` used to overwrite unconditionally.
+Buying a Common of a type you already had at Legendary — legitimate, see
+[Same-tier-only stacking](#same-tier-only-stacking-firerange-firerate-bulletdamage) above — used to
+silently erase the record of ever having had the Legendary, even though the stat itself kept using the
+higher tier bucket underneath. Fixed to only ever raise the recorded tier, never lower it. This was
+already a latent inaccuracy in the Loadout menu's "what would help" hint (`BuildCatalog.cs`, reads the
+same `OwnedTiers`); fusion is the second consumer that needed it correct.
+
 ## Ultimates
 
 Three practical, distinct abilities — no tiers, each a single fixed pickup in the Epic bucket, marked `RewardSource.Shop` so they never show up for free at level-up (see [Level-up picks vs. shop items](#level-up-picks-vs-shop-items)).

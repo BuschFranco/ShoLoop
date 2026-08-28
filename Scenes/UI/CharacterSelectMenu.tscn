@@ -110,6 +110,15 @@ theme_override_font_sizes/font_size = 20
 text = "ELEGÍ TU PILOTO"
 horizontal_alignment = 1
 
+[node name="NucleosLabel" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.55, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 14
+text = "Núcleos: 0"
+horizontal_alignment = 1
+
 [node name="Carousel" type="HBoxContainer" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_constants/separation = 14
@@ -244,6 +253,19 @@ theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 text = "Elegir a Equilibrado"
+
+[node name="UnlockButton" type="Button" parent="CenterContainer/Panel/Box"]
+visible = false
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(1, 0.878, 0.4, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_button")
+text = "Desbloquear (30 Núcleos)"
 
 [node name="CancelButton" type="Button" parent="CenterContainer/Panel/Box"]
 custom_minimum_size = Vector2(0, 44)

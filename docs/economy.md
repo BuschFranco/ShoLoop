@@ -1,6 +1,6 @@
-# Economy: Coins, Score & Shop Pricing
+# Economy: Coins, Score, Núcleos & Shop Pricing
 
-Two separate currencies exist. Confusing them is the most common bug source here.
+Three separate currencies exist. Confusing them is the most common bug source here.
 
 ## Coins (`GameManager.Coins`)
 
@@ -23,6 +23,28 @@ Two separate currencies exist. Confusing them is the most common bug source here
 - `GameManager.LoadHighScore()` / the private `SaveHighScore(int)` read/write a single integer to `user://highscore.save` (plain text, one line) via Godot's `FileAccess` — this is local, per-install save data, not tied to any account or cloud sync.
 - `GameManager.NotifyPlayerDied()` calls `RegisterFinalScore()` right when a run ends, which compares the just-finished `Score` against the saved value and overwrites it only if the run's Score is higher.
 - [MainMenu.cs](../Scripts/UI/MainMenu.cs) reads it with the static `GameManager.LoadHighScore()` in `_Ready()` and shows it on the main menu — both on a fresh app launch and whenever you return to the menu via the Game Over screen's "Menú Principal" button.
+
+## Núcleos (`GameManager.MetaCurrency`)
+
+The **persistent meta-currency** — the only one of the three that survives death. Deliberately kept
+apart from both Coins (resets every run, never touches disk) and Score (run-scoped, and the only thing
+of it that persists is a read-only high score/record — not something spendable):
+
+- **Earned once, at run end.** `RegisterFinalScore()` — the single point both exit paths (death via
+  `NotifyPlayerDied()`, manual quit via `AbandonRun()`) already funnel through — awards
+  `RoundNumber × NucleosPerRound` (currently `1`, a first guess pending playtesting) and calls
+  `AddMetaCurrency`, read *before* `ResetRun()` zeroes `RoundNumber`. The amount is cached on
+  `GameManager.LastRunNucleosEarned` so [GameOverScreen.cs](../Scripts/UI/GameOverScreen.cs) can show
+  "+N" without recomputing the formula or racing the reset.
+- **Persisted immediately on every change**, unlike Coins — `AddMetaCurrency`/`TryUnlockCharacter`
+  both write straight to `user://settings.cfg` (`meta_currency` key) rather than waiting for some
+  later save point, since the balance has to survive the app being killed mid-run on a phone.
+- **Spent on characters today** — see [characters.md](characters.md#locked-characters--núcleos) for
+  `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`. Framed as "first
+  thing to spend it on," not the only one; `docs/characters.md` has the unlock-flow details.
+- `GameManager.UnlockedCharacters` (a `HashSet<string>` of slugs) is the other half of the save —
+  persisted as a `PackedStringArray` under the same `settings.cfg` key `unlocked_characters`, no
+  separate file needed (mirrors how `records.cfg` already stores its top-10 list the same way).
 
 ## Shop pricing (`Shop.cs`, `GameManager.cs`)
 

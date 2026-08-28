@@ -239,6 +239,20 @@ public class UpgradeData
         return result;
     }
 
+    // For Legendary fusion (Player.CheckLegendaryFusion): a free Legendary of a type the player
+    // doesn't already have at that tier. Reuses RewardSource.Both rather than gating by
+    // LevelUp/Shop — this is a bonus grant, not something offered on a normal picker/shop slot, so
+    // the usual pool-separation rule doesn't apply. Returns null once every fusable type is already
+    // owned at Legendary (Ultimates have no Legendary tier at all, so they're never candidates) —
+    // callers should treat that as "nothing to grant this time", not an error.
+    public static UpgradeData PickRandomLegendaryExcluding(HashSet<UpgradeType> ownedLegendaryTypes)
+    {
+        var candidates = BuildCatalog(RewardSource.Both)[RewardTier.Legendary]
+            .FindAll(u => !ownedLegendaryTypes.Contains(u.Type));
+
+        return candidates.Count == 0 ? null : candidates[Rng.Next(candidates.Count)];
+    }
+
     // The one-time reward for killing the first boss: a straight choice between Ultimates, outside
     // the tier system entirely (Ultimates have no tiers — they all sit in the Epic bucket purely so
     // the normal shop roll can surface them). Prefers ones the player doesn't already have

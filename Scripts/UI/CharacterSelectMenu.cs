@@ -42,7 +42,9 @@ public partial class CharacterSelectMenu : Control
     private Label _nameLabel;
     private Label _descLabel;
     private Button _confirmButton;
+    private Button _unlockButton;
     private Button _deleteButton;
+    private Label _nucleosLabel;
     private CharacterCreator _creator;
     private PanelContainer _panel;
     private Control _carouselPreview;
@@ -71,7 +73,9 @@ public partial class CharacterSelectMenu : Control
         _perkPanel = GetNode<PanelContainer>("CenterContainer/Panel/Box/PerkPanel");
         _perkLabel = GetNode<Label>("CenterContainer/Panel/Box/PerkPanel/PerkLabel");
         _confirmButton = GetNode<Button>("CenterContainer/Panel/Box/ConfirmButton");
+        _unlockButton = GetNode<Button>("CenterContainer/Panel/Box/UnlockButton");
         _deleteButton = GetNode<Button>("CenterContainer/Panel/Box/Actions/DeleteButton");
+        _nucleosLabel = GetNode<Label>("CenterContainer/Panel/Box/NucleosLabel");
         _creator = GetNode<CharacterCreator>("CharacterCreator");
 
         var leftButton = GetNode<Button>("CenterContainer/Panel/Box/Carousel/LeftButton");
@@ -84,9 +88,10 @@ public partial class CharacterSelectMenu : Control
         createButton.Pressed += () => _creator.Open();
         _deleteButton.Pressed += DeleteFramed;
         _confirmButton.Pressed += Confirm;
+        _unlockButton.Pressed += UnlockFramed;
         cancelButton.Pressed += () => Juice.ModalOut(_panel, () => Visible = false);
 
-        foreach (var b in new[] { leftButton, rightButton, createButton, _deleteButton, _confirmButton, cancelButton })
+        foreach (var b in new[] { leftButton, rightButton, createButton, _deleteButton, _confirmButton, _unlockButton, cancelButton })
             Juice.WireButtonFeedback(b);
 
         // Land on the character that was just created rather than making the player hunt for it at
@@ -181,12 +186,16 @@ public partial class CharacterSelectMenu : Control
     private void RefreshPreview()
     {
         var info = CharacterCatalog.Get(_order[_index]);
+        bool locked = !CharacterCatalog.IsUnlocked(info);
 
         // Same texture and same tint the arena will use, so the preview is the character rather than
         // a stand-in for it: a white silhouette picks up its Color, a portrait (Color = White) shows
-        // its own photo untouched.
+        // its own photo untouched. Locked ones dim to 55% alpha — same "disabled" convention the
+        // RewardCard uses — rather than hiding the portrait outright, since seeing who you're saving
+        // up for is part of the motivation to keep playing.
         _previewTexture.Texture = CharacterCatalog.Texture(info);
-        _previewTexture.Modulate = info.Color;
+        var tint = info.Color;
+        _previewTexture.Modulate = locked ? new Color(tint.R, tint.G, tint.B, 0.55f) : tint;
 
         // Marks the pilot the run would currently start with. The carousel silently *opened* on this
         // one, but nothing said so — step once and there was no way back to "which was I using"
@@ -209,7 +218,29 @@ public partial class CharacterSelectMenu : Control
         // Only the player's own characters can be removed; the built-in cast is part of the game.
         _deleteButton.Visible = info.IsCustom;
 
+        // Confirm and Unlock are mutually exclusive states for the framed character, never both.
+        _confirmButton.Visible = !locked;
+        _unlockButton.Visible = locked;
+        if (locked)
+        {
+            _unlockButton.Text = $"Desbloquear ({info.UnlockCost} Núcleos)";
+            _unlockButton.Disabled = GameManager.Instance.MetaCurrency < info.UnlockCost;
+        }
+
+        _nucleosLabel.Text = $"Núcleos: {GameManager.Instance.MetaCurrency}";
+
         FitDescriptionHeight(info.Description ?? "");
+    }
+
+    // Spends and unlocks in place — no auto-select, no closing the carousel — so the player can
+    // immediately see the character they just unlocked (Confirm swaps in for Unlock right here)
+    // instead of being dropped back into a run before they've even looked at what they bought.
+    private void UnlockFramed()
+    {
+        var info = CharacterCatalog.Get(_order[_index]);
+        if (!GameManager.Instance.TryUnlockCharacter(info.Slug, info.UnlockCost)) return;
+
+        RefreshPreview();
     }
 
     // Sizes the scroll area to exactly the text, capped so the panel can't outgrow the screen.
@@ -286,7 +317,10 @@ public partial class CharacterSelectMenu : Control
 
     private void Confirm()
     {
-        GameManager.Instance.SetSelectedCharacter(_order[_index]);
+        var info = CharacterCatalog.Get(_order[_index]);
+        if (!CharacterCatalog.IsUnlocked(info)) return;   // Confirm is hidden while locked; this is just defense in depth
+
+        GameManager.Instance.SetSelectedCharacter(info.Slug);
         GetTree().ChangeSceneToFile("res://Scenes/Arena.tscn");
     }
 }

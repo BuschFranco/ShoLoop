@@ -613,13 +613,28 @@ public partial class GameManager : Node
         GetTree().Root.ContentScaleSize = portrait ? PortraitBaseSize : LandscapeBaseSize;
     }
 
+    // 1 per round survived — simple and transparent enough that the player can predict it before the
+    // run ends, and it scales with skill (a better run pays out more) without needing to weigh kills
+    // vs. score vs. coins into one made-up formula. First-guess constant; retune after playtesting.
+    private const int NucleosPerRound = 1;
+
     private void RegisterFinalScore()
     {
         if (Score > LoadHighScore())
             SaveHighScore(Score);
 
         AppendRecord(Score);
+
+        // Read before ResetRun() zeroes RoundNumber. This is the single point both exit paths
+        // (death via NotifyPlayerDied, manual quit via AbandonRun) already funnel through, so it
+        // covers both without duplicating the award logic at each call site.
+        LastRunNucleosEarned = RoundNumber * NucleosPerRound;
+        AddMetaCurrency(LastRunNucleosEarned);
     }
+
+    // Set by RegisterFinalScore just before Game Over is shown, so GameOverScreen can display "+N"
+    // without recomputing the formula itself or racing ResetRun's RoundNumber reset.
+    public int LastRunNucleosEarned { get; private set; }
 
     // --- Settings and records (ConfigFile) ---
     //
@@ -715,6 +730,51 @@ public partial class GameManager : Node
         config.Save(SettingsFilePath);
     }
 
+    // The persistent, cross-run currency — deliberately not Coins (which resets to 0 every run,
+    // AddCoins/SpendCoins never touch disk) and not Score (a run-scoped counter whose only
+    // persistence is a read-only high score/records list). Named "Núcleos" everywhere player-facing
+    // specifically so it can't be confused with either — docs/economy.md already flags "confusing
+    // the two currencies" as the most common bug source here, and this makes it three.
+    //
+    // Persisted immediately on every change, unlike Coins: this has to survive the app being killed
+    // mid-run on a phone, not just a clean return to the main menu.
+    public int MetaCurrency { get; private set; }
+
+    // Slugs the player has spent MetaCurrency on. A HashSet, not a count — unlocking is permanent
+    // and per-character, there's nothing to accumulate. Built-ins that don't require unlocking (see
+    // CharacterCatalog.CharacterInfo.RequiresUnlock) and every custom character never consult this
+    // at all, so it only ever needs entries for the handful of gated built-ins.
+    public HashSet<string> UnlockedCharacters { get; private set; } = new();
+
+    public void AddMetaCurrency(int amount)
+    {
+        if (amount <= 0) return;
+        MetaCurrency += amount;
+        SaveMetaCurrency();
+    }
+
+    // Returns false (spending nothing) if the character is already unlocked, doesn't require
+    // unlocking at all, or the player can't afford it — callers can treat any false as "nothing to
+    // do" without needing to distinguish why.
+    public bool TryUnlockCharacter(string slug, int cost)
+    {
+        if (UnlockedCharacters.Contains(slug) || MetaCurrency < cost) return false;
+
+        MetaCurrency -= cost;
+        UnlockedCharacters.Add(slug);
+        SaveMetaCurrency();
+        return true;
+    }
+
+    private void SaveMetaCurrency()
+    {
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, "meta_currency", MetaCurrency);
+        config.SetValue(SettingsSection, "unlocked_characters", new List<string>(UnlockedCharacters).ToArray());
+        config.Save(SettingsFilePath);
+    }
+
     private void LoadSettings()
     {
         var config = new ConfigFile();
@@ -736,6 +796,10 @@ public partial class GameManager : Node
             slug = CharacterCatalog.SlugForLegacyIndex((int)config.GetValue(SettingsSection, "selected_character", 0));
 
         SelectedCharacter = slug;
+
+        MetaCurrency = (int)config.GetValue(SettingsSection, "meta_currency", 0);
+        var unlocked = (string[])config.GetValue(SettingsSection, "unlocked_characters", System.Array.Empty<string>());
+        UnlockedCharacters = new HashSet<string>(unlocked);
     }
 
     private const string RecordsFilePath = "user://records.cfg";
