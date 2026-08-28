@@ -7,7 +7,7 @@ namespace ShooterLoop;
 public partial class CooldownIcon : Control
 {
     [Export] public Color IconColor = Colors.White;
-    [Export] public string Label = "?";
+    [Export] public string Glyph = "?";
 
     // 1 = just used (fully covered), 0 = ready (fully clear).
     public float CooldownFraction = 0f;
@@ -58,13 +58,13 @@ public partial class CooldownIcon : Control
         // stayed in the old typeface while every Label in the game switched.
         var font = GetThemeDefaultFont();
         int fontSize = 14;
-        Vector2 textSize = font.GetStringSize(Label, HorizontalAlignment.Center, -1f, fontSize);
+        Vector2 textSize = font.GetStringSize(Glyph, HorizontalAlignment.Center, -1f, fontSize);
         Vector2 textPos = center - textSize / 2f + new Vector2(0f, textSize.Y * 0.35f);
 
         // Outlined, unlike every other DrawString in the project — this letter is the ONLY thing
         // identifying which ability the icon belongs to, and it sits over the live arena. A white
         // glyph on top of a bright cyan or pink explosion simply disappears without this.
-        DrawStringOutline(font, textPos, Label, HorizontalAlignment.Center, -1f, fontSize, 4, Colors.Black);
-        DrawString(font, textPos, Label, HorizontalAlignment.Center, -1f, fontSize, Colors.White);
+        DrawStringOutline(font, textPos, Glyph, HorizontalAlignment.Center, -1f, fontSize, 4, Colors.Black);
+        DrawString(font, textPos, Glyph, HorizontalAlignment.Center, -1f, fontSize, Colors.White);
     }
 }
