@@ -60,9 +60,9 @@ select screen builds its list from `CharacterCatalog.All`, so it picks the new o
 **Remove a character:** delete the entry and the PNG. A saved selection pointing at it resolves back
 to `BuiltIns[0]` via `Get()`, so nobody ends up stuck on a character that no longer exists.
 
-## Locked characters & Núcleos
+## Locked characters & Libras
 
-Three slots (`secreto1`/`2`/`3`) are gated behind [Núcleos](economy.md#núcleos--gamemanagermetacurrency),
+Three slots (`secreto1`/`2`/`3`) are gated behind [Libras](economy.md#libras--gamemanagerlibras),
 the game's persistent, cross-run currency — the first thing it's spendable on. The gate is two fields
 on `CharacterInfo`, both defaulting to "unlocked" so nothing existing is affected by adding a new one:
 

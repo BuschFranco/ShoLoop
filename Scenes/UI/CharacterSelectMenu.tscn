@@ -59,6 +59,20 @@ content_margin_top = 6.0
 content_margin_right = 10.0
 content_margin_bottom = 6.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_bar_bg"]
+bg_color = Color(0.102, 0.0588, 0.1686, 0.8)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_level_bar_fill"]
+bg_color = Color(0.55, 0.75, 1, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_swatch"]
 bg_color = Color(0.043, 0.024, 0.078, 0.85)
 border_width_left = 2
@@ -110,13 +124,13 @@ theme_override_font_sizes/font_size = 20
 text = "ELEGÍ TU PILOTO"
 horizontal_alignment = 1
 
-[node name="NucleosLabel" type="Label" parent="CenterContainer/Panel/Box"]
+[node name="LibrasLabel" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.55, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 14
-text = "Núcleos: 0"
+text = "Libras: 0"
 horizontal_alignment = 1
 
 [node name="Carousel" type="HBoxContainer" parent="CenterContainer/Panel/Box"]
@@ -183,6 +197,27 @@ theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 26
 text = "Equilibrado"
 horizontal_alignment = 1
+
+[node name="LevelLabel" type="Label" parent="CenterContainer/Panel/Box/Identity"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.75, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 13
+text = "Nivel 1"
+horizontal_alignment = 1
+
+[node name="LevelBarRow" type="CenterContainer" parent="CenterContainer/Panel/Box/Identity"]
+layout_mode = 2
+
+[node name="LevelBar" type="ProgressBar" parent="CenterContainer/Panel/Box/Identity/LevelBarRow"]
+custom_minimum_size = Vector2(200, 8)
+layout_mode = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_level_bar_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_level_bar_fill")
+max_value = 5.0
+value = 0.0
+show_percentage = false
 
 [node name="DescScroll" type="ScrollContainer" parent="CenterContainer/Panel/Box/Identity"]
 layout_mode = 2
@@ -265,7 +300,7 @@ theme_override_constants/outline_size = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 theme_override_styles/disabled = SubResource("StyleBoxFlat_button")
-text = "Desbloquear (30 Núcleos)"
+text = "Desbloquear (30 Libras)"
 
 [node name="CancelButton" type="Button" parent="CenterContainer/Panel/Box"]
 custom_minimum_size = Vector2(0, 44)

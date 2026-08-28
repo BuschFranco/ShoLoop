@@ -40,11 +40,13 @@ public partial class CharacterSelectMenu : Control
     private Label _perkLabel;
 
     private Label _nameLabel;
+    private Label _levelLabel;
+    private ProgressBar _levelBar;
     private Label _descLabel;
     private Button _confirmButton;
     private Button _unlockButton;
     private Button _deleteButton;
-    private Label _nucleosLabel;
+    private Label _librasLabel;
     private CharacterCreator _creator;
     private PanelContainer _panel;
     private Control _carouselPreview;
@@ -68,6 +70,8 @@ public partial class CharacterSelectMenu : Control
         _previewTexture = GetNode<TextureRect>("CenterContainer/Panel/Box/Carousel/Preview/Swatch/PreviewTexture");
         _identity = GetNode<VBoxContainer>("CenterContainer/Panel/Box/Identity");
         _nameLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/NameLabel");
+        _levelLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/LevelLabel");
+        _levelBar = GetNode<ProgressBar>("CenterContainer/Panel/Box/Identity/LevelBarRow/LevelBar");
         _descScroll = GetNode<ScrollContainer>("CenterContainer/Panel/Box/Identity/DescScroll");
         _descLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/DescScroll/DescLabel");
         _perkPanel = GetNode<PanelContainer>("CenterContainer/Panel/Box/PerkPanel");
@@ -75,7 +79,7 @@ public partial class CharacterSelectMenu : Control
         _confirmButton = GetNode<Button>("CenterContainer/Panel/Box/ConfirmButton");
         _unlockButton = GetNode<Button>("CenterContainer/Panel/Box/UnlockButton");
         _deleteButton = GetNode<Button>("CenterContainer/Panel/Box/Actions/DeleteButton");
-        _nucleosLabel = GetNode<Label>("CenterContainer/Panel/Box/NucleosLabel");
+        _librasLabel = GetNode<Label>("CenterContainer/Panel/Box/LibrasLabel");
         _creator = GetNode<CharacterCreator>("CharacterCreator");
 
         var leftButton = GetNode<Button>("CenterContainer/Panel/Box/Carousel/LeftButton");
@@ -202,6 +206,16 @@ public partial class CharacterSelectMenu : Control
         // except memory, and the confirm button read identically either way.
         bool isEquipped = info.Slug == GameManager.Instance.SelectedCharacter;
         _nameLabel.Text = isEquipped ? $"{info.Name}  ·  ACTUAL" : info.Name;
+
+        // Per-pilot progression, independent of the account-wide level shown on the main menu — a
+        // brand-new pilot always reads Level 1 regardless of how long the account has played.
+        int level = GameManager.Instance.GetCharacterLevel(info.Slug);
+        int xp = GameManager.Instance.GetCharacterXp(info.Slug);
+        int xpToNext = GameManager.Instance.GetCharacterXpToNextLevel(info.Slug);
+        _levelLabel.Text = $"Nivel {level}";
+        _levelBar.MaxValue = xpToNext;
+        _levelBar.Value = xp;
+
         _descLabel.Text = info.Description ?? "";
         _confirmButton.Text = isEquipped ? $"Jugar con {info.Name}" : $"Elegir a {info.Name}";
 
@@ -223,11 +237,11 @@ public partial class CharacterSelectMenu : Control
         _unlockButton.Visible = locked;
         if (locked)
         {
-            _unlockButton.Text = $"Desbloquear ({info.UnlockCost} Núcleos)";
-            _unlockButton.Disabled = GameManager.Instance.MetaCurrency < info.UnlockCost;
+            _unlockButton.Text = $"Desbloquear ({info.UnlockCost} Libras)";
+            _unlockButton.Disabled = GameManager.Instance.Libras < info.UnlockCost;
         }
 
-        _nucleosLabel.Text = $"Núcleos: {GameManager.Instance.MetaCurrency}";
+        _librasLabel.Text = $"Libras: {GameManager.Instance.Libras}";
 
         FitDescriptionHeight(info.Description ?? "");
     }

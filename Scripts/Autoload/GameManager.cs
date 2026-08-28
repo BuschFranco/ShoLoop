@@ -184,6 +184,12 @@ public partial class GameManager : Node
     // mid-effect too, not just the ones that existed at the moment it was triggered.
     public float EnemySpeedMultiplier = 1f;
 
+    // What EnemySpeedMultiplier reverts to once a temporary slow (Zona Lenta) expires — set by
+    // RoundEventDirector to Frenzy's speed-up while that event is active, 1f otherwise. Without this,
+    // firing Zona Lenta during a Frenzy round used to leave speed at 1f (a normal round's pace) once
+    // the ultimate wore off, instead of snapping back to Frenzy's still-active speed-up.
+    public float BaseEnemySpeedMultiplier = 1f;
+
     // Extra XP/coin payout from a round event (Frenesí doubles it). Applied per spawn in
     // EnemySpawner.SpawnOne alongside RewardMultCurve, and reset by RoundEventDirector at round end.
     public float EventRewardMultiplier = 1f;
@@ -203,7 +209,7 @@ public partial class GameManager : Node
         {
             _slowTimer = new Timer { OneShot = true };
             AddChild(_slowTimer);
-            _slowTimer.Timeout += () => EnemySpeedMultiplier = 1f;
+            _slowTimer.Timeout += () => EnemySpeedMultiplier = BaseEnemySpeedMultiplier;
         }
         _slowTimer.WaitTime = duration;
         _slowTimer.Start();
@@ -613,10 +619,16 @@ public partial class GameManager : Node
         GetTree().Root.ContentScaleSize = portrait ? PortraitBaseSize : LandscapeBaseSize;
     }
 
-    // 1 per round survived — simple and transparent enough that the player can predict it before the
-    // run ends, and it scales with skill (a better run pays out more) without needing to weigh kills
-    // vs. score vs. coins into one made-up formula. First-guess constant; retune after playtesting.
-    private const int NucleosPerRound = 1;
+    // 1 per round survived, counted from round 1 (no free/unpaid opening rounds) — simple and
+    // transparent enough that the player can predict it before the run ends, and it scales with skill
+    // (a better run pays out more) without needing to weigh kills vs. score vs. coins into one
+    // made-up formula. Retune after playtesting.
+    private const int LibrasPerRound = 1;
+
+    // Kept (rather than deleted) as the single knob for reintroducing an opening grace period later;
+    // 0 means every round pays out from the start. Public so GameOverScreen can explain a 0-Libras
+    // run without hardcoding the number itself.
+    public const int LibrasFreeRounds = 0;
 
     private void RegisterFinalScore()
     {
@@ -628,13 +640,17 @@ public partial class GameManager : Node
         // Read before ResetRun() zeroes RoundNumber. This is the single point both exit paths
         // (death via NotifyPlayerDied, manual quit via AbandonRun) already funnel through, so it
         // covers both without duplicating the award logic at each call site.
-        LastRunNucleosEarned = RoundNumber * NucleosPerRound;
-        AddMetaCurrency(LastRunNucleosEarned);
+        LastRunLibrasEarned = Mathf.Max(0, RoundNumber - LibrasFreeRounds) * LibrasPerRound;
+        AddLibras(LastRunLibrasEarned);
+        LastRunAccountLevelsGained = AddAccountXp(LastRunLibrasEarned);
+        LastRunCharacterLevelsGained = AddCharacterXp(SelectedCharacter, LastRunLibrasEarned);
     }
 
     // Set by RegisterFinalScore just before Game Over is shown, so GameOverScreen can display "+N"
     // without recomputing the formula itself or racing ResetRun's RoundNumber reset.
-    public int LastRunNucleosEarned { get; private set; }
+    public int LastRunLibrasEarned { get; private set; }
+    public int LastRunAccountLevelsGained { get; private set; }
+    public int LastRunCharacterLevelsGained { get; private set; }
 
     // --- Settings and records (ConfigFile) ---
     //
@@ -732,25 +748,26 @@ public partial class GameManager : Node
 
     // The persistent, cross-run currency — deliberately not Coins (which resets to 0 every run,
     // AddCoins/SpendCoins never touch disk) and not Score (a run-scoped counter whose only
-    // persistence is a read-only high score/records list). Named "Núcleos" everywhere player-facing
+    // persistence is a read-only high score/records list). Named "Libras" everywhere player-facing
     // specifically so it can't be confused with either — docs/economy.md already flags "confusing
-    // the two currencies" as the most common bug source here, and this makes it three.
+    // the two currencies" as the most common bug source here, and this makes it three. (Formerly
+    // called Núcleos; renamed with no other behavior change beyond RegisterFinalScore's formula.)
     //
     // Persisted immediately on every change, unlike Coins: this has to survive the app being killed
     // mid-run on a phone, not just a clean return to the main menu.
-    public int MetaCurrency { get; private set; }
+    public int Libras { get; private set; }
 
-    // Slugs the player has spent MetaCurrency on. A HashSet, not a count — unlocking is permanent
+    // Slugs the player has spent Libras on. A HashSet, not a count — unlocking is permanent
     // and per-character, there's nothing to accumulate. Built-ins that don't require unlocking (see
     // CharacterCatalog.CharacterInfo.RequiresUnlock) and every custom character never consult this
     // at all, so it only ever needs entries for the handful of gated built-ins.
     public HashSet<string> UnlockedCharacters { get; private set; } = new();
 
-    public void AddMetaCurrency(int amount)
+    public void AddLibras(int amount)
     {
         if (amount <= 0) return;
-        MetaCurrency += amount;
-        SaveMetaCurrency();
+        Libras += amount;
+        SaveMetaProgress();
     }
 
     // Returns false (spending nothing) if the character is already unlocked, doesn't require
@@ -758,20 +775,114 @@ public partial class GameManager : Node
     // do" without needing to distinguish why.
     public bool TryUnlockCharacter(string slug, int cost)
     {
-        if (UnlockedCharacters.Contains(slug) || MetaCurrency < cost) return false;
+        if (UnlockedCharacters.Contains(slug) || Libras < cost) return false;
 
-        MetaCurrency -= cost;
+        Libras -= cost;
         UnlockedCharacters.Add(slug);
-        SaveMetaCurrency();
+        SaveMetaProgress();
         return true;
     }
 
-    private void SaveMetaCurrency()
+    // A second, independent track of permanent progression — separate from Libras (spendable) the
+    // same way in-run Level is separate from Coins. Nothing consumes AccountLevel yet; it exists so
+    // the player has a number that only ever goes up across their whole history with the game, ahead
+    // of deciding what unlocks it should drive. Same threshold-growth shape as the in-run Level/Xp
+    // pair above, just re-scaled: Libras per run are small (rarely above ~15), so the curve starts
+    // much lower.
+    public int AccountLevel { get; private set; } = 1;
+    public int AccountXp { get; private set; }
+    public int AccountXpToNextLevel { get; private set; } = 5;
+
+    private const float AccountXpGrowthFactor = 1.35f;
+
+    // Returns how many levels this call crossed, so RegisterFinalScore can hand GameOverScreen a
+    // "+N nivel de cuenta" without it recomputing the curve itself.
+    private int AddAccountXp(int amount)
+    {
+        if (amount <= 0) return 0;
+
+        AccountXp += amount;
+        int levelsGained = 0;
+        while (AccountXp >= AccountXpToNextLevel)
+        {
+            AccountXp -= AccountXpToNextLevel;
+            AccountLevel++;
+            AccountXpToNextLevel = Mathf.RoundToInt(AccountXpToNextLevel * AccountXpGrowthFactor);
+            levelsGained++;
+        }
+
+        SaveMetaProgress();
+        return levelsGained;
+    }
+
+    // A THIRD progression track, alongside AccountLevel — one per character slug rather than one for
+    // the whole account, so switching pilots doesn't blend their progress into a single number and a
+    // brand-new pilot always starts at Level 1 regardless of how long the account has played. Built-ins
+    // and custom characters (CharacterCatalog.CharacterInfo.IsCustom) are keyed the same way, by slug,
+    // so this needs no special-casing between them.
+    private readonly Dictionary<string, int> _characterLevel = new();
+    private readonly Dictionary<string, int> _characterXp = new();
+    private readonly Dictionary<string, int> _characterXpToNext = new();
+
+    private const int CharacterXpToNextLevelStart = 5;
+    private const float CharacterXpGrowthFactor = 1.35f;
+
+    public int GetCharacterLevel(string slug) => _characterLevel.GetValueOrDefault(slug, 1);
+    public int GetCharacterXp(string slug) => _characterXp.GetValueOrDefault(slug, 0);
+    public int GetCharacterXpToNextLevel(string slug) => _characterXpToNext.GetValueOrDefault(slug, CharacterXpToNextLevelStart);
+
+    // Same "1 Libra earned = 1 XP" rule as AddAccountXp, on whichever pilot was actually flown —
+    // GameManager.SelectedCharacter still names that pilot when this runs, since ResetRun never
+    // touches it (it's the persisted choice, not run state) and the next selection only happens back
+    // on the character-select screen. Returns levels gained, same reason as AddAccountXp.
+    private int AddCharacterXp(string slug, int amount)
+    {
+        if (amount <= 0) return 0;
+
+        int level = GetCharacterLevel(slug);
+        int xp = GetCharacterXp(slug) + amount;
+        int xpToNext = GetCharacterXpToNextLevel(slug);
+
+        int levelsGained = 0;
+        while (xp >= xpToNext)
+        {
+            xp -= xpToNext;
+            level++;
+            xpToNext = Mathf.RoundToInt(xpToNext * CharacterXpGrowthFactor);
+            levelsGained++;
+        }
+
+        _characterLevel[slug] = level;
+        _characterXp[slug] = xp;
+        _characterXpToNext[slug] = xpToNext;
+
+        SaveMetaProgress();
+        return levelsGained;
+    }
+
+    private const string CharacterProgressSection = "character_progress";
+
+    private void SaveMetaProgress()
     {
         var config = new ConfigFile();
         config.Load(SettingsFilePath);
-        config.SetValue(SettingsSection, "meta_currency", MetaCurrency);
+        config.SetValue(SettingsSection, "libras", Libras);
         config.SetValue(SettingsSection, "unlocked_characters", new List<string>(UnlockedCharacters).ToArray());
+        config.SetValue(SettingsSection, "account_level", AccountLevel);
+        config.SetValue(SettingsSection, "account_xp", AccountXp);
+        config.SetValue(SettingsSection, "account_xp_to_next", AccountXpToNextLevel);
+
+        // One key per slug ("level|xp|xpToNext") rather than three parallel arrays — a slug is never
+        // dropped from the middle of an array (custom characters can be deleted, but that just leaves
+        // an orphaned key here, same as it already does for UnlockedCharacters), and GetSectionKeys
+        // means loading doesn't need to know the full slug list up front.
+        foreach (var kv in _characterLevel)
+        {
+            string slug = kv.Key;
+            config.SetValue(CharacterProgressSection, slug,
+                $"{kv.Value}|{GetCharacterXp(slug)}|{GetCharacterXpToNextLevel(slug)}");
+        }
+
         config.Save(SettingsFilePath);
     }
 
@@ -797,9 +908,34 @@ public partial class GameManager : Node
 
         SelectedCharacter = slug;
 
-        MetaCurrency = (int)config.GetValue(SettingsSection, "meta_currency", 0);
+        // Falls back to the old "meta_currency" key so a save from before the Núcleos → Libras rename
+        // doesn't lose an existing balance.
+        Libras = (int)config.GetValue(SettingsSection, "libras",
+            config.GetValue(SettingsSection, "meta_currency", 0));
         var unlocked = (string[])config.GetValue(SettingsSection, "unlocked_characters", System.Array.Empty<string>());
         UnlockedCharacters = new HashSet<string>(unlocked);
+
+        AccountLevel = (int)config.GetValue(SettingsSection, "account_level", 1);
+        AccountXp = (int)config.GetValue(SettingsSection, "account_xp", 0);
+        AccountXpToNextLevel = (int)config.GetValue(SettingsSection, "account_xp_to_next", 5);
+
+        _characterLevel.Clear();
+        _characterXp.Clear();
+        _characterXpToNext.Clear();
+        foreach (string charSlug in config.GetSectionKeys(CharacterProgressSection))
+        {
+            string raw = (string)config.GetValue(CharacterProgressSection, charSlug, "");
+            string[] parts = raw.Split('|');
+            if (parts.Length != 3
+                || !int.TryParse(parts[0], out int level)
+                || !int.TryParse(parts[1], out int xp)
+                || !int.TryParse(parts[2], out int xpToNext))
+                continue;
+
+            _characterLevel[charSlug] = level;
+            _characterXp[charSlug] = xp;
+            _characterXpToNext[charSlug] = xpToNext;
+        }
     }
 
     private const string RecordsFilePath = "user://records.cfg";
@@ -878,6 +1014,7 @@ public partial class GameManager : Node
         _roundTimer.Stop();
         _roundTimer.Start();
         EnemySpeedMultiplier = 1f;
+        BaseEnemySpeedMultiplier = 1f;
         EventRewardMultiplier = 1f;
         SurvivabilityCatchUpMultiplier = 1f;
         _slowTimer?.Stop();

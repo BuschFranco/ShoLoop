@@ -1,4 +1,4 @@
-# Economy: Coins, Score, Núcleos & Shop Pricing
+# Economy: Coins, Score, Libras & Shop Pricing
 
 Three separate currencies exist. Confusing them is the most common bug source here.
 
@@ -24,29 +24,79 @@ Three separate currencies exist. Confusing them is the most common bug source he
 - `GameManager.NotifyPlayerDied()` calls `RegisterFinalScore()` right when a run ends, which compares the just-finished `Score` against the saved value and overwrites it only if the run's Score is higher.
 - [MainMenu.cs](../Scripts/UI/MainMenu.cs) reads it with the static `GameManager.LoadHighScore()` in `_Ready()` and shows it on the main menu — both on a fresh app launch and whenever you return to the menu via the Game Over screen's "Menú Principal" button.
 
-## Núcleos (`GameManager.MetaCurrency`)
+## Libras (`GameManager.Libras`)
 
 The **persistent meta-currency** — the only one of the three that survives death. Deliberately kept
 apart from both Coins (resets every run, never touches disk) and Score (run-scoped, and the only thing
-of it that persists is a read-only high score/record — not something spendable):
+of it that persists is a read-only high score/record — not something spendable). Formerly called
+Núcleos; renamed with no change to the underlying mechanism beyond the earn formula below.
 
-- **Earned once, at run end.** `RegisterFinalScore()` — the single point both exit paths (death via
-  `NotifyPlayerDied()`, manual quit via `AbandonRun()`) already funnel through — awards
-  `RoundNumber × NucleosPerRound` (currently `1`, a first guess pending playtesting) and calls
-  `AddMetaCurrency`, read *before* `ResetRun()` zeroes `RoundNumber`. The amount is cached on
-  `GameManager.LastRunNucleosEarned` so [GameOverScreen.cs](../Scripts/UI/GameOverScreen.cs) can show
-  "+N" without recomputing the formula or racing the reset.
-- **Persisted immediately on every change**, unlike Coins — `AddMetaCurrency`/`TryUnlockCharacter`
-  both write straight to `user://settings.cfg` (`meta_currency` key) rather than waiting for some
+- **Earned once, at run end, counted from round 1** — no free/unpaid opening rounds.
+  `RegisterFinalScore()` — the single point both exit paths (death via `NotifyPlayerDied()`, manual quit
+  via `AbandonRun()`) already funnel through — awards `Max(0, RoundNumber - LibrasFreeRounds) ×
+  LibrasPerRound` (`LibrasFreeRounds` currently `0`, `LibrasPerRound` currently `1` — first-guess
+  constants pending playtesting; `LibrasFreeRounds` exists as the one knob to reintroduce a grace period
+  later without touching the formula) and calls `AddLibras`, read *before* `ResetRun()` zeroes
+  `RoundNumber`. The amount is cached on `GameManager.LastRunLibrasEarned` so
+  [GameOverScreen.cs](../Scripts/UI/GameOverScreen.cs) can show "+N" without recomputing the formula or
+  racing the reset.
+- **Persisted immediately on every change**, unlike Coins — `AddLibras`/`TryUnlockCharacter`
+  both write straight to `user://settings.cfg` (`libras` key) rather than waiting for some
   later save point, since the balance has to survive the app being killed mid-run on a phone.
-- **Spent on characters today** — see [characters.md](characters.md#locked-characters--núcleos) for
+- **Spent on characters today** — see [characters.md](characters.md#locked-characters--libras) for
   `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`. Framed as "first
   thing to spend it on," not the only one; `docs/characters.md` has the unlock-flow details.
 - `GameManager.UnlockedCharacters` (a `HashSet<string>` of slugs) is the other half of the save —
   persisted as a `PackedStringArray` under the same `settings.cfg` key `unlocked_characters`, no
   separate file needed (mirrors how `records.cfg` already stores its top-10 list the same way).
 
-## Shop pricing (`Shop.cs`, `GameManager.cs`)
+## Account level (`GameManager.AccountLevel`)
+
+A second, independent permanent-progression track — separate from Libras the same way in-run `Level`
+is separate from `Coins`. Every run's `LastRunLibrasEarned` also feeds `AccountXp` via `AddAccountXp`,
+using the same threshold-growth shape as the in-run Level/Xp pair (`AccountXpToNextLevel` grows by
+`AccountXpGrowthFactor` = 1.35x per level crossed), just re-scaled: Libras per run are small (rarely
+above ~15), so the curve starts much lower — `AccountXpToNextLevel` begins at 5.
+
+Nothing consumes `AccountLevel` yet; it exists purely as a number that only ever goes up across the
+player's whole history with the game, ahead of deciding what rewards it should unlock. `RegisterFinalScore`
+returns how many levels a run crossed as `GameManager.LastRunAccountLevelsGained`, which
+[GameOverScreen.cs](../Scripts/UI/GameOverScreen.cs) uses to show a "¡Nivel de cuenta N!" line only on
+runs that actually crossed a threshold. Persisted alongside Libras in the same `SaveMetaProgress()`
+call (`account_level`/`account_xp`/`account_xp_to_next` keys).
+
+**GameOverScreen always shows an "XP cuenta" line**, even on a 0-Libras run — a silent 0 used to read
+as a bug ("did this not work?"), when it's actually `LibrasFreeRounds` telling the player they need to
+survive further before anything is paid out. That 0-case spells out the threshold by name
+(`GameManager.LibrasFreeRounds`, made `public const` specifically so this message doesn't hardcode a
+number that could drift from the real one).
+
+**[MainMenu.tscn](../Scenes/UI/MainMenu.tscn) shows a `ProgressBar`** under the "Nivel de cuenta" label
+(`AccountLevelBar`, styled after the HUD's own XP bar), bounds `AccountXp`/`AccountXpToNextLevel` — the
+same refresh hook as the Libras/level labels (`CharacterSelectMenu.VisibilityChanged`) keeps it in sync
+after spending Libras in the character-select overlay.
+
+## Character level (per pilot, `GameManager.GetCharacterLevel(slug)`)
+
+A THIRD progression track, alongside Libras and AccountLevel — one per character slug rather than one
+for the whole account, keyed the same way `UnlockedCharacters` already is (a `slug` string, so custom
+characters need no special-casing next to built-ins). Every run's `LastRunLibrasEarned` feeds
+`GameManager.SelectedCharacter`'s own Xp via `AddCharacterXp` — the same "1 Libra = 1 XP" rule and
+threshold-growth shape as `AddAccountXp`, just scoped to one pilot instead of the whole save. A
+brand-new pilot always starts at Level 1 with 0 XP, regardless of how long the account has played or
+how leveled its other pilots are.
+
+Persisted as one string per slug (`"level|xp|xpToNext"`) under its own ConfigFile section
+(`character_progress`), rather than parallel arrays — `ConfigFile.GetSectionKeys` means loading doesn't
+need to already know the full slug list, which matters since custom characters' slugs are generated at
+creation time, not fixed like the built-in cast.
+
+Same "always show progress, not just level-ups" treatment as the account line — see
+[GameOverScreen.cs](../Scripts/UI/GameOverScreen.cs) — and the same `ProgressBar` treatment on the
+character-select carousel ([CharacterSelectMenu.tscn](../Scenes/UI/CharacterSelectMenu.tscn)'s
+`LevelBar`, inside `Identity` so it slides with the rest of the framed pilot's info during the carousel
+crossfade), refreshed every `RefreshPreview()` call so stepping through the carousel shows each pilot's
+own progress, not whichever pilot was framed last. Nothing consumes it yet, same as `AccountLevel`.
 
 Every shop item's final price is the catalog base cost multiplied by **two independent, stacking multipliers**:
 

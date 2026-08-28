@@ -46,8 +46,28 @@ public partial class GameOverScreen : Control
         {
             $"Ronda {gm.RoundNumber}   Nv {gm.Level}   {Glossary.Kills}: {gm.EnemiesKilled}",
             $"Monedas: {gm.Coins}",
-            $"+{gm.LastRunNucleosEarned} Núcleos (total: {gm.MetaCurrency})",
+            $"+{gm.LastRunLibrasEarned} Libras (total: {gm.Libras})",
         };
+
+        // Always shown, even when this run earned 0 Libras — a silent 0 used to read as a bug ("did I
+        // not get anything?"). With GameManager.LibrasFreeRounds at 0 every run earns something, but
+        // the 0-case stays here (rather than assuming it can't happen) so a future grace period doesn't
+        // silently reintroduce the same confusing blank line.
+        lines.Add(gm.LastRunLibrasEarned > 0
+            ? $"XP cuenta: +{gm.LastRunLibrasEarned}   ({gm.AccountXp}/{gm.AccountXpToNextLevel} para Nv {gm.AccountLevel + 1})"
+            : $"XP cuenta: +0   (superá la ronda {GameManager.LibrasFreeRounds + 1} para empezar a ganar)");
+
+        // The pilot actually flown this run, separate from the account-wide line above — shown with
+        // its own name so a level-up reads as "this pilot got stronger," not a duplicate of the line
+        // right above it.
+        if (gm.LastRunCharacterLevelsGained > 0)
+        {
+            string pilotName = CharacterCatalog.Get(gm.SelectedCharacter).Name;
+            lines.Add($"¡{pilotName} subió a Nivel {gm.GetCharacterLevel(gm.SelectedCharacter)}!");
+        }
+
+        if (gm.LastRunAccountLevelsGained > 0)
+            lines.Add($"¡Nivel de cuenta {gm.AccountLevel}!");
 
         if (player != null)
         {

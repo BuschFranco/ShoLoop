@@ -70,7 +70,7 @@ public readonly struct CharacterInfo
     // Player-created, therefore deletable and loaded from disk at runtime rather than compiled in.
     public bool IsCustom { get; init; }
 
-    // Gated behind GameManager's persistent Núcleos currency (see docs/economy.md). Struct default is
+    // Gated behind GameManager's persistent Libras currency (see docs/economy.md). Struct default is
     // false, so every existing built-in and every custom character — neither of which ever sets this
     // — is unaffected; only entries that explicitly opt in via Portrait(requiresUnlock: true) are ever
     // locked. CharacterCatalog itself doesn't know whether a given slug HAS been unlocked — that's
@@ -178,11 +178,11 @@ public static class CharacterCatalog
             + "-10% de salud.",
             enemyHp: 0.9f, enemyTint: new Color("9bff4d")),
 
-        // Locked behind Núcleos (see GameManager.MetaCurrency/TryUnlockCharacter). Placeholder "?"
+        // Locked behind Libras (see GameManager.Libras/TryUnlockCharacter). Placeholder "?"
         // portraits and cosmetic-only for now, same as Juan — the slot is meant to be filled in later
         // exactly like the six above were: swap the PNG with tools/prep_character_sprite.py, then add
-        // a real Description/perk here. Costs step up (30/50/75) so the first unlock lands in 2-3 runs
-        // at NucleosPerRound=1 and the third takes 6-8 — a first guess, retune after playtesting.
+        // a real Description/perk here. Costs step up (30/50/75); LibrasFreeRounds+LibrasPerRound
+        // makes each Libra cost a genuinely long run to earn — a first guess, retune after playtesting.
         Portrait("secreto1", "Piloto Secreto I",
             "Un piloto misterioso. Desbloqueálo para descubrir quién es.",
             requiresUnlock: true, unlockCost: 30),

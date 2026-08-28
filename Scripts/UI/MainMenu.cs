@@ -18,16 +18,18 @@ public partial class MainMenu : Control
         var highScoreLabel = GetNode<Label>("VBoxContainer/HighScoreLabel");
         highScoreLabel.Text = $"Mejor puntaje: {GameManager.LoadHighScore()}";
 
-        // Read from the live instance, not a static file re-read like the high score above — Núcleos
+        // Read from the live instance, not a static file re-read like the high score above — Libras
         // is already loaded into GameManager.Instance at boot. CharacterSelectMenu is an overlay
         // *child* of this menu, not a scene swap, so MainMenu's own Visible never toggles while it's
-        // open — the refresh has to hook the overlay's visibility instead, so spending Núcleos in
+        // open — the refresh has to hook the overlay's visibility instead, so spending Libras in
         // there and hitting Cancel updates the balance shown underneath.
-        var nucleosLabel = GetNode<Label>("VBoxContainer/NucleosLabel");
-        nucleosLabel.Text = $"Núcleos: {GameManager.Instance.MetaCurrency}";
+        var librasLabel = GetNode<Label>("VBoxContainer/LibrasLabel");
+        var accountLevelLabel = GetNode<Label>("VBoxContainer/AccountLevelLabel");
+        var accountLevelBar = GetNode<ProgressBar>("VBoxContainer/AccountLevelBarRow/AccountLevelBar");
+        RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
         characterSelect.VisibilityChanged += () =>
         {
-            if (!characterSelect.Visible) nucleosLabel.Text = $"Núcleos: {GameManager.Instance.MetaCurrency}";
+            if (!characterSelect.Visible) RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
         };
 
         var options = GetNode<OptionsMenu>("OptionsMenu");
@@ -64,6 +66,15 @@ public partial class MainMenu : Control
         {
             recordsPanel.CreateTween().TweenProperty(recordsPanel, "modulate:a", 1f, 0.25f);
         };
+    }
+
+    private void RefreshMetaLabels(Label librasLabel, Label accountLevelLabel, ProgressBar accountLevelBar)
+    {
+        var gm = GameManager.Instance;
+        librasLabel.Text = $"Libras: {gm.Libras}";
+        accountLevelLabel.Text = $"Nivel de cuenta: {gm.AccountLevel}";
+        accountLevelBar.MaxValue = gm.AccountXpToNextLevel;
+        accountLevelBar.Value = gm.AccountXp;
     }
 
     private void PopulateRecords()
