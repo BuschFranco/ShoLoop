@@ -93,8 +93,12 @@ public partial class MainMenu : Control
         {
             string pos = $"{i + 1}.";
             string score = records[i].Score.ToString("N0");
+            // Round 0 only ever comes from a save written before records tracked it (see
+            // GameManager.ScoreRecord) — shown as "R?" rather than a misleading "R0", since round
+            // numbering starts at 1 and a real round 0 never happens.
+            string round = records[i].Round > 0 ? $"R{records[i].Round}" : "R?";
             string date = records[i].Date;
-            lines[i] = $"[color=#ffe066]{pos,-4}[/color][color=#7dfdfe]{score,10}[/color]   [color=#b8a040]{date}[/color]";
+            lines[i] = $"[color=#ffe066]{pos,-4}[/color][color=#7dfdfe]{score,10}[/color]  [color=#c9a6ff]{round,-4}[/color][color=#b8a040]{date}[/color]";
         }
 
         list.Text = string.Join("\n", lines);

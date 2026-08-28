@@ -91,6 +91,25 @@ portrait, meant to be filled in exactly like the six amigos originally were: swa
 `tools/prep_character_sprite.py`, then add a real `Description`/`PerkText` to the catalog entry.
 Nothing about the unlock plumbing needs to change when that happens.
 
+## Per-pilot leaderboard & level
+
+Each pilot slug gets its own top-10 score list, kept in `user://records.cfg` alongside the overall
+leaderboard but under its own ConfigFile section (`records_<slug>`, see
+`GameManager.LoadCharacterRecords`/`AppendCharacterRecord`) — answering "how am I doing with THIS
+pilot" separately from the main menu's "what's my best run ever". `RegisterFinalScore` appends to both
+on every run, keyed by whichever pilot `GameManager.SelectedCharacter` names — same slug either way, so
+custom characters need no special-casing.
+
+`CharacterSelectMenu` shows the top 3 (`RefreshRecords`, `MaxRecordsShown`) inside each pilot's own box
+in the carousel — a fixed-height `RecordsBox` (46px, `clip_contents = true`), same pattern as the
+Reward card fix for text that shouldn't be able to grow its container. `MaxDescriptionHeight` was
+trimmed from 190 to 144 to make room for it inside the panel's fixed landscape budget.
+
+This is a third per-pilot number alongside `GetCharacterLevel`(see below) — level tracks permanent
+XP-style progression, the records list tracks actual runs. Both are keyed by slug and shown together
+in the carousel, but they're unrelated: leveling up doesn't touch the leaderboard, and a great run
+doesn't grant XP beyond the Libras it already earns (see [economy.md](economy.md)).
+
 ## Perks: how they reach the game
 
 Every perk follows the same path, and the shape matters more than any individual perk:

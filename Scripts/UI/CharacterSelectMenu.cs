@@ -23,10 +23,11 @@ public partial class CharacterSelectMenu : Control
     // Real descriptions land well under it, so no scrollbar ever appears for actual content.
     //
     // The budget it has to fit inside is the LANDSCAPE viewport — 1152x648 logical, i.e. only 648
-    // tall, far tighter than portrait's 1152. Everything else in this panel adds up to ~440px, so
-    // this is what's left.
+    // tall, far tighter than portrait's 1152. Everything else in this panel adds up to ~486px now that
+    // RecordsBox (below) takes a further 46px, so this is what's left — trimmed down from 190 to make
+    // room for it.
     private ScrollContainer _descScroll;
-    private const float MaxDescriptionHeight = 190f;
+    private const float MaxDescriptionHeight = 144f;
 
     // The panel's fixed 600px minus the stylebox's 18px content margins. Hardcoded on purpose: the
     // height below is measured against a known width instead of asking the label how it wrapped,
@@ -42,6 +43,7 @@ public partial class CharacterSelectMenu : Control
     private Label _nameLabel;
     private Label _levelLabel;
     private ProgressBar _levelBar;
+    private RichTextLabel _recordsList;
     private Label _descLabel;
     private Button _confirmButton;
     private Button _unlockButton;
@@ -72,6 +74,7 @@ public partial class CharacterSelectMenu : Control
         _nameLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/NameLabel");
         _levelLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/LevelLabel");
         _levelBar = GetNode<ProgressBar>("CenterContainer/Panel/Box/Identity/LevelBarRow/LevelBar");
+        _recordsList = GetNode<RichTextLabel>("CenterContainer/Panel/Box/Identity/RecordsBox/RecordsList");
         _descScroll = GetNode<ScrollContainer>("CenterContainer/Panel/Box/Identity/DescScroll");
         _descLabel = GetNode<Label>("CenterContainer/Panel/Box/Identity/DescScroll/DescLabel");
         _perkPanel = GetNode<PanelContainer>("CenterContainer/Panel/Box/PerkPanel");
@@ -216,6 +219,8 @@ public partial class CharacterSelectMenu : Control
         _levelBar.MaxValue = xpToNext;
         _levelBar.Value = xp;
 
+        RefreshRecords(info.Slug);
+
         _descLabel.Text = info.Description ?? "";
         _confirmButton.Text = isEquipped ? $"Jugar con {info.Name}" : $"Elegir a {info.Name}";
 
@@ -244,6 +249,35 @@ public partial class CharacterSelectMenu : Control
         _librasLabel.Text = $"Libras: {GameManager.Instance.Libras}";
 
         FitDescriptionHeight(info.Description ?? "");
+    }
+
+    // Per-pilot leaderboard, kept separate from the overall one on the main menu — this answers "how
+    // am I doing with THIS pilot", not "what's my best run ever". Only the top 3 fit the fixed-height
+    // RecordsBox (see the MaxDescriptionHeight comment above for why this panel's whole layout is a
+    // tight, hardcoded budget); GameManager.LoadCharacterRecords still keeps the full top-10 on disk,
+    // this just doesn't have room to show all of it.
+    private const int MaxRecordsShown = 3;
+
+    private void RefreshRecords(string slug)
+    {
+        var records = GameManager.LoadCharacterRecords(slug);
+        if (records.Count == 0)
+        {
+            _recordsList.Text = "Sin récords todavía";
+            return;
+        }
+
+        var lines = new string[Mathf.Min(records.Count, MaxRecordsShown)];
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string score = records[i].Score.ToString("N0");
+            // Round 0 only ever comes from a save written before records tracked it — shown as "R?"
+            // rather than a misleading "R0" (round numbering starts at 1).
+            string round = records[i].Round > 0 ? $"R{records[i].Round}" : "R?";
+            lines[i] = $"[color=#ffe066]{i + 1}.[/color] [color=#7dfdfe]{score}[/color] [color=#c9a6ff]{round}[/color]  [color=#b8a040]{records[i].Date}[/color]";
+        }
+
+        _recordsList.Text = string.Join("\n", lines);
     }
 
     // Spends and unlocks in place — no auto-select, no closing the carousel — so the player can

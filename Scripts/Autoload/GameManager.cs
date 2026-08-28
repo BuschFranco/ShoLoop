@@ -635,7 +635,8 @@ public partial class GameManager : Node
         if (Score > LoadHighScore())
             SaveHighScore(Score);
 
-        AppendRecord(Score);
+        AppendRecord(Score, RoundNumber);
+        AppendCharacterRecord(SelectedCharacter, Score, RoundNumber);
 
         // Read before ResetRun() zeroes RoundNumber. This is the single point both exit paths
         // (death via NotifyPlayerDied, manual quit via AbandonRun) already funnel through, so it
@@ -941,46 +942,136 @@ public partial class GameManager : Node
     private const string RecordsFilePath = "user://records.cfg";
     private const int MaxRecords = 10;
 
-    public readonly record struct ScoreRecord(int Score, string Date);
+    // Round is the round the run reached, not necessarily completed — RegisterFinalScore reads it
+    // before ResetRun zeroes it, same as LastRunLibrasEarned above. Old save files only ever wrote
+    // "score|date" (no round); those parse back in as Round = 0, which the UI treats as "unknown"
+    // rather than crashing or discarding decades-old — well, days-old — records.
+    public readonly record struct ScoreRecord(int Score, int Round, string Date);
 
-    // Stored as "score|date" strings rather than nested dictionaries: ConfigFile round-trips a
+    // Stored as "score|round|date" strings rather than nested dictionaries: ConfigFile round-trips a
     // PackedStringArray cleanly and there's nothing here worth the extra parsing surface.
     public static List<ScoreRecord> LoadRecords()
+    {
+        var records = LoadRecordSection("records");
+        BackfillLegacyHighScore(records);
+        return records;
+    }
+
+    // highscore.save predates the records leaderboard by however long AppendRecord took to get added
+    // after it — a run that set a high score before then saved it there and nowhere else, so it can sit
+    // far above the records table's own #1, reading as a bug ("why doesn't my best score show up
+    // here?") rather than what it actually is. Backfilled once and persisted (not just patched at read
+    // time), so it becomes a real, sorted entry from here on rather than a live correction reapplied on
+    // every load. Round/date are unknown for a run that predates tracking them, same "unknown" ScoreRecord
+    // shape a pre-round save already parses into (see ShortenDate/Round==0 above).
+    private static void BackfillLegacyHighScore(List<ScoreRecord> records)
+    {
+        int highScore = LoadHighScore();
+        if (highScore <= 0) return;
+
+        bool alreadyTracked = false;
+        bool somethingAlreadyAsHighOrHigher = false;
+        foreach (var r in records)
+        {
+            if (r.Score == highScore) alreadyTracked = true;
+            if (r.Score >= highScore) somethingAlreadyAsHighOrHigher = true;
+        }
+        if (alreadyTracked || somethingAlreadyAsHighOrHigher) return;
+
+        records.Add(new ScoreRecord(highScore, 0, "—"));
+        SaveRecordSection("records", records);
+    }
+
+    // Short D/M/YY, no leading zeros and no time-of-day — the records tables are tight on width (see
+    // CharacterSelectMenu's fixed-height RecordsBox), and which run happened at 14:32 vs 14:35 isn't
+    // information anyone reading this table needs. Records already saved with the old, longer
+    // "DD/MM/YYYY HH:MM" format are untouched — Date is stored and displayed as a plain string, so old
+    // and new formats simply coexist rather than needing a migration.
+    private static string FormatNow()
+    {
+        var now = Time.GetDatetimeDictFromSystem();
+        return $"{now["day"].AsInt32()}/{now["month"].AsInt32()}/{now["year"].AsInt32() % 100}";
+    }
+
+    private static void AppendRecord(int score, int round)
+    {
+        var records = LoadRecords();
+        records.Add(new ScoreRecord(score, round, FormatNow()));
+        SaveRecordSection("records", records);
+    }
+
+    // One section per character slug, in the same records.cfg file as the overall leaderboard above —
+    // works for custom characters too, since their slugs are just as valid a section name as a built-in's.
+    // Kept separate from the overall list (rather than replacing it) because a per-pilot table answers
+    // "how am I doing with THIS pilot", while the main menu's table answers "what's my best run ever" —
+    // two different questions that would erase each other's history if merged into one list.
+    private static string CharacterRecordsSection(string slug) => $"records_{slug}";
+
+    public static List<ScoreRecord> LoadCharacterRecords(string slug) => LoadRecordSection(CharacterRecordsSection(slug));
+
+    private static void AppendCharacterRecord(string slug, int score, int round)
+    {
+        var records = LoadCharacterRecords(slug);
+        records.Add(new ScoreRecord(score, round, FormatNow()));
+        SaveRecordSection(CharacterRecordsSection(slug), records);
+    }
+
+    private static List<ScoreRecord> LoadRecordSection(string section)
     {
         var records = new List<ScoreRecord>();
 
         var config = new ConfigFile();
         if (config.Load(RecordsFilePath) != Error.Ok) return records;
 
-        var raw = (string[])config.GetValue("records", "entries", System.Array.Empty<string>());
+        var raw = (string[])config.GetValue(section, "entries", System.Array.Empty<string>());
         foreach (string line in raw)
         {
             string[] parts = line.Split('|');
-            if (parts.Length != 2 || !int.TryParse(parts[0], out int score)) continue;
-            records.Add(new ScoreRecord(score, parts[1]));
+            if (parts.Length < 2 || !int.TryParse(parts[0], out int score)) continue;
+
+            // 3 parts is the current format (score|round|date); 2 parts is a pre-round save, where
+            // parts[1] is the date and the round is simply not known.
+            if (parts.Length >= 3 && int.TryParse(parts[1], out int round))
+                records.Add(new ScoreRecord(score, round, ShortenDate(parts[2])));
+            else
+                records.Add(new ScoreRecord(score, 0, ShortenDate(parts[1])));
         }
         return records;
     }
 
-    private static void AppendRecord(int score)
+    // Normalizes an on-disk date string to the short D/M/YY display format, regardless of which format
+    // it was actually saved in — records written before FormatNow was shortened still have the old
+    // "DD/MM/YYYY HH:MM" on disk, and this reformats them at load time rather than requiring a one-time
+    // file migration. The next SaveRecordSection call (any future append) re-persists whatever's in
+    // memory, which is already short by then, so the file quietly upgrades itself the next time each
+    // section is written to.
+    private static string ShortenDate(string raw)
     {
-        var records = LoadRecords();
+        string[] dateParts = raw.Split(' ')[0].Split('/');
+        if (dateParts.Length != 3
+            || !int.TryParse(dateParts[0], out int day)
+            || !int.TryParse(dateParts[1], out int month)
+            || !int.TryParse(dateParts[2], out int year))
+            return raw;   // unrecognized shape — show it verbatim rather than mangling it
 
-        var now = Time.GetDatetimeDictFromSystem();
-        string date = $"{now["day"].AsInt32():D2}/{now["month"].AsInt32():D2}/{now["year"].AsInt32()} "
-                    + $"{now["hour"].AsInt32():D2}:{now["minute"].AsInt32():D2}";
-        records.Add(new ScoreRecord(score, date));
+        return $"{day}/{month}/{year % 100}";
+    }
 
-        // Highest first, then keep only the top few — this is a leaderboard, not a full history, so an
-        // unbounded file would grow forever for no benefit.
+    // Highest first, then keep only the top few — this is a leaderboard, not a full history, so an
+    // unbounded file would grow forever for no benefit. Loads before writing (unlike a plain overwrite)
+    // so appending one section's record doesn't wipe every other section already in the same file —
+    // the overall list and however many per-character sections have been written so far.
+    private static void SaveRecordSection(string section, List<ScoreRecord> records)
+    {
         records.Sort((a, b) => b.Score.CompareTo(a.Score));
         if (records.Count > MaxRecords) records.RemoveRange(MaxRecords, records.Count - MaxRecords);
 
         var lines = new string[records.Count];
-        for (int i = 0; i < records.Count; i++) lines[i] = $"{records[i].Score}|{records[i].Date}";
+        for (int i = 0; i < records.Count; i++) lines[i] = $"{records[i].Score}|{records[i].Round}|{records[i].Date}";
 
         var config = new ConfigFile();
-        config.SetValue("records", "entries", lines);
+        config.Load(RecordsFilePath);
+        config.SetValue(section, "entries", lines);
         config.Save(RecordsFilePath);
     }
 
