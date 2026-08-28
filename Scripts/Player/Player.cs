@@ -1682,7 +1682,11 @@ public partial class Player : CharacterBody2D
                 DodgeChance = Mathf.Min(DodgeChance + upgrade.Value, 25f);
                 break;
             case UpgradeType.Fortune:
-                FortuneBonus = Mathf.Min(FortuneBonus + upgrade.Value, 25f);
+                // Cap matches the sum of all four tiers (2+3+5+7=17) — nerfed down from 25 (3+5+7+10)
+                // because a flat bonus added to Rare/Epic/Legendary's raw weight before renormalizing
+                // (see RewardTierRoller.GetWeights) skews the whole roll harder than the headline
+                // percentage suggests, especially against Legendary's tiny early-round raw weight.
+                FortuneBonus = Mathf.Min(FortuneBonus + upgrade.Value, 17f);
                 break;
             case UpgradeType.Ricochet:
                 RicochetCount = Mathf.Max(RicochetCount, (int)upgrade.Value);
@@ -2008,7 +2012,7 @@ public partial class Player : CharacterBody2D
             case UpgradeType.Dodge:
                 return $"Tenés: {DodgeChance:0}% esquiva (tope 25%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.Fortune:
-                return $"Tenés: +{FortuneBonus:0}% fortuna (tope 25%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
+                return $"Tenés: +{FortuneBonus:0}% fortuna (tope 17%) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.Ricochet:
                 return $"Tenés: {RicochetCount} rebotes (tope 4) — {(helps ? "se suma" : Glossary.AtCapSentence)}";
             case UpgradeType.Thorns:
