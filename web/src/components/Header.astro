@@ -1,0 +1,68 @@
+---
+interface Props {
+  lang: 'es' | 'en';
+  esHref: string;
+  enHref: string;
+}
+
+const { lang, esHref, enHref } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const home = lang === 'es' ? `${base}/` : `${base}/en/`;
+---
+
+<header>
+	<a class="brand" href={home}>
+		<img src={`${base}/favicon.svg`} alt="" width="32" height="32" />
+		<span>INFINITIX</span>
+	</a>
+	<nav>
+		<a href={esHref} class:list={{ active: lang === 'es' }}>ES</a>
+		<span aria-hidden="true">/</span>
+		<a href={enHref} class:list={{ active: lang === 'en' }}>EN</a>
+	</nav>
+</header>
+
+<style>
+	header {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 28px 24px 0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		color: var(--text);
+		text-decoration: none;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		font-size: 1.1rem;
+	}
+
+	.brand img {
+		display: block;
+	}
+
+	nav {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.85rem;
+		color: var(--text-dim);
+	}
+
+	nav a {
+		color: var(--text-dim);
+		text-decoration: none;
+		padding: 2px 4px;
+	}
+
+	nav a.active {
+		color: var(--cyan);
+		font-weight: 700;
+	}
+</style>

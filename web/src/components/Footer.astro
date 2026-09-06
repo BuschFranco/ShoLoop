@@ -1,0 +1,53 @@
+---
+interface Props {
+  lang: 'es' | 'en';
+}
+
+const { lang } = Astro.props;
+const base = import.meta.env.BASE_URL;
+
+const t = lang === 'es'
+  ? { privacy: 'Privacidad', terms: 'Términos de uso', contact: 'Contacto' }
+  : { privacy: 'Privacy', terms: 'Terms of use', contact: 'Contact' };
+
+const prefix = lang === 'es' ? base : `${base}/en`;
+---
+
+<footer>
+	<nav>
+		<a href={`${prefix}/privacy/`}>{t.privacy}</a>
+		<a href={`${prefix}/terms/`}>{t.terms}</a>
+		<a href="mailto:francobusch130@gmail.com">{t.contact}</a>
+	</nav>
+	<p>© 2026 Infinitix</p>
+</footer>
+
+<style>
+	footer {
+		max-width: 760px;
+		margin: 60px auto 0;
+		padding: 24px;
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px;
+		color: var(--text-dim);
+		font-size: 0.85rem;
+	}
+
+	nav {
+		display: flex;
+		gap: 18px;
+	}
+
+	nav a {
+		color: var(--text-dim);
+		text-decoration: none;
+	}
+
+	nav a:hover {
+		color: var(--cyan);
+	}
+</style>

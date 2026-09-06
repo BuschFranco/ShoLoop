@@ -1,0 +1,106 @@
+---
+import Base from '../../layouts/Base.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<Base
+	title="Política de privacidad — Infinitix"
+	description="Política de privacidad de Infinitix: el juego no recolecta, transmite ni comparte ningún dato personal."
+	lang="es"
+	altHref={`${base}/en/privacy/`}
+>
+	<Header lang="es" esHref={`${base}/privacy/`} enHref={`${base}/en/privacy/`} />
+
+	<main class="prose">
+		<h1>Política de privacidad de Infinitix</h1>
+		<p class="updated"><strong>Última actualización:</strong> 1 de septiembre de 2026</p>
+
+		<h2>Resumen</h2>
+		<p>
+			Infinitix no recolecta, transmite, vende ni comparte ningún dato personal. El juego
+			funciona completamente sin conexión: no tiene servidores propios, no usa analíticas,
+			no muestra publicidad y no requiere ni permite crear una cuenta.
+		</p>
+
+		<h2>Qué datos existen y dónde quedan</h2>
+		<ul>
+			<li>
+				<strong>Progreso de juego</strong> (mejor puntaje, récords por personaje, nivel de
+				cuenta, Libras, personajes desbloqueados): se guarda únicamente en el
+				dispositivo, en el almacenamiento privado de la aplicación. Nunca sale del
+				teléfono. Se borra al desinstalar el juego.
+			</li>
+			<li>
+				<strong>Personajes creados por el jugador</strong> (nombre, descripción y una foto
+				elegida desde la galería del dispositivo, si el jugador decide crear un piloto
+				propio): se procesan y guardan también únicamente en el almacenamiento privado de
+				la aplicación. La foto nunca se sube a ningún servidor ni se comparte con
+				terceros — se usa solo para dibujar ese personaje dentro del juego. El jugador
+				puede borrar un personaje creado por él en cualquier momento desde el propio
+				juego, lo que borra también la foto guardada; desinstalar la aplicación borra
+				todo lo demás.
+			</li>
+			<li>
+				<strong>Ningún otro dato</strong> se recolecta: no hay identificador de
+				publicidad, no hay ubicación, no hay contactos, no hay red ni analíticas de
+				ningún tipo.
+			</li>
+		</ul>
+
+		<h2>Permisos</h2>
+		<p>
+			La aplicación solo pide acceso a la galería de fotos del dispositivo, y únicamente en
+			el momento en que el jugador elige crear un personaje propio y selecciona una imagen.
+			Ese acceso no se usa para ningún otro fin.
+		</p>
+
+		<h2>Menores de edad</h2>
+		<p>
+			Infinitix no está dirigido específicamente a niños y no recolecta datos de nadie, sin
+			importar la edad.
+		</p>
+
+		<h2>Cambios a esta política</h2>
+		<p>
+			Si esta política cambia (por ejemplo, si en el futuro se agrega alguna función en
+			línea), la nueva versión se publicará en esta misma dirección con la fecha de
+			actualización correspondiente.
+		</p>
+
+		<h2>Contacto</h2>
+		<p>
+			Para consultas sobre esta política, escribir a:
+			<a href="mailto:francobusch130@gmail.com">francobusch130@gmail.com</a>.
+		</p>
+	</main>
+
+	<Footer lang="es" />
+</Base>
+
+<style>
+	.prose {
+		padding-top: 48px;
+	}
+
+	.prose h1 {
+		color: var(--cyan);
+		font-size: 1.8rem;
+	}
+
+	.prose h2 {
+		color: var(--cyan);
+		font-size: 1.15rem;
+		margin-top: 2em;
+	}
+
+	.prose .updated {
+		color: var(--text-dim);
+	}
+
+	.prose li {
+		margin-bottom: 0.6em;
+	}
+</style>

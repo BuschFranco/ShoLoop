@@ -1,0 +1,84 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  lang: 'es' | 'en';
+  altHref: string;
+}
+
+const { title, description, lang, altHref } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<html lang={lang}>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+
+		<link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:type" content="website" />
+		<meta property="og:image" content={`${base}/og-image.png`} />
+		<meta name="twitter:card" content="summary_large_image" />
+
+		<link rel="alternate" hreflang={lang === 'es' ? 'en' : 'es'} href={altHref} />
+	</head>
+	<body>
+		<slot />
+	</body>
+</html>
+
+<style is:global>
+	:root {
+		--bg: #0b0614;
+		--panel: #1a1024;
+		--cyan: #7dfdfe;
+		--magenta: #ff4fd8;
+		--text: #f2eefb;
+		--text-dim: #b8aed0;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	html,
+	body {
+		margin: 0;
+		padding: 0;
+	}
+
+	body {
+		background: var(--bg);
+		color: var(--text);
+		font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+		line-height: 1.6;
+	}
+
+	a {
+		color: var(--cyan);
+	}
+
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 0 24px 80px;
+	}
+
+	h1,
+	h2,
+	h3 {
+		line-height: 1.2;
+	}
+
+	code {
+		background: var(--panel);
+		padding: 0.1em 0.4em;
+		border-radius: 4px;
+	}
+</style>

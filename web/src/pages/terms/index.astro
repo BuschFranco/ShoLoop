@@ -1,0 +1,109 @@
+---
+import Base from '../../layouts/Base.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<Base
+	title="Términos de uso — Infinitix"
+	description="Términos de uso y licencia de Infinitix."
+	lang="es"
+	altHref={`${base}/en/terms/`}
+>
+	<Header lang="es" esHref={`${base}/terms/`} enHref={`${base}/en/terms/`} />
+
+	<main class="prose">
+		<h1>Términos de uso de Infinitix</h1>
+		<p class="updated"><strong>Última actualización:</strong> 1 de septiembre de 2026</p>
+
+		<p>
+			Al descargar, instalar o jugar Infinitix ("el Juego"), aceptás estos Términos de uso.
+			Si no estás de acuerdo, no uses el Juego.
+		</p>
+
+		<h2>Licencia de uso</h2>
+		<p>
+			Se te otorga una licencia personal, no exclusiva, no transferible y revocable para
+			instalar y usar el Juego en tus propios dispositivos, únicamente para uso personal y
+			no comercial. Esta licencia no te transfiere ninguna propiedad sobre el Juego, su
+			código, sus assets ni su marca — todo eso sigue siendo propiedad del desarrollador.
+		</p>
+
+		<h2>Gratuito, sin compras dentro de la app</h2>
+		<p>
+			Infinitix es gratuito. La versión actual no tiene compras dentro de la aplicación, ni
+			publicidad, ni ningún sistema de pago. Toda la economía interna del Juego (Coins,
+			Score, Libras) se gana únicamente jugando y no tiene ningún valor monetario real ni es
+			canjeable por dinero.
+		</p>
+
+		<h2>Personajes y contenido del Juego</h2>
+		<p>
+			El roster de personajes incluidos en el Juego puede incluir nombres y likeness
+			inspirados en personas reales, usados con su consentimiento explícito. Si además creás
+			tu propio personaje dentro del Juego usando una foto tuya o de un tercero, sos vos
+			quien garantiza tener derecho a usar esa imagen; esa foto queda guardada únicamente en
+			tu dispositivo (ver la <a href={`${base}/privacy/`}>Política de privacidad</a>).
+		</p>
+
+		<h2>Sin garantías</h2>
+		<p>
+			El Juego se ofrece "tal cual" ("as is"), sin garantías de ningún tipo, expresas o
+			implícitas, incluyendo pero no limitado a garantías de comerciabilidad, idoneidad para
+			un propósito particular o ausencia de errores. No se garantiza que el Juego vaya a
+			funcionar sin interrupciones o libre de fallos en todo dispositivo.
+		</p>
+
+		<h2>Limitación de responsabilidad</h2>
+		<p>
+			En la máxima medida permitida por la ley aplicable, el desarrollador no será
+			responsable por daños indirectos, incidentales o consecuentes derivados del uso o la
+			imposibilidad de uso del Juego.
+		</p>
+
+		<h2>Cambios</h2>
+		<p>
+			Estos Términos pueden actualizarse a medida que el Juego evoluciona. La versión vigente
+			siempre va a estar publicada en esta misma dirección.
+		</p>
+
+		<h2>Ley aplicable</h2>
+		<p>
+			<em
+				>[A completar: jurisdicción y ley aplicable, si el desarrollador decide fijar
+				una.]</em
+			>
+		</p>
+
+		<h2>Contacto</h2>
+		<p>
+			Para consultas sobre estos Términos, escribir a:
+			<a href="mailto:francobusch130@gmail.com">francobusch130@gmail.com</a>.
+		</p>
+	</main>
+
+	<Footer lang="es" />
+</Base>
+
+<style>
+	.prose {
+		padding-top: 48px;
+	}
+
+	.prose h1 {
+		color: var(--cyan);
+		font-size: 1.8rem;
+	}
+
+	.prose h2 {
+		color: var(--cyan);
+		font-size: 1.15rem;
+		margin-top: 2em;
+	}
+
+	.prose .updated {
+		color: var(--text-dim);
+	}
+</style>

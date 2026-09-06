@@ -1,8 +1,13 @@
-# ShooterLoop
+# Infinitix
 
 A mobile auto-shooter arena game built in **Godot 4.7** with **C# / .NET 8**. Vampire-Survivors-style
 round loop, Geometry-Wars-style visuals — every sprite in the game is a procedurally-built
 `Polygon2D` or `Line2D`, so there are no art assets to manage.
+
+**Premise:** no hay historia que termine porque la ronda no termina. Te subís a la arena, los
+demonios no paran de escalar, y la única salida es sobrevivir una más — y después otra. Infinitix
+es ese "una más" convertido en juego: cada ronda te hace más fuerte, cada ronda manda algo peor a
+buscarte, y no hay final feliz esperándote al otro lado. Solo el próximo récord.
 
 ## The loop
 

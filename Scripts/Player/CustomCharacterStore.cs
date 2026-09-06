@@ -64,6 +64,7 @@ public static class CustomCharacterStore
                 Color = Colors.White,   // the portrait carries its own colours; see CharacterInfo.Color
                 SpritePath = imagePath,
                 IsCustom = true,
+                IsCircular = true,
             });
         }
         return result.ToArray();

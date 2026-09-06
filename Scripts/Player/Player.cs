@@ -272,7 +272,7 @@ public partial class Player : CharacterBody2D
     // makes the turn look like banking instead of the whole ship instantly snapping to face a
     // direction change.
     private const float FacingTurnRate = 16f;
-    private bool _isCustomCharacter;
+    private bool _isCircularCharacter;
 
     // Movement ramps in and out instead of snapping between full speed and a dead stop, so the
     // player carries a little inertia. Both rates are px/s²: at MoveSpeed 265 that's ~0.15s to
@@ -319,7 +319,7 @@ public partial class Player : CharacterBody2D
         // Applied before anything below snapshots or consumes these fields, so the chosen character
         // shifts the run's whole stat curve rather than being overwritten by it.
         var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
-        _isCustomCharacter = character.IsCustom;
+        _isCircularCharacter = character.IsCircular;
         MoveSpeed *= character.MoveSpeedMultiplier;
         BulletDamage = Mathf.RoundToInt(BulletDamage * character.BulletDamageMultiplier);
         CoinDropBonus = character.CoinDropBonus;
@@ -551,9 +551,12 @@ public partial class Player : CharacterBody2D
     // held, so the ship keeps facing forward as it coasts to a stop rather than snapping to face
     // whatever residual coast direction. Holds its last facing entirely when both are ~zero,
     // instead of resetting to some default — a stationary ship has no "forward" to snap back to.
+    //
+    // Skipped entirely for circular portraits: a circle reads identically at every rotation, so
+    // spinning one to "face" a direction is motion with no visible meaning.
     private void UpdateFacing(Vector2 inputDir, float delta)
     {
-        if (_isCustomCharacter) return;
+        if (_isCircularCharacter) return;
         Vector2 facing = inputDir != Vector2.Zero ? inputDir
             : (_moveVelocity.LengthSquared() > 25f ? _moveVelocity : Vector2.Zero);
         if (facing == Vector2.Zero) return;
@@ -739,45 +742,6 @@ public partial class Player : CharacterBody2D
         TryActivate(BuildClass.Pyromaniac);
         TryActivate(BuildClass.Armored);
         TryActivate(BuildClass.Hunter);
-    }
-
-    // Every additional PAIR of distinct Legendary-tier types owned triggers one more fusion, not just
-    // the first time the player crosses 2 — a deeply-built run can cross several pairs. Tracked as a
-    // count of fusions already granted rather than a HashSet, since the trigger itself has no
-    // identity to key on (unlike BuildClass, there's no fixed catalog of "which fusion" to guard).
-    private int _legendaryFusionsGranted = 0;
-
-    private void CheckLegendaryFusion()
-    {
-        int legendaryCount = 0;
-        foreach (var tier in _ownedTiers.Values)
-            if (tier == RewardTier.Legendary) legendaryCount++;
-
-        // A while, not an if: a single ApplyUpgrade call could in principle cross more than one
-        // threshold (it can't today since only one tier changes per call, but the loop costs nothing
-        // and removes the assumption). Each iteration re-reads the owned set fresh, since the
-        // ApplyUpgrade call inside can itself raise legendaryCount further.
-        while (legendaryCount / 2 > _legendaryFusionsGranted)
-        {
-            var ownedLegendaries = new HashSet<UpgradeType>();
-            foreach (var kv in _ownedTiers)
-                if (kv.Value == RewardTier.Legendary) ownedLegendaries.Add(kv.Key);
-
-            var bonus = UpgradeData.PickRandomLegendaryExcluding(ownedLegendaries);
-            if (bonus == null) break;   // every fusable type already at Legendary — nothing left to grant
-
-            _legendaryFusionsGranted++;
-            ApplyUpgrade(bonus);   // re-enters this method; the while-condition above accounts for that
-
-            var parent = GetParent();
-            if (parent != null)
-                Juice.FloatingLabel(parent, "¡FUSIÓN LEGENDARIA!", GlobalPosition + new Vector2(-70f, -60f),
-                    Palette.CoinPickup, fontSize: 20, driftY: -30f, holdBeforeFade: 0.6f, lifetime: 1.1f);
-
-            legendaryCount = 0;
-            foreach (var tier in _ownedTiers.Values)
-                if (tier == RewardTier.Legendary) legendaryCount++;
-        }
     }
 
     private void TryActivate(BuildClass cls)
@@ -1587,8 +1551,8 @@ public partial class Player : CharacterBody2D
         // Only ever raises the recorded tier, never lowers it. Used to overwrite unconditionally —
         // buying a Common of a type you already had at Legendary (legitimate; see the stacking rules
         // in docs/rewards.md) would silently "forget" the Legendary here even though the stat itself
-        // keeps using the higher tier bucket underneath. BuildCatalog's Loadout hint already relied on
-        // this being accurate, and CheckLegendaryFusion below now does too.
+        // keeps using the higher tier bucket underneath. BuildCatalog's Loadout hint relies on this
+        // being accurate.
         if (!_ownedTiers.TryGetValue(upgrade.Type, out var existingTier) || upgrade.Tier > existingTier)
             _ownedTiers[upgrade.Type] = upgrade.Tier;
         switch (upgrade.Type)
@@ -1696,7 +1660,6 @@ public partial class Player : CharacterBody2D
                 break;
         }
         CheckBuildClass();
-        CheckLegendaryFusion();
     }
 
     // Shield regen (shop-only Regeneración). Stored as charges-per-minute so "higher is better"

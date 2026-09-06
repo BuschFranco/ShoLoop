@@ -70,6 +70,12 @@ public readonly struct CharacterInfo
     // Player-created, therefore deletable and loaded from disk at runtime rather than compiled in.
     public bool IsCustom { get; init; }
 
+    // True for every portrait character (built-in Portrait() entries and custom ones alike) — both
+    // go through the same 144x144 circle mask (CustomCharacterStore, tools/prep_character_sprite.py),
+    // unlike the three ship.svg originals, which are a triangle. Player.UpdateFacing reads this to
+    // skip rotating a sprite that has no "facing" to read in the first place.
+    public bool IsCircular { get; init; }
+
     // Gated behind GameManager's persistent Libras currency (see docs/economy.md). Struct default is
     // false, so every existing built-in and every custom character — neither of which ever sets this
     // — is unaffected; only entries that explicitly opt in via Portrait(requiresUnlock: true) are ever
@@ -221,6 +227,7 @@ public static class CharacterCatalog
         UnlockCost = unlockCost,
         Color = Colors.White,
         SpritePath = $"res://Assets/Sprites/Characters/{slug}.png",
+        IsCircular = true,
     };
 
     // Built-ins first, then the player's own, so a saved selection index never points at a

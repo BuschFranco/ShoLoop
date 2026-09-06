@@ -9,6 +9,11 @@ other field is snapshotted.
 to be swapped, renamed and retuned often. This document is written for that: the sections below are
 ordered by what you're most likely to be here to do.
 
+**Consent on file**: every real person depicted (Maxi, Conrado, Manu, Juan, Nico L, Juli) has given
+explicit consent for their name and likeness to be used this way ahead of any public release. Noted
+here so the question doesn't get reopened by a future audit — if a new joke character is added later
+using a real coworker's photo, get the same sign-off before it ships.
+
 ---
 
 ## The cast

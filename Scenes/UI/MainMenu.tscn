@@ -94,13 +94,7 @@ theme_override_colors/font_color = Color(0.3, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 40
-text = "SHOOTERLOOP"
-horizontal_alignment = 1
-
-[node name="Subtitle" type="Label" parent="VBoxContainer" unique_id=1344699159]
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-text = "Sobrevive en la arena"
+text = "INFINITIX"
 horizontal_alignment = 1
 
 [node name="HighScoreLabel" type="Label" parent="VBoxContainer" unique_id=1637789029]

@@ -28,3 +28,6 @@ obj/
 # Python bytecode from the tools/ scripts
 __pycache__/
 *.pyc
+
+# Claude Code session-local runtime state (PID/timestamp, not shared config)
+.claude/scheduled_tasks.lock

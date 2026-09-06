@@ -187,37 +187,23 @@ Crit and Pierce also feed `Player.GetOffensivePower()` as real damage multiplier
 
 `_hasExtraProjectile = true`. Boolean, Epic-only, no tiers. Also shop-"Owned"-gated once acquired.
 
-## Legendary fusion
+## `Player.OwnedTiers` tracks the best tier ever owned per type
 
-Every additional **pair** of distinct Legendary-tier types owned grants one bonus Legendary — automatic,
-no modal, just a "¡FUSIÓN LEGENDARIA!" flare (`Juice.FloatingLabel`) over the player. Structurally the
-same shape as `Player.CheckBuildClass()`'s build-class activation (poll a declarative condition after
-every `ApplyUpgrade`, one-shot, guarded so it can't re-fire on its own) — `Player.CheckLegendaryFusion()`,
-called right after it.
+`Player.ApplyUpgrade` records every upgrade it applies into `_ownedTiers[type]`, but only ever
+*raises* the stored tier, never lowers it — buying a Common of a type you already had at Legendary
+(legitimate; see [Same-tier-only stacking](#same-tier-only-stacking-firerange-firerate-bulletdamage)
+above) doesn't erase the record of having had the Legendary, even though the stat itself keeps using
+the higher tier bucket underneath. The Loadout menu's "what would help" hint (`BuildCatalog.cs`) reads
+this same `OwnedTiers` and relies on it being accurate.
 
-1. **Count.** `_ownedTiers.Values.Count(t => t == RewardTier.Legendary)` — how many distinct
-   `UpgradeType`s currently sit at Legendary. `RewardTier`'s declaration order (`Common < Rare < Epic
-   < Legendary`) is what makes tier comparisons like this valid.
-2. **Threshold.** `legendaryCount / 2 > _legendaryFusionsGranted` — the 2nd distinct Legendary triggers
-   the first fusion, the 4th triggers a second, and so on. A `while`, not an `if`: a single grant can
-   itself raise `legendaryCount` (see below), so the loop re-checks rather than assuming one bonus per
-   call is the ceiling.
-3. **Content.** `UpgradeData.PickRandomLegendaryExcluding(ownedLegendaryTypes)` — a free Legendary of a
-   type the player doesn't already have at that tier. Reuses the existing, already-balanced tier
-   values instead of inventing a new stat or effect, and is what makes it visually distinct from a
-   normal pick without being a new balance lever. Returns `null` (fusion simply stops firing) once
-   every fusable type is already at Legendary — `Ultimate` has no Legendary tier at all, so it's never
-   a candidate.
-4. **Grant.** The bonus goes through the normal `ApplyUpgrade(bonus)` — same stacking rules as any
-   other pickup, and it's what re-triggers `CheckLegendaryFusion` for step 2's `while` to catch.
-
-**The bug this depends on having fixed:** `_ownedTiers[type] = tier` used to overwrite unconditionally.
-Buying a Common of a type you already had at Legendary — legitimate, see
-[Same-tier-only stacking](#same-tier-only-stacking-firerange-firerate-bulletdamage) above — used to
-silently erase the record of ever having had the Legendary, even though the stat itself kept using the
-higher tier bucket underneath. Fixed to only ever raise the recorded tier, never lower it. This was
-already a latent inaccuracy in the Loadout menu's "what would help" hint (`BuildCatalog.cs`, reads the
-same `OwnedTiers`); fusion is the second consumer that needed it correct.
+A "fuse 2 Legendaries into a free bonus Legendary" mechanic used to read this same map
+(`Player.CheckLegendaryFusion`, removed) — worth knowing if you're reintroducing something like it:
+its bonus picker sourced from `BuildCatalog(RewardSource.Both)`, which does **not** filter by source
+(every catalog entry's `Source` is non-zero, so `Both`'s bitmask matches all of them) — that let the
+free grant hand out the three shop-exclusive Legendaries (Corazón, Regeneración+, Vendaval II) without
+the player ever paying for them, Corazón being the more consequential one since it's +1 max life, the
+exact stat `MaxLivesCap` was tightened to gate. Any future free-grant mechanic drawing from the
+catalog should filter by `RewardSource.LevelUp` explicitly, not `Both`.
 
 ## Ultimates
 

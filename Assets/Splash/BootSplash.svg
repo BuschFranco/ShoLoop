@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Same mark as icon.svg, coordinates scaled ×4 (128→512) so the two stay visually identical
+       rather than being redrawn by eye at the larger size. -->
+  <rect width="512" height="512" fill="#0b0614"/>
+  <polygon points="256,32 424,392 256,312 88,392" fill="#ff4fd8" opacity="0.3"/>
+  <polygon points="256,72 368,360 256,288 144,360" fill="#7dfdfe"/>
+</svg>
