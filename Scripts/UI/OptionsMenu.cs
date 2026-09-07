@@ -28,29 +28,47 @@ public partial class OptionsMenu : Control
     private Button _closeButton;
     private Button _reducedMotionButton;
     private PanelContainer _panel;
+    private ScrollContainer _scroll;
+
+    // The rows add up to roughly 1100px, against a logical viewport of 648 in landscape and 1152 in
+    // portrait — so the panel overflowed off both ends of the screen in landscape, and portrait had
+    // barely 40px of slack that the music row would have eaten as soon as music came back. Hence the
+    // ScrollContainer: it fixes both orientations rather than just the one that was reported.
+    //
+    // A ScrollContainer only scrolls if something bounds its height, and inside a CenterContainer
+    // nothing does — it would just grow to fit its content again. These are that bound, sized to
+    // leave room for the panel's 16px margins and a margin of comfort at the screen edge. Same
+    // approach PauseMenu already uses for its loadout panel.
+    // Against 648 and 1152 logical pixels respectively, plus the panel's own 32px of margins: that
+    // leaves ~56px of screen edge in landscape (where notches are on the sides) and ~120px in
+    // portrait (where they're on top). Portrait barely scrolls at these numbers, which is the point —
+    // the cap is there to stop overflow, not to make a short list scroll for no reason.
+    private const float ScrollHeightLandscape = 560f;
+    private const float ScrollHeightPortrait = 1000f;
 
     public override void _Ready()
     {
         Visible = false;
 
         _panel = GetNode<PanelContainer>("CenterContainer/Panel");
-        _joystickLabel = GetNode<Label>("CenterContainer/Panel/Box/JoystickLabel");
-        _joystickSlider = GetNode<HSlider>("CenterContainer/Panel/Box/JoystickSlider");
-        _ultimateButtonLabel = GetNode<Label>("CenterContainer/Panel/Box/UltimateButtonLabel");
-        _ultimateButtonSlider = GetNode<HSlider>("CenterContainer/Panel/Box/UltimateButtonSlider");
-        _masterVolumeLabel = GetNode<Label>("CenterContainer/Panel/Box/MasterVolumeLabel");
-        _masterVolumeSlider = GetNode<HSlider>("CenterContainer/Panel/Box/MasterVolumeSlider");
-        _volumeLabel = GetNode<Label>("CenterContainer/Panel/Box/VolumeLabel");
-        _volumeSlider = GetNode<HSlider>("CenterContainer/Panel/Box/VolumeSlider");
-        _musicVolumeLabel = GetNode<Label>("CenterContainer/Panel/Box/MusicVolumeLabel");
-        _musicVolumeSlider = GetNode<HSlider>("CenterContainer/Panel/Box/MusicVolumeSlider");
-        _musicSeparator = GetNode<Control>("CenterContainer/Panel/Box/SepSfx");
-        _cameraDistanceLabel = GetNode<Label>("CenterContainer/Panel/Box/CameraDistanceLabel");
-        _cameraDistanceSlider = GetNode<HSlider>("CenterContainer/Panel/Box/CameraDistanceSlider");
-        _landscapeButton = GetNode<Button>("CenterContainer/Panel/Box/OrientationRow/LandscapeButton");
-        _portraitButton = GetNode<Button>("CenterContainer/Panel/Box/OrientationRow/PortraitButton");
-        _closeButton = GetNode<Button>("CenterContainer/Panel/Box/CloseButton");
-        _reducedMotionButton = GetNode<Button>("CenterContainer/Panel/Box/ReducedMotionButton");
+        _scroll = GetNode<ScrollContainer>("CenterContainer/Panel/Scroll");
+        _joystickLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/JoystickLabel");
+        _joystickSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/JoystickSlider");
+        _ultimateButtonLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/UltimateButtonLabel");
+        _ultimateButtonSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/UltimateButtonSlider");
+        _masterVolumeLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/MasterVolumeLabel");
+        _masterVolumeSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/MasterVolumeSlider");
+        _volumeLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/VolumeLabel");
+        _volumeSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/VolumeSlider");
+        _musicVolumeLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/MusicVolumeLabel");
+        _musicVolumeSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/MusicVolumeSlider");
+        _musicSeparator = GetNode<Control>("CenterContainer/Panel/Scroll/Box/SepSfx");
+        _cameraDistanceLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/CameraDistanceLabel");
+        _cameraDistanceSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/CameraDistanceSlider");
+        _landscapeButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/OrientationRow/LandscapeButton");
+        _portraitButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/OrientationRow/PortraitButton");
+        _closeButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/CloseButton");
+        _reducedMotionButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/ReducedMotionButton");
 
         _joystickSlider.ValueChanged += OnJoystickOpacityChanged;
         _ultimateButtonSlider.ValueChanged += OnUltimateButtonOpacityChanged;
@@ -66,14 +84,33 @@ public partial class OptionsMenu : Control
 
         _reducedMotionButton.Toggled += OnReducedMotionToggled;
 
+        // Re-fitting after the switch matters: this is the one screen that can change the viewport
+        // out from under itself, and the whole reason the scroll box needs a height is that the two
+        // orientations have very different ones. Without this, flipping to landscape from in here
+        // would leave the panel sized for portrait and hanging off both edges.
         _landscapeButton.Toggled += pressed =>
         {
-            if (pressed) GameManager.Instance?.SetOrientation(GameManager.ScreenOrientation.Landscape);
+            if (!pressed) return;
+            GameManager.Instance?.SetOrientation(GameManager.ScreenOrientation.Landscape);
+            FitToOrientation();
         };
         _portraitButton.Toggled += pressed =>
         {
-            if (pressed) GameManager.Instance?.SetOrientation(GameManager.ScreenOrientation.Portrait);
+            if (!pressed) return;
+            GameManager.Instance?.SetOrientation(GameManager.ScreenOrientation.Portrait);
+            FitToOrientation();
         };
+
+        FitToOrientation();
+    }
+
+    // Caps the scrollable area so the panel fits on screen, and drops the cap when the content is
+    // short enough not to need it — otherwise a short options list would sit in a tall box with dead
+    // space under it.
+    private void FitToOrientation()
+    {
+        bool landscape = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Landscape;
+        _scroll.CustomMinimumSize = new Vector2(0f, landscape ? ScrollHeightLandscape : ScrollHeightPortrait);
     }
 
     public void Open()
@@ -118,6 +155,14 @@ public partial class OptionsMenu : Control
         bool reduced = GameManager.Instance?.ReducedMotion ?? false;
         _reducedMotionButton.SetPressedNoSignal(reduced);
         UpdateReducedMotionLabel(reduced);
+
+        // Also here, not just in _Ready: the orientation can be changed from the main menu's own
+        // toggles or restored from settings after this node was built.
+        FitToOrientation();
+
+        // Always reopen at the top. Scrolled to the bottom on the way out, the next Open() would
+        // otherwise show the middle of the list with no title, which reads as a broken screen.
+        _scroll.ScrollVertical = 0;
 
         Visible = true;
         Juice.ModalIn(_panel);
