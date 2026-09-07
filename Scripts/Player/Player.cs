@@ -274,13 +274,26 @@ public partial class Player : CharacterBody2D
     private const float FacingTurnRate = 16f;
     private bool _isCircularCharacter;
 
+    // A lean on top of the rotation above — driven by how much turn is still left to complete, so a
+    // small course correction barely tilts it while a sharp reversal banks hard and eases out
+    // smoothly as the turn finishes. Kept on Sprite2D.Skew rather than Scale so it can't fight the
+    // idle "breathe" tween in StartIdleAnimations, which already owns Scale. Capped small (~13°) and
+    // eased fast in both directions — enough to read as motion, not a wobble.
+    private float _visualBankSkew = 0f;
+    private const float BankSkewPerRadRemaining = 0.3f;
+    private const float MaxBankSkew = 0.22f;
+    private const float BankSmoothingRate = 10f;
+
     // Movement ramps in and out instead of snapping between full speed and a dead stop, so the
-    // player carries a little inertia. Both rates are px/s²: at MoveSpeed 265 that's ~0.15s to
-    // reach top speed and ~0.11s to stop — deliberately short. The stop is snappier than the start
-    // so the ship still feels responsive rather than floaty/slippery.
+    // player carries real inertia. Both rates are px/s²: at MoveSpeed 290 that's ~0.48s to reach
+    // top speed and ~0.39s to stop. Went through two rounds of softening from an original 1800/2400
+    // (~0.16s/0.12s, effectively an instant velocity flip) — the first pass to 1300/1700
+    // (~0.22s/0.17s) still read as no inertia at all, so this jumps much further rather than
+    // nudging again. The stop still stays quicker than the start so the ship doesn't feel like
+    // it's sliding on ice, just genuinely carrying momentum instead of snapping to a stop.
     private Vector2 _moveVelocity = Vector2.Zero;
-    private const float MoveAcceleration = 1800f;
-    private const float MoveDeceleration = 2400f;
+    private const float MoveAcceleration = 600f;
+    private const float MoveDeceleration = 750f;
 
     // Per-type, per-tier accumulated bonus. Same tier stacks additively (2 Rare picks of the
     // same reward add up); different tiers do NOT sum on top of each other — the final bonus is
@@ -510,6 +523,7 @@ public partial class Player : CharacterBody2D
         MoveAndSlide();
 
         UpdateFacing(dir, (float)delta);
+        UpdateThruster((float)delta);
 
         GlobalPosition = new Vector2(
             Mathf.Clamp(GlobalPosition.X, -ArenaHalfExtents.X, ArenaHalfExtents.X),
@@ -559,12 +573,91 @@ public partial class Player : CharacterBody2D
         if (_isCircularCharacter) return;
         Vector2 facing = inputDir != Vector2.Zero ? inputDir
             : (_moveVelocity.LengthSquared() > 25f ? _moveVelocity : Vector2.Zero);
-        if (facing == Vector2.Zero) return;
 
-        // Exponential catch-up rather than an instant snap, so a sharp direction change reads as
-        // the triangle banking through the turn instead of teleporting to face the new heading.
-        float weight = 1f - Mathf.Exp(-FacingTurnRate * delta);
-        _visual.Rotation = Mathf.LerpAngle(_visual.Rotation, facing.Angle(), weight);
+        float targetSkew = 0f;
+        if (facing != Vector2.Zero)
+        {
+            // How much turn is still left to complete, not how fast the rotation is currently
+            // changing — the first version of this used the rotation's frame-to-frame delta, which
+            // (being the derivative of an already-fast exponential catch-up) saturates to the max
+            // lean on almost any input nudge and then snaps back a few frames later, reading as a
+            // jittery pulse rather than a lean. The remaining angle is naturally bounded to
+            // [-pi, pi] and shrinks smoothly toward 0 as the rotation lerp below catches up to it,
+            // so the lean eases out exactly as the turn finishes.
+            float angleRemaining = Mathf.Wrap(facing.Angle() - _visual.Rotation, -Mathf.Pi, Mathf.Pi);
+            targetSkew = Mathf.Clamp(-angleRemaining * BankSkewPerRadRemaining, -MaxBankSkew, MaxBankSkew);
+
+            // Exponential catch-up rather than an instant snap, so a sharp direction change reads as
+            // the triangle banking through the turn instead of teleporting to face the new heading.
+            float weight = 1f - Mathf.Exp(-FacingTurnRate * delta);
+            _visual.Rotation = Mathf.LerpAngle(_visual.Rotation, facing.Angle(), weight);
+        }
+
+        // Eases toward 0 the same way whether the ship is turning, holding a straight line, or
+        // stopped — no separate idle case needed to un-bank it.
+        _visualBankSkew = Mathf.Lerp(_visualBankSkew, targetSkew, 1f - Mathf.Exp(-BankSmoothingRate * delta));
+        _visual.Skew = _visualBankSkew;
+    }
+
+    // A trail of small fading puffs behind the ship while it's actually moving, not a constant
+    // engine glow — the point is to sell *motion*, so it starts/stops with the ship rather than
+    // running whenever the player merely holds a direction against a wall. Purely decorative (a
+    // Polygon2D circle, same fade-out-then-QueueFree pattern as Enemy/Mine's death blasts), tinted
+    // to the ship's own Modulate so it reads as its own exhaust rather than a generic effect.
+    private float _thrusterAccumulator = 0f;
+    private const float ThrusterInterval = 0.05f;
+    private const float ThrusterMinSpeedRatio = 0.35f;
+    private const float ThrusterPuffOffset = 14f;
+
+    private void UpdateThruster(float delta)
+    {
+        float topSpeed = MoveSpeed * GetClassSpeedMultiplier();
+        float speedRatio = topSpeed > 0f ? _moveVelocity.Length() / topSpeed : 0f;
+
+        if (speedRatio < ThrusterMinSpeedRatio || DangerLevel.Reduced)
+        {
+            _thrusterAccumulator = 0f;
+            return;
+        }
+
+        _thrusterAccumulator += delta;
+        if (_thrusterAccumulator < ThrusterInterval) return;
+        _thrusterAccumulator = 0f;
+
+        SpawnThrusterPuff(speedRatio);
+    }
+
+    private void SpawnThrusterPuff(float speedRatio)
+    {
+        var parent = GetParent();
+        if (parent == null) return;
+
+        Vector2 backward = -_moveVelocity.Normalized();
+        float size = Mathf.Lerp(3f, 6f, speedRatio);
+
+        const int segments = 8;
+        var points = new Vector2[segments];
+        for (int i = 0; i < segments; i++)
+        {
+            float angle = i / (float)segments * Mathf.Tau;
+            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * size;
+        }
+
+        var puff = new Polygon2D
+        {
+            Polygon = points,
+            Color = _visual.Modulate,
+            GlobalPosition = GlobalPosition + backward * ThrusterPuffOffset,
+            ZIndex = -1,
+        };
+        parent.AddChild(puff);
+
+        var tween = puff.CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(puff, "scale", Vector2.One * 0.2f, 0.35f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+        tween.TweenProperty(puff, "modulate:a", 0f, 0.35f);
+        tween.Chain().TweenCallback(Callable.From(puff.QueueFree));
     }
 
     // WASD as a desktop-friendly alternative to the virtual joystick — only consulted when the
