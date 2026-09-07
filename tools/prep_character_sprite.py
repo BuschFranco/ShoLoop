@@ -18,11 +18,13 @@ import argparse
 import os
 from PIL import Image, ImageDraw
 
+from assetlib.palette import BACKDROP_RGBA, RING_DEFAULT
+
 # 4x the ~36px the ship occupies in world space -- the same supersample the SVG silhouettes use,
 # which keeps the edge clean through the breathe/punch tweens that scale the sprite up.
 DEFAULT_SIZE = 144
 RING_WIDTH_RATIO = 0.055
-BACKDROP = (11, 6, 20, 255)      # Palette.Backdrop
+BACKDROP = BACKDROP_RGBA          # was a private copy of Palette.Backdrop; now shared
 SS = 4                            # mask supersample, so the circle edge isn't jagged
 
 
@@ -70,7 +72,7 @@ def main():
     ap.add_argument("source")
     ap.add_argument("dest")
     ap.add_argument("--size", type=int, default=DEFAULT_SIZE)
-    ap.add_argument("--ring", default="ff4fd8", help="hex neon ring colour")
+    ap.add_argument("--ring", default=RING_DEFAULT, help="hex neon ring colour")
     args = ap.parse_args()
 
     out = make_portrait(Image.open(args.source), args.size, parse_hex(args.ring))

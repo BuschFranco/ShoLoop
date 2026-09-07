@@ -29,5 +29,9 @@ obj/
 __pycache__/
 *.pyc
 
+# Asset audition page: copies of assets that are already committed elsewhere, regenerated on demand
+# by `build_assets.py --audition`. Committing it would double every sound in the repo.
+/tools/audition/
+
 # Claude Code session-local runtime state (PID/timestamp, not shared config)
 .claude/scheduled_tasks.lock

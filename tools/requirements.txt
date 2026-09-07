@@ -1,0 +1,12 @@
+# Dependencies for the asset generators in tools/.
+#
+#   pip install -r tools/requirements.txt
+#
+# Only prep_character_sprite.py needs anything at all — gen_sfx.py, gen_music.py, gen_sprites.py and
+# build_assets.py are stdlib-only by design, so a fresh clone can regenerate every sound and every
+# silhouette with nothing installed. Pillow is required solely to turn a photograph into a character
+# portrait, which is the one job that genuinely needs an imaging library.
+#
+# Pinned to a minimum rather than an exact version: this uses only Image/ImageDraw basics that have
+# been stable for years, and pinning exactly would break anyone whose distro ships a newer Pillow.
+Pillow>=10.0
