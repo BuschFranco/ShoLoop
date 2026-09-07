@@ -856,6 +856,12 @@ public partial class Enemy : CharacterBody2D
     // Rolled independently for every kill, split generations included (same as Coins already
     // paying out on every generation) — simplest reading of "enemies drop this", not just bosses
     // or only final-generation kills.
+    //
+    // Every AddChild below is deferred: TakeDamage (and therefore this) runs synchronously from
+    // Bullet.OnBodyEntered, a physics signal fired mid-flush of the physics server's query results.
+    // PickupBase is an Area2D, which registers its monitoring state on entering the tree — doing that
+    // synchronously here spammed "Can't change this state while flushing queries" every kill. Deferring
+    // the AddChild pushes that registration to a safe point instead.
     private void TryDropPickup()
     {
         var parent = GetParent();
@@ -872,8 +878,8 @@ public partial class Enemy : CharacterBody2D
             if (HeartPickupScene != null && _rng.NextDouble() < UnrewardedHeartDropChance)
             {
                 var heartOnly = HeartPickupScene.Instantiate<Node2D>();
-                parent.AddChild(heartOnly);
                 heartOnly.GlobalPosition = GlobalPosition;
+                parent.CallDeferred(Node.MethodName.AddChild, heartOnly);
             }
             return;
         }
@@ -899,8 +905,8 @@ public partial class Enemy : CharacterBody2D
         if (HeartPickupScene != null && _rng.NextDouble() < heartChance)
         {
             var heart = HeartPickupScene.Instantiate<Node2D>();
-            parent.AddChild(heart);
             heart.GlobalPosition = GlobalPosition;
+            parent.CallDeferred(Node.MethodName.AddChild, heart);
         }
 
         // Shield drops only matter to a player who's actually bought a Barrier — otherwise it'd
@@ -910,16 +916,16 @@ public partial class Enemy : CharacterBody2D
             && _rng.NextDouble() < shieldChance)
         {
             var shield = ShieldPickupScene.Instantiate<Node2D>();
-            parent.AddChild(shield);
             shield.GlobalPosition = GlobalPosition;
+            parent.CallDeferred(Node.MethodName.AddChild, shield);
         }
 
         if (XpPickupScene != null && _rng.NextDouble() < xpChance)
         {
             var xp = XpPickupScene.Instantiate<XpPickup>();
             xp.XpAmount = Mathf.Max(1, XpReward);
-            parent.AddChild(xp);
             xp.GlobalPosition = GlobalPosition;
+            parent.CallDeferred(Node.MethodName.AddChild, xp);
         }
 
         if (CoinPickupScene != null && _rng.NextDouble() < coinChance)
@@ -931,8 +937,8 @@ public partial class Enemy : CharacterBody2D
                 coin.CoinAmount = EarlyCoinPickupValue;
             else
                 coin.CoinAmount = Mathf.Max(1, CoinsReward);
-            parent.AddChild(coin);
             coin.GlobalPosition = GlobalPosition;
+            parent.CallDeferred(Node.MethodName.AddChild, coin);
         }
     }
 
