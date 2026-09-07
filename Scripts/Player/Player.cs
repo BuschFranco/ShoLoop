@@ -244,6 +244,9 @@ public partial class Player : CharacterBody2D
     // here, not to Vector2.One — doing the latter blew the ship up to its texture's full resolution
     // within the first second of every run.
     private Vector2 _visualBaseScale = Vector2.One;
+    private Tween _breatheTween;
+    private Tween _launchPunchTween;
+    private bool _wasInputMoving = false;
 
     // Extra coin-pickup drop chance granted by the selected character (Manu), read by
     // Enemy.TryDropPickup off the player node. Lives here rather than on GameManager for the same
@@ -411,11 +414,11 @@ public partial class Player : CharacterBody2D
         // rather than substituting anything. The ship simply sits still.
         if (DangerLevel.Reduced) return;
 
-        var breathe = CreateTween();
-        breathe.SetLoops();
-        breathe.TweenProperty(_visual, "scale", _visualBaseScale * 1.06f, 0.9f)
+        _breatheTween = CreateTween();
+        _breatheTween.SetLoops();
+        _breatheTween.TweenProperty(_visual, "scale", _visualBaseScale * 1.06f, 0.9f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-        breathe.TweenProperty(_visual, "scale", _visualBaseScale, 0.9f)
+        _breatheTween.TweenProperty(_visual, "scale", _visualBaseScale, 0.9f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 
         // The ring slowly counter-rotates — a static circle reads as UI, a drifting one as a field.
@@ -423,6 +426,31 @@ public partial class Player : CharacterBody2D
         spin.SetLoops();
         spin.TweenProperty(_fireRangeRing, "rotation", Mathf.Tau, 24f);
         spin.TweenCallback(Callable.From(() => _fireRangeRing.Rotation = 0f));
+    }
+
+    // A quick squash-then-stretch the instant the ship goes from a standstill to moving — sells the
+    // impulse itself, on top of the velocity ramp already giving it inertia. Elongating local X
+    // (not a screen axis) reads as "surging forward" for the triangle ships, since UpdateFacing
+    // already keeps X pointed the way it's traveling; for a circular portrait it's just a punch
+    // with no particular direction, which still reads fine since there's no "facing" to align to.
+    //
+    // Pauses (not kills) _breatheTween for the duration rather than letting both drive Scale at
+    // once — two tweens racing the same property every frame is exactly the jitter the bank-lean
+    // fix earlier had to work around, and pausing is free since Godot's Tween supports it natively.
+    private void PlayLaunchPunch()
+    {
+        if (DangerLevel.Reduced) return;
+
+        _launchPunchTween?.Kill();
+        _breatheTween?.Pause();
+        _visual.Scale = _visualBaseScale;
+
+        _launchPunchTween = _visual.CreateTween();
+        _launchPunchTween.TweenProperty(_visual, "scale", _visualBaseScale * new Vector2(1.35f, 0.75f), 0.08f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
+        _launchPunchTween.TweenProperty(_visual, "scale", _visualBaseScale, 0.22f)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        _launchPunchTween.TweenCallback(Callable.From(() => _breatheTween?.Play()));
     }
 
     // A faint ring showing FireRange — the player only auto-fires at enemies inside it, so it
@@ -458,6 +486,13 @@ public partial class Player : CharacterBody2D
         Vector2 dir = _joystick?.GetVector() ?? Vector2.Zero;
         if (dir == Vector2.Zero)
             dir = GetKeyboardDirection();
+
+        // Fires exactly once per genuine 0 -> moving transition, not every frame input is held — a
+        // continuous stick hold shouldn't keep re-punching the ship every physics tick.
+        bool isInputMoving = dir != Vector2.Zero;
+        if (isInputMoving && !_wasInputMoving)
+            PlayLaunchPunch();
+        _wasInputMoving = isInputMoving;
 
         // Ease toward the requested velocity rather than assigning it outright — this is what gives
         // the movement its arranque/frenada. Steering mid-move interpolates through the turn too,
