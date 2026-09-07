@@ -19,9 +19,13 @@ public partial class RewardCard : PanelContainer
     private Label _tierChip;
     private Label _bestBadge;
     private Label _nameLabel;
+    private Control _descBox;
     private Label _descLabel;
+    private Control _stackBox;
     private Label _stackLabel;
     private Label _verdictChip;
+    private Control _buildHintBox;
+    private Label _buildHintLabel;
     private Label _priceLabel;
     private Button _actionButton;
     private ColorRect _flare;
@@ -47,9 +51,13 @@ public partial class RewardCard : PanelContainer
         _tierChip = GetNode<Label>("Body/TopRow/TierChip");
         _bestBadge = GetNode<Label>("Body/TopRow/BestBadge");
         _nameLabel = GetNode<Label>("Body/NameLabel");
+        _descBox = GetNode<Control>("Body/DescBox");
         _descLabel = GetNode<Label>("Body/DescBox/DescLabel");
+        _stackBox = GetNode<Control>("Body/StackBox");
         _stackLabel = GetNode<Label>("Body/StackBox/StackRow/StackLabel");
         _verdictChip = GetNode<Label>("Body/StackBox/StackRow/VerdictChip");
+        _buildHintBox = GetNode<Control>("Body/BuildHintBox");
+        _buildHintLabel = GetNode<Label>("Body/BuildHintBox/BuildHintLabel");
         _priceLabel = GetNode<Label>("Body/BottomRow/PriceBox/PriceLabel");
         _actionButton = GetNode<Button>("Body/BottomRow/ActionButton");
         _flare = GetNode<ColorRect>("Flare");
@@ -59,6 +67,7 @@ public partial class RewardCard : PanelContainer
         // Read from Palette rather than left as a literal in the .tscn: the same hand-synced-duplicate
         // problem that had left Palette.ShopPanelBorder as dead code.
         _bestBadge.AddThemeColorOverride("font_color", Palette.GlowHighlight);
+        _buildHintLabel.AddThemeColorOverride("font_color", Palette.GlowHighlight);
 
         _actionButton.Pressed += Activate;
         GuiInput += OnCardGuiInput;
@@ -104,6 +113,7 @@ public partial class RewardCard : PanelContainer
         ConfigurePrice(cost, surcharge);
         ConfigureAction(data, cost, verb, alreadyTaken, player, allowUseless);
         ConfigureBestBadge(isBest);
+        ConfigureBuildHint(data, player);
     }
 
     private void ConfigurePrice(int? cost, int surcharge)
@@ -211,6 +221,26 @@ public partial class RewardCard : PanelContainer
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
     }
 
+    // Hidden on almost every card — only the one offer that would actually tip an inactive build
+    // class over its thresholds shows this, via BuildCatalog.WouldComplete. Collapsed to 0 height
+    // rather than just Visible = false so a card without the hint doesn't carry dead empty space
+    // where a sibling card's hint is showing.
+    private void ConfigureBuildHint(UpgradeData data, Player player)
+    {
+        var completes = player != null ? BuildCatalog.WouldComplete(data, player) : null;
+        _buildHintBox.Visible = completes != null;
+
+        if (completes == null)
+        {
+            _buildHintBox.CustomMinimumSize = new Vector2(_buildHintBox.CustomMinimumSize.X, 0f);
+            return;
+        }
+
+        _buildHintLabel.Text = $"¡Con esta recompensa armás la build \"{BuildCatalog.Name(completes.Value)}\"!";
+        _buildHintBox.CustomMinimumSize = new Vector2(_buildHintBox.CustomMinimumSize.X,
+            MeasureTextHeight(_buildHintLabel, _buildHintLabel.Text, MeasureWidth));
+    }
+
     // --- Flare, in the tier's own colour ---
 
     // Staggered by the caller so the three cards cascade in rather than all flashing on the same frame.
@@ -287,6 +317,47 @@ public partial class RewardCard : PanelContainer
     {
         if (!_interactive) return;
         EmitSignal(SignalName.Activated);
+    }
+
+    // --- Description/stack-info height sync ---
+    //
+    // DescBox/StackBox used to be a hardcoded 38px with clip_contents = true — fine for a short
+    // one-liner, but any description that wrapped past ~2 lines was silently cut off, worse in
+    // landscape where Shop/UpgradePicker give each card a narrower column (see their
+    // ApplyOrientationLayout) so the same text wraps to more lines. Measured the same way
+    // CharacterSelectMenu.FitDescriptionHeight does (Font.GetMultilineStringSize against a known
+    // width) instead of just clipping.
+    //
+    // The width measured against is a fixed, conservative constant — Shop's own narrowest landscape
+    // column — used in both orientations rather than the card's actual current width. Simpler than
+    // plumbing the live per-column width down from each caller, and it only ever errs toward "a
+    // little taller than strictly necessary" (in portrait, where cards are wider), never toward
+    // clipping.
+    private const float MeasureWidth = 260f;
+    private const float StackMeasureWidth = 190f; // narrower: shares its row with VerdictChip
+    private const float MinContentHeight = 38f;
+    private const float MaxContentHeight = 90f;
+
+    public float MeasureDescriptionHeight() => MeasureTextHeight(_descLabel, _descLabel.Text, MeasureWidth);
+    public float MeasureStackHeight() => MeasureTextHeight(_stackLabel, _stackLabel.Text, StackMeasureWidth);
+
+    private static float MeasureTextHeight(Label label, string text, float width)
+    {
+        if (string.IsNullOrEmpty(text)) return MinContentHeight;
+
+        var font = label.GetThemeFont("font") ?? label.GetThemeDefaultFont();
+        int fontSize = label.GetThemeFontSize("font_size");
+        float needed = font.GetMultilineStringSize(text, HorizontalAlignment.Left, width, fontSize).Y;
+        return Mathf.Clamp(needed, MinContentHeight, MaxContentHeight);
+    }
+
+    // Called by the caller (Shop/UpgradePicker) after measuring every card in the current batch, with
+    // the *max* height across that batch — so every card in a row ends up the same height instead of
+    // each growing to only its own text, which would leave a row visually uneven.
+    public void ApplyContentHeights(float descHeight, float stackHeight)
+    {
+        _descBox.CustomMinimumSize = new Vector2(_descBox.CustomMinimumSize.X, descHeight);
+        _stackBox.CustomMinimumSize = new Vector2(_stackBox.CustomMinimumSize.X, stackHeight);
     }
 
     private static StyleBoxFlat GetTierStyle(RewardTier tier)

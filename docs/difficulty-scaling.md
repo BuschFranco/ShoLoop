@@ -102,6 +102,21 @@ It carries a second dip past round 3, because by round 6 alone `SpecialChanceCur
 
 A `RoundCurve` can't express "ease, hold the normal ramp, dip again, resume" — that shape is piecewise by definition — so this is the same per-round-override-table mechanism as the rounds 1-3 cushion, just with more entries; nothing past index 10 is listed because `EarlyRoundMult` falls back to `1f` once the round is past the table's length, same as it always has for rounds 4/5 today.
 
+### Rounds 11-16 relief (crowd size and toughness only)
+
+The variety dip above tapers back to full at round 12 — right as `MidGameCrowdMult`/`MidGameToughnessMult` below start easing rounds 11-16, since nothing else in this window eased at all: `LateCrowdMultCurve` is still on its way down toward the round-18 floor (not yet biting hard this early), and `HpMultCurve`/`DmgMultCurve`/`SpeedMultCurve` don't ease anywhere. Requested by feel rather than diagnosed from a specific number — rounds 11-16 read as a genuinely harder stretch than the rounds either side of it.
+
+Same shape as the dip above (ease in, bottom out mid-window, ease back out, rejoin the normal curves untouched at round 17 via `EarlyRoundMult`'s implicit `1f` past the table's length) — but deliberately **not** touching enemy variety this time, only crowd size (`MidGameCrowdMult`, folded into `NormalConcurrentCap`) and per-enemy HP/damage/speed (`MidGameToughnessMult`, folded into `EvaluateStatCurves`). Crowd eases harder than toughness — perceived density is the bigger lever (see the late-game composition notes above), while a toughness cut compounds across every enemy alive, so a smaller per-enemy reduction already adds up:
+
+| Round | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 |
+|---|---|---|---|---|---|---|---|---|
+| `MidGameCrowdMult` | 1.0 | 0.85 | 0.75 | 0.70 | 0.70 | 0.75 | 0.85 | 1.0 |
+| `MidGameToughnessMult` | 1.0 | 0.90 | 0.85 | 0.82 | 0.82 | 0.85 | 0.90 | 1.0 |
+| Concurrent cap (before → after) | 45 → 45 | 46 → 39 | 47 → 35 | 47 → 33 | 48 → 34 | 48 → 36 | 48 → 41 | 49 → 49 |
+| HP × (before → after) | 2.62 → 2.62 | 2.80 → 2.52 | 2.98 → 2.53 | 3.16 → 2.59 | 3.34 → 2.74 | 3.52 → 2.99 | 3.70 → 3.33 | 3.88 → 3.88 |
+
+Round 15 is a boss round — both `ConfigureForBossRound` and `ConfigureForRound` route through `NormalConcurrentCap`/`EvaluateStatCurves`, so the relief reaches it automatically with no separate boss-round handling needed.
+
 Note this is why Hidden's rate now lives in a `_hiddenChance` field: it was a flat `const` checked before everything else, which meant no multiplier could reach it. The `HiddenChance` constant is still the base value, it's just read through the field now.
 
 Spawn *rate* and concurrent *cap* are separate levers and both matter: slowing the tick alone still lets a beginner accumulate 25 simultaneous enemies over a 60-second round. The cap is what bounds how overwhelming the screen gets; the interval controls how fast it fills.

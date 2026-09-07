@@ -21,6 +21,13 @@ public static class Palette
     public static readonly Color PlayerBullet = new("3dff8f");
     public static readonly Color ShieldAura = new("4fa8ff", 0.35f);
     public static readonly Color FireRangeRing = new("3dff8f", 0.3f);
+    // Legendary Movement Speed's Tron-style damaging trail. Deliberately NOT the cosmetics shop's
+    // equipped trail colour (CosmeticCatalog) — this is a gameplay signal ("this hurts you"), same
+    // reasoning as crit always overriding the bullet cosmetic, so it has to read the same regardless
+    // of what colour the player bought. Whiter/paler than Player's own cyan so the two don't blur
+    // together when the trail sits directly under the ship. Scene-authored on
+    // Scenes/Player/SpeedTrailSegment.tscn's Visual, kept in sync with this value by hand.
+    public static readonly Color SpeedTrail = new("baffff", 0.55f);
 
     // --- Player weapons ---
     public static readonly Color LaserBeam = new("3dff8f", 0.85f);

@@ -97,6 +97,26 @@ public partial class EnemySpawner : Node2D
     //                                     r1  r2  r3  r4  r5   r6    r7    r8   r9   r10   r11
     private static readonly float[] EarlyRoundVarietyMult = { 0f, 1f, 1f, 1f, 1f, 0.75f, 0.65f, 0.6f, 0.6f, 0.65f, 0.75f };
 
+    // Rounds 11-16 relief, by request: the mid-game variety dip above tapers back to full at round
+    // 12, and neither the crowd taper (still declining toward its round-18 floor here, not yet
+    // biting hard) nor the toughness curves ease at all in this window — so rounds 11-16 stacked full
+    // enemy variety on top of a still-climbing crowd cap and steadily-rising HP/damage/speed with
+    // nothing easing any of it, right where the earlier dip's own relief had just worn off. Same
+    // shape as the two dips above: ease in at 11, bottom out mid-window, ease back out by 16, then
+    // rejoin the normal curves untouched at 17 (the table's implicit 1x default beyond its length).
+    //
+    // Deliberately NOT touching enemy variety this time (Rare/Special/Hidden/Demon share) — only
+    // crowd size and per-enemy toughness, per what actually felt too hard here. The two dips
+    // therefore have different shapes: crowd eases harder (perceived density is the bigger lever per
+    // the late-game composition notes below) than toughness (which compounds across every enemy
+    // alive, so a smaller per-enemy cut already adds up).
+    //
+    //                                      r11    r12    r13    r14    r15    r16
+    private static readonly float[] MidGameCrowdMult =
+        { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.85f, 0.75f, 0.70f, 0.70f, 0.75f, 0.85f };
+    private static readonly float[] MidGameToughnessMult =
+        { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.90f, 0.85f, 0.82f, 0.82f, 0.85f, 0.90f };
+
     private static float EarlyRoundMult(float[] table, int round)
     {
         int index = round - 1;
@@ -154,6 +174,11 @@ public partial class EnemySpawner : Node2D
         _player = GetTree().GetFirstNodeInGroup("player") as Node2D;
 
         ConfigureForRound(1);
+
+        // This node only exists once Arena.tscn has actually loaded — the one reliable "gameplay
+        // genuinely began" signal round 1 has. See GameManager.StartRoundOneTimer for why round 1
+        // needs this at all (every later round arms its own timer from StartNextRound instead).
+        GameManager.Instance?.StartRoundOneTimer();
     }
 
     // A Timer only pauses (freezes its remaining time) when the tree pauses — it doesn't reset.
@@ -187,7 +212,8 @@ public partial class EnemySpawner : Node2D
     private float NormalConcurrentCap(int round) =>
         MaxConcurrentCurve.Evaluate(round)
         * LateCrowdMultCurve.Evaluate(round)
-        * EarlyRoundMult(EarlyRoundConcurrentMult, round);
+        * EarlyRoundMult(EarlyRoundConcurrentMult, round)
+        * EarlyRoundMult(MidGameCrowdMult, round);
 
     // The round-indexed HP/damage curves assume the player's power grows on a predictable
     // schedule; DifficultyBalancer measures whether it actually did and scales those two (only)
@@ -212,9 +238,10 @@ public partial class EnemySpawner : Node2D
                 DifficultyBalancer.GetSurvivabilityCatchUpMultiplier(player.GetSurvivabilityScore(), round);
         }
 
-        _hpMult = HpMultCurve.Evaluate(round) * _catchUpMult;
-        _dmgMult = DmgMultCurve.Evaluate(round) * _catchUpMult;
-        _speedMult = SpeedMultCurve.Evaluate(round) * EarlyRoundMult(EarlyRoundSpeedMult, round);
+        float toughnessMult = EarlyRoundMult(MidGameToughnessMult, round);
+        _hpMult = HpMultCurve.Evaluate(round) * _catchUpMult * toughnessMult;
+        _dmgMult = DmgMultCurve.Evaluate(round) * _catchUpMult * toughnessMult;
+        _speedMult = SpeedMultCurve.Evaluate(round) * EarlyRoundMult(EarlyRoundSpeedMult, round) * toughnessMult;
         // Read live rather than snapshotted, so a Frenesí round's doubled payout applies to everything it
         // spawns. EvaluateStatCurves runs after RoundEventDirector.BeginActiveEvent has set it.
         _rewardMult = RewardMultCurve.Evaluate(round) * (GameManager.Instance?.EventRewardMultiplier ?? 1f);

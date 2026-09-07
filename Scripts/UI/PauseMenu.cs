@@ -6,9 +6,12 @@ public partial class PauseMenu : Control
     private Button _resumeButton;
     private Button _menuButton;
     private PanelContainer _pausePanel;
+    private ScrollContainer _scroll;
     private LoadoutMenu _loadoutMenu;
     private HSlider _cameraDistanceSlider;
     private Label _cameraDistanceLabel;
+    private HSlider _masterVolumeSlider;
+    private Label _masterVolumeLabel;
     private Label _resumeCountdownLabel;
     private Control _hbox;
 
@@ -26,30 +29,41 @@ public partial class PauseMenu : Control
         Visible = false;
         ProcessMode = ProcessModeEnum.Always;
 
-        _statsLabel = GetNode<Label>("CenterContainer/HBox/Panel/VBoxContainer/StatsLabel");
-        _resumeButton = GetNode<Button>("CenterContainer/HBox/Panel/VBoxContainer/ResumeButton");
-        _menuButton = GetNode<Button>("CenterContainer/HBox/Panel/VBoxContainer/MenuButton");
-        _cameraDistanceSlider = GetNode<HSlider>("CenterContainer/HBox/Panel/VBoxContainer/CameraDistanceSlider");
-        _cameraDistanceLabel = GetNode<Label>("CenterContainer/HBox/Panel/VBoxContainer/CameraDistanceLabel");
+        _statsLabel = GetNode<Label>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/StatsLabel");
+        _resumeButton = GetNode<Button>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/ResumeButton");
+        _menuButton = GetNode<Button>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/MenuButton");
+        _cameraDistanceSlider = GetNode<HSlider>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/CameraDistanceSlider");
+        _cameraDistanceLabel = GetNode<Label>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/CameraDistanceLabel");
+        _masterVolumeSlider = GetNode<HSlider>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/MasterVolumeSlider");
+        _masterVolumeLabel = GetNode<Label>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/MasterVolumeLabel");
         _pausePanel = GetNode<PanelContainer>("CenterContainer/HBox/Panel");
+        _scroll = GetNode<ScrollContainer>("CenterContainer/HBox/Panel/Scroll");
         _loadoutMenu = GetNode<LoadoutMenu>("CenterContainer/HBox/LoadoutMenu");
         _resumeCountdownLabel = GetNode<Label>("ResumeCountdownLabel");
         _hbox = GetNode<Control>("CenterContainer/HBox");
         _resumeButton.Pressed += OnResumePressed;
         _menuButton.Pressed += OnMenuPressed;
         _cameraDistanceSlider.ValueChanged += OnCameraDistanceChanged;
+        _masterVolumeSlider.ValueChanged += OnMasterVolumeChanged;
         Juice.WireButtonFeedback(_resumeButton);
         Juice.WireButtonFeedback(_menuButton);
 
+        // The stats/settings column grew past screen height in landscape once the volume slider
+        // joined the camera-zoom one below it — same overflow OptionsMenu hit for the same reason
+        // (a CenterContainer never bounds a ScrollContainer's height on its own). Bounding Scroll to
+        // the same height already used for the loadout panel on the right keeps both columns the same
+        // height instead of one overflowing past the other.
         bool portrait = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
         if (portrait)
         {
             _pausePanel.CustomMinimumSize = new Vector2(250f, 0f);
+            _scroll.CustomMinimumSize = new Vector2(0f, 940f);
             _loadoutMenu.CustomMinimumSize = new Vector2(360f, 940f);
         }
         else
         {
             _pausePanel.CustomMinimumSize = new Vector2(340f, 0f);
+            _scroll.CustomMinimumSize = new Vector2(0f, 520f);
             _loadoutMenu.CustomMinimumSize = new Vector2(460f, 520f);
         }
     }
@@ -69,37 +83,14 @@ public partial class PauseMenu : Control
         if (player != null)
         {
             lines.Add("");
-            lines.Add("── COMBATE ──");
-            lines.Add($"{Glossary.Damage}: {player.BulletDamage}   {Glossary.FireRate}: {player.FireRate:0.0}/s   {Glossary.Crit}: {player.CritChance:0}%");
-            lines.Add($"{Glossary.Range}: {player.FireRange:0}   {Glossary.Pierce}: {player.BulletPierce}   Rebote: {player.RicochetCount}");
-            lines.Add($"Retroceso: {player.BulletKnockback:0}   {Glossary.Dodge}: {player.DodgeChance:0}%");
-            lines.Add($"Disparo en Diagonal: {(player.HasExtraProjectile ? "Sí" : "No")}   Disparo Paralelo: {player.ExtraFiringLines}/{Player.MaxExtraFiringLinesCap}");
-            lines.Add($"Cuchillas Orbitales: {player.OrbitCount}   Escudo Voltáico: {(player.ThornsDamage > 0 ? $"{player.ThornsDamage:0} daño" : "No")}");
-
-            lines.Add("");
-            lines.Add("── DEFENSAS ──");
-            lines.Add($"Vidas: {player.CurrentLives}/{player.MaxLives}   Escudos: {player.CurrentShieldCharges}/{player.MaxShieldCharges}");
-            lines.Add($"Regeneración: {(player.ShieldRegenPerMinute > 0 ? $"{player.ShieldRegenPerMinute:0.#}/min" : "No")}");
-
-            lines.Add("");
-            lines.Add("── PODERES ──");
-            lines.Add($"Dron: {(player.CompanionStatPercent > 0 ? $"{player.CompanionStatPercent * 100:0}%" : "No")}");
-
-            // "Nv" here too — this block used to be the one place in the game that said "Lv", three
-            // lines below its own "Nv 5" in the status section above. Mina was also simply missing:
-            // the loadout panel and the HUD both showed it, this didn't.
-            if (player.LaserLevel > 0) lines.Add($"Láser: {Glossary.LevelPrefix}{player.LaserLevel}");
-            if (player.MissileLevel > 0) lines.Add($"Misil: {Glossary.LevelPrefix}{player.MissileLevel}");
-            if (player.MineLevel > 0) lines.Add($"Mina: {Glossary.LevelPrefix}{player.MineLevel}");
-            if (player.BurnLevel > 0) lines.Add($"Incendiario: {Glossary.LevelPrefix}{player.BurnLevel}");
-            if (player.OndaLevel > 0) lines.Add($"Onda de Choque: {Glossary.LevelPrefix}{player.OndaLevel}");
-            if (player.VendavalLevel > 0) lines.Add($"Vendaval: {Glossary.LevelPrefix}{player.VendavalLevel}");
-            if (player.EquippedUltimate != null) lines.Add($"Ultimate: {UltimateKindNames.Display(player.EquippedUltimate.Value)}");
+            lines.AddRange(player.BuildCombatStatsLines());
         }
 
         _statsLabel.Text = string.Join("\n", lines);
         _cameraDistanceSlider.Value = gm.CameraDistance;
         UpdateCameraDistanceLabel(gm.CameraDistance);
+        _masterVolumeSlider.SetValueNoSignal(Mathf.Round(gm.MasterVolume * 100f));
+        UpdateMasterVolumeLabel(_masterVolumeSlider.Value);
         _loadoutMenu.Refresh(player);
 
         // Defensive reset: Visible only ever goes false once the countdown below completes, so this
@@ -209,4 +200,15 @@ public partial class PauseMenu : Control
         float pct = 2000f / distance * 100f;
         _cameraDistanceLabel.Text = $"Zoom de cámara: {pct:0}%";
     }
+
+    // Same setting as OptionsMenu's "Volumen general" slider (GameManager.MasterVolume) — surfaced
+    // here too so muting/adjusting doesn't require leaving the run to reach the main menu's Options.
+    private void OnMasterVolumeChanged(double value)
+    {
+        GameManager.Instance.SetMasterVolume((float)value / 100f);
+        UpdateMasterVolumeLabel(value);
+    }
+
+    private void UpdateMasterVolumeLabel(double value) =>
+        _masterVolumeLabel.Text = $"Volumen general: {value:0}%";
 }

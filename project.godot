@@ -17,10 +17,6 @@ boot_splash/bg_color=Color(0.043, 0.024, 0.078, 1)
 boot_splash/image="res://Assets/Splash/BootSplash.png"
 config/icon="res://icon.svg"
 
-[audio]
-
-buses/default_bus_layout="res://default_bus_layout.tres"
-
 [autoload]
 
 GameManager="*res://Scripts/Autoload/GameManager.cs"

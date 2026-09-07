@@ -43,12 +43,21 @@ Núcleos; renamed with no change to the underlying mechanism beyond the earn for
 - **Persisted immediately on every change**, unlike Coins — `AddLibras`/`TryUnlockCharacter`
   both write straight to `user://settings.cfg` (`libras` key) rather than waiting for some
   later save point, since the balance has to survive the app being killed mid-run on a phone.
-- **Spent on characters today** — see [characters.md](characters.md#locked-characters--libras) for
-  `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`. Framed as "first
-  thing to spend it on," not the only one; `docs/characters.md` has the unlock-flow details.
-- `GameManager.UnlockedCharacters` (a `HashSet<string>` of slugs) is the other half of the save —
-  persisted as a `PackedStringArray` under the same `settings.cfg` key `unlocked_characters`, no
-  separate file needed (mirrors how `records.cfg` already stores its top-10 list the same way).
+- **Spent on characters** — see [characters.md](characters.md#locked-characters--libras) for
+  `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`.
+- **Spent on cosmetics** — [CosmeticCatalog.cs](../Scripts/Player/CosmeticCatalog.cs) lists a shared
+  set of colors purchasable independently across 4 categories (bullets, ship trail, character
+  outline, arena/grid accent), bought and equipped from the "Tienda" screen
+  ([CosmeticsShopMenu.cs](../Scripts/UI/CosmeticsShopMenu.cs)). Purely visual — no category affects
+  gameplay. `GameManager.TryBuyCosmetic`/`EquipCosmetic` are the mutators, same no-signal shape as
+  `TryUnlockCharacter`; ownership lives in `GameManager.OwnedCosmetics`, keyed by
+  `CosmeticCatalog.ItemKey(category, id)` since owning a color for one category says nothing about
+  owning it for another. Each category also has a free, always-owned "Original" option that reverts
+  to how that system looked before this feature existed — the whole thing is opt-in.
+- `GameManager.UnlockedCharacters`/`OwnedCosmetics` (both `HashSet<string>`) are the other half of the
+  save — persisted as `PackedStringArray`s under the same `settings.cfg` keys `unlocked_characters`/
+  `owned_cosmetics`, no separate file needed (mirrors how `records.cfg` already stores its top-10 list
+  the same way). The 4 `Equipped*Cosmetic` properties are plain string keys alongside them.
 
 ## Account level (`GameManager.AccountLevel`)
 

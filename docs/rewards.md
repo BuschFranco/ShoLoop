@@ -81,6 +81,7 @@ Most rewards exist in all 4 tiers. Exceptions: Twin Shot (Epic only), Side Shot 
 | Fire Range | `FireRange` | +70 (8💰) | +130 (16💰) | +200 (28💰) | +300 (45💰) | +500 bonus |
 | Rapid Fire | `FireRate` | +0.5/s (8💰) | +1/s (16💰) | +1.8/s (28💰) | +3/s (45💰) | 12/s total |
 | Sharper Rounds | `BulletDamage` | +3 (8💰) | +5 (16💰) | +9 (28💰) | +15 (45💰) | +200 bonus |
+| Movement Speed | `MovementSpeed` | +12 (10💰) | +20 (18💰) | +32 (28💰) | +45 (42💰) — also arms a damaging Tron trail | +70 bonus |
 | Orbit Blade | `OrbitShield` | 1 blade (20💰) | 2 blades (32💰) | 3 blades (46💰) | 4 blades (60💰) | 4 blades, 100px radius, 16 dmg every 0.4s each + knockback |
 | Barrier | `HitShield` | 1 charge (14💰) | 2 charges (24💰) | 3 charges (36💰) | 4 charges (48💰) | 4 charges |
 | Drone | `Companion` | 30% stats (12💰) | 35% stats (22💰) | 45% stats (34💰) | 50% stats (50💰) | 50% stats |
@@ -107,20 +108,52 @@ See [player.md](player.md) for what each `UpgradeType` actually does mechanicall
 
 This is the part most likely to need re-tuning if the game feels too easy or too hard, so it's spelled out precisely.
 
-### Same-tier-only stacking: FireRange, FireRate, BulletDamage
+### Flat additive with a hard cap: FireRange, FireRate, BulletDamage, MovementSpeed
 
-These three feed `Player.ApplyTieredStack(upgrade)`, picked at any tier from either the level-up picker or the shop:
+These four feed `Player.ApplyFlatStack(upgrade)`, picked at any tier from either the level-up picker
+or the shop: every pick just adds `upgrade.Value` to a running per-type total
+(`Player._stackTotals`), **regardless of tier** — a Common pick and a Legendary pick both count in
+full, in whatever order you find them. Same model as Side Shot's `ExtraFiringLines` (see below), just
+with a bigger cap.
 
-1. Adds `upgrade.Value` to a running total kept **per (UpgradeType, RewardTier)** bucket (`Player._tierStackTotals`).
-2. The stat's final bonus is **the single highest bucket total**, not the sum of every bucket.
+This used to bucket by `RewardTier` and take only the single highest bucket — a Common pick after a
+Legendary contributed nothing, since different tiers didn't sum. Changed to flat-additive on request:
+tier still decides how much a single pick is worth (a Legendary Sharper Rounds is still worth more
+than a Common one), it just no longer decides whether *older* picks of a different tier keep
+counting.
 
-So: two Rare Sharper Rounds picks (+5 each) stack to +10 bonus damage, because they're the same tier. But a Common pick (+3) and a Legendary pick (+15) do **not** add up to +18 — the Legendary bucket (15) simply wins, and the Common pick contributed nothing once you already had it. If you'd instead picked *four* Common Sharper Rounds (4×3=12) against one Legendary (15), the Legendary still wins (15 > 12) — but three Commons (9) plus a Rare pickup that also had, say, 2 more Common-tier stacks could in principle out-total a single Epic pick, which is an intentional, mildly interesting tradeoff rather than a bug.
+The player's *base* value (`_baseFireRange` / `_baseFireRate` / `_baseBulletDamage` / `_baseMoveSpeed`,
+snapshotted once in `_Ready()`) is always added back on top of the accumulated total — this system
+only governs the *bonus*, never regresses you below your starting stats.
 
-**Why:** these three stats compound player DPS/reach, which is exactly the axis that made the game trivially easy in earlier playtesting. Free-summing every tier ever picked has no ceiling; bucketing by tier means your total is bounded by "how many of your best-populated tier you've found," which grows much slower than "everything you've ever picked, added together."
+**Each stat has a hard ceiling** (`MaxFireRangeBonus = 500`, `MaxBulletDamageBonus = 200`,
+`MaxMoveSpeedBonus = 70`, and `FireRate` was already clamped to `MaxFireRate = 12`/s from the start)
+— with tier no longer limiting how many picks count, the flat cap is now the *only* thing bounding a
+long run's total. `Mathf.Min(ApplyFlatStack(upgrade), cap)` is applied before adding the total on top
+of the base value.
 
-The player's *base* value (`_baseFireRange` / `_baseFireRate` / `_baseBulletDamage`, snapshotted once in `_Ready()`) is always added back on top of the winning bucket — the tier system only governs the *bonus*, never regresses you below your starting stats.
+**Movement Speed's Legendary tier additionally arms a Tron-style trail** — this is the Laser
+precedent (docs above: Epic/Legendary *change the mechanism*, not just the number) applied to a
+single tier instead of two. `Player.HasLegendarySpeedTrail()` checks `_ownedTiers[MovementSpeed] ==
+RewardTier.Legendary` live (same best-tier-ever-owned map the Loadout hint already reads), and while
+moving fast enough to also spawn the cosmetic thruster puff (`UpdateThruster`), it additionally drops
+a [`SpeedTrailSegment`](../Scripts/Player/SpeedTrailSegment.cs) behind the ship every 0.12s. Each
+segment is a small `Area2D` that ticks 8 damage every 0.4s against anything still overlapping it
+(same `GetOverlappingBodies()`-on-an-interval reasoning as [`OrbitShield`](../Scripts/Player/OrbitShield.cs)
+— `BodyEntered` alone would only hit an enemy once on entry) for 1.2s before fading out and freeing
+itself. Rolls crit and applies Burn like every other damage source. Its color
+(`Palette.SpeedTrail`) is fixed regardless of the cosmetics shop's equipped trail color — same
+reasoning as crit always overriding the bullet cosmetic: this is a "this hurts you" gameplay signal,
+not a style choice, so it has to read the same no matter what the player bought.
 
-**On top of the tier-bucketing, each stat also has a hard ceiling** (`MaxFireRangeBonus = 500`, `MaxBulletDamageBonus = 200`, and `FireRate` was already clamped to `MaxFireRate = 12`/s from the start). Tier-bucketing alone doesn't stop the *same* tier from being re-rolled many times over a long run (e.g. Legendary Fire Range ×10 would be +3000 with no other limit) — the flat cap is what actually bounds that. `Mathf.Min(ApplyTieredStack(upgrade), cap)` is applied before adding the bucket total on top of the base value.
+### Same-tier-only stacking: BulletKnockback
+
+`BulletKnockback` still uses the older model, `Player.ApplyTieredStack(upgrade)` /
+`Player._tierStackTotals` — same tier stacks additively (two Rare picks add up), different tiers do
+**not** sum on top of each other, the final bonus is whichever single tier-bucket is currently
+highest. It wasn't part of the flat-additive change above; see [the stacking-model
+table](#the-new-combat-rewards-by-model) for why. `MaxBulletKnockbackBonus = 400` still bounds the
+winning bucket the same way it always did.
 
 ### Additive with a hard cap: Side Shot
 
@@ -191,10 +224,22 @@ Crit and Pierce also feed `Player.GetOffensivePower()` as real damage multiplier
 
 `Player.ApplyUpgrade` records every upgrade it applies into `_ownedTiers[type]`, but only ever
 *raises* the stored tier, never lowers it — buying a Common of a type you already had at Legendary
-(legitimate; see [Same-tier-only stacking](#same-tier-only-stacking-firerange-firerate-bulletdamage)
-above) doesn't erase the record of having had the Legendary, even though the stat itself keeps using
-the higher tier bucket underneath. The Loadout menu's "what would help" hint (`BuildCatalog.cs`) reads
-this same `OwnedTiers` and relies on it being accurate.
+(legitimate; see [Flat additive with a hard cap](#flat-additive-with-a-hard-cap-firerange-firerate-bulletdamage-movementspeed)
+above, or [Same-tier-only stacking](#same-tier-only-stacking-bulletknockback) for `BulletKnockback`)
+doesn't erase the record of having had the Legendary, even though a Common pick afterward keeps
+contributing its own value on top rather than replacing it. The Loadout menu's "what would help" hint
+(`BuildCatalog.cs`) reads this same `OwnedTiers` and relies on it being accurate.
+
+`BuildCatalog.WouldComplete(UpgradeData, Player)` is the same idea applied at pick time rather than
+in the Loadout menu: given one specific offer on a `RewardCard`, would taking it right now tip an
+inactive build class (Artillero/Tanque/Asesino/Explorador/Pirómano/Acorazado/Cazador —
+`Player.BuildClass`, thresholds in `Player.GetBuildRequirements`) over all of its thresholds? It
+simulates only that one offer's
+`Value` against whichever requirement shares its `UpgradeType` (same `Additive`/max-style rule
+`RewardsThatFulfill` already uses), reading every other requirement live off the player's real current
+stats — every other build class untouched, only the one this exact pick would complete. `RewardCard`
+shows the result as a highlighted line ("¡Con esta recompensa armás la build "X"!") when non-null,
+collapsed to nothing otherwise; see `RewardCard.ConfigureBuildHint`.
 
 A "fuse 2 Legendaries into a free bonus Legendary" mechanic used to read this same map
 (`Player.CheckLegendaryFusion`, removed) — worth knowing if you're reintroducing something like it:

@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/Missile.tscn" id="6"]
 [ext_resource type="Texture2D" path="res://Assets/Sprites/Characters/ship.svg" id="7"]
 [ext_resource type="PackedScene" path="res://Scenes/PlayerMine.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://Scenes/Player/SpeedTrailSegment.tscn" id="9"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 16.0
@@ -23,11 +24,17 @@ MissileScene = ExtResource("6")
 OrbitBladeScene = ExtResource("4")
 CompanionScene = ExtResource("5")
 PlayerMineScene = ExtResource("8")
+SpeedTrailSegmentScene = ExtResource("9")
 
 [node name="ShieldAura" type="Polygon2D" parent="."]
 visible = false
 color = Color(0.31, 0.66, 1, 0.35)
 polygon = PackedVector2Array(28, 0, 24.2, 14, 14, 24.2, 0, 28, -14, 24.2, -24.2, 14, -28, 0, -24.2, -14, -14, -24.2, 0, -28, 14, -24.2, 24.2, -14)
+
+[node name="Outline" type="Sprite2D" parent="."]
+visible = false
+texture = ExtResource("7")
+scale = Vector2(0.25, 0.25)
 
 [node name="Visual" type="Sprite2D" parent="."]
 texture = ExtResource("7")

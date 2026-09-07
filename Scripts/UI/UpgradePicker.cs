@@ -146,6 +146,22 @@ public partial class UpgradePicker : Control
             card.Activated += () => OnChoicePressed(index);
             _cards.Add(card);
         }
+
+        SyncCardContentHeights();
+    }
+
+    // Every card gets the same description/stack-info height — the max needed across the current
+    // choices — so a row never ends up uneven, and long text never gets clipped instead of wrapping
+    // (RewardCard.ApplyContentHeights). See Shop.cs's identical helper for the full rationale.
+    private void SyncCardContentHeights()
+    {
+        float maxDesc = 0f, maxStack = 0f;
+        foreach (var card in _cards)
+        {
+            maxDesc = Mathf.Max(maxDesc, card.MeasureDescriptionHeight());
+            maxStack = Mathf.Max(maxStack, card.MeasureStackHeight());
+        }
+        foreach (var card in _cards) card.ApplyContentHeights(maxDesc, maxStack);
     }
 
     private void OnChoicePressed(int index)

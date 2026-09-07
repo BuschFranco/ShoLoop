@@ -4,10 +4,12 @@ public partial class GameOverScreen : Control
 {
     private Button _restartButton;
     private Button _menuButton;
+    private Button _statsButton;
     private Button _quitButton;
     private Label _scoreLabel;
     private PanelContainer _panel;
     private VBoxContainer _summaryContainer;
+    private GameOverStatsMenu _statsMenu;
 
     public override void _Ready()
     {
@@ -20,14 +22,18 @@ public partial class GameOverScreen : Control
         _summaryContainer = GetNode<VBoxContainer>("Panel/VBoxContainer/SummaryContainer");
         _restartButton = GetNode<Button>("Panel/VBoxContainer/RestartButton");
         _menuButton = GetNode<Button>("Panel/VBoxContainer/MenuButton");
+        _statsButton = GetNode<Button>("Panel/VBoxContainer/StatsButton");
         _quitButton = GetNode<Button>("Panel/VBoxContainer/QuitButton");
+        _statsMenu = GetNode<GameOverStatsMenu>("GameOverStatsMenu");
 
         _restartButton.Pressed += OnRestartPressed;
         _menuButton.Pressed += OnMenuPressed;
+        _statsButton.Pressed += _statsMenu.Open;
         _quitButton.Pressed += OnQuitPressed;
 
         Juice.WireButtonFeedback(_restartButton);
         Juice.WireButtonFeedback(_menuButton);
+        Juice.WireButtonFeedback(_statsButton);
         Juice.WireButtonFeedback(_quitButton);
     }
 

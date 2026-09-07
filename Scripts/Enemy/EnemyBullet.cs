@@ -34,7 +34,13 @@ public partial class EnemyBullet : Area2D
 
     public override void _PhysicsProcess(double delta)
     {
-        Position += Direction * Speed * (float)delta;
+        // Same global multiplier Enemy.FinishMovement already scales MoveSpeed by (see GameManager.
+        // EnemySpeedMultiplier) — Zona Lenta used to slow enemies down and leave their shots at full
+        // speed, which read as only half the ultimate actually working. Read live rather than
+        // snapshotted so a shot already in flight when the ultimate fires slows down mid-flight too,
+        // not just ones spawned afterward.
+        float speedMult = GameManager.Instance?.EnemySpeedMultiplier ?? 1f;
+        Position += Direction * Speed * speedMult * (float)delta;
         _timeAlive += (float)delta;
         if (_timeAlive >= Lifetime)
             QueueFree();

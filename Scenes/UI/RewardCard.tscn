@@ -100,6 +100,27 @@ theme_override_constants/outline_size = 2
 vertical_alignment = 1
 text = "MEJORA"
 
+[node name="BuildHintBox" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 0)
+clip_contents = true
+layout_mode = 2
+mouse_filter = 2
+visible = false
+
+[node name="BuildHintLabel" type="Label" parent="Body/BuildHintBox"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+autowrap_mode = 2
+vertical_alignment = 0
+
 [node name="BottomRow" type="HBoxContainer" parent="Body"]
 layout_mode = 2
 mouse_filter = 2

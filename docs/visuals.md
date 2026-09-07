@@ -42,6 +42,20 @@ The player is the one entity whose colour is *not* authored in its scene: `Playe
 [characters.md](characters.md)), so the value in `Player.tscn` is only
 the editor-time preview.
 
+Four more colours can be overridden by the player themselves, for Libras, via the "Tienda" screen (see
+[economy.md](economy.md) and [CosmeticCatalog.cs](../Scripts/Player/CosmeticCatalog.cs)): bullet
+colour (`Player.cs`, non-crit only — crit always wins), the thruster-trail puff colour
+(`Player.SpawnThrusterPuff`), a new `Outline` sprite behind `Visual` (doesn't exist otherwise — a
+flat-shape halo scaled up 1.12×, same trick as `icon.svg`'s glow layer, not a real edge outline), and
+the arena boundary/grid base colour (`ArenaBounds.cs`, read once in `_Ready` before `DangerDirector`'s
+per-round `Modulate` tint applies on top — the cosmetic changes the base, the danger tint still
+multiplies over it same as always). Each has a free "Original" option, and for three of the four it
+reproduces the untouched pre-shop look exactly. The one exception is the trail: it used to copy
+`Visual.Modulate` (the selected pilot's own colour, per `CharacterInfo.Color` above), which meant its
+look — and the shop's own preview swatch for it — changed depending on whoever was currently equipped.
+"Original" is now `Palette.PlayerBullet` for every pilot instead, a deliberate behaviour change so the
+trail (and its shop preview) reads the same regardless of who's flying.
+
 ### The palette
 
 Pink/magenta primary, cyan for the player, violet/purple for variety, deep purple-black backdrops.

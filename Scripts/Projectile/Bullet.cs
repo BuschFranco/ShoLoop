@@ -27,8 +27,10 @@ public partial class Bullet : Area2D
     private readonly HashSet<ulong> _hitEnemies = new();
 
     // Read off the scene rather than from Palette so the impact spark tracks whatever colour the
-    // bullet is actually painted — Bullet.tscn's colour is hand-kept in sync with Palette.PlayerBullet,
-    // and this way a drift between the two can't make the spark disagree with the projectile.
+    // bullet is actually painted. Bullet.tscn's Visual/Halo are plain white — Player.cs is the only
+    // thing that ever colours a bullet, entirely via Modulate (Palette.PlayerBullet by default, a
+    // cosmetic shop colour, or Palette.CritBullet on a crit) — so white here is an identity multiply,
+    // never a colour of its own to drift out of sync with anything.
     private Polygon2D _visual;
 
     private const float EnemyImpactSize = 11f;

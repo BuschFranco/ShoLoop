@@ -12,6 +12,7 @@ public partial class MainMenu : Control
         var startButton = GetNode<Button>("VBoxContainer/ButtonsRow/StartButton");
         var optionsButton = GetNode<Button>("VBoxContainer/ButtonsRow/OptionsButton");
         var buildsButton = GetNode<Button>("VBoxContainer/ButtonsRow/BuildsButton");
+        var tiendaButton = GetNode<Button>("VBoxContainer/ButtonsRow/TiendaButton");
         var characterSelect = GetNode<CharacterSelectMenu>("CharacterSelectMenu");
         startButton.Pressed += characterSelect.Open;
         startButton.GrabFocus();
@@ -19,6 +20,7 @@ public partial class MainMenu : Control
         Juice.WireButtonFeedback(startButton);
         Juice.WireButtonFeedback(optionsButton);
         Juice.WireButtonFeedback(buildsButton);
+        Juice.WireButtonFeedback(tiendaButton);
 
         var highScoreLabel = GetNode<Label>("VBoxContainer/HighScoreLabel");
         highScoreLabel.Text = $"Mejor puntaje: {GameManager.LoadHighScore()}";
@@ -42,6 +44,15 @@ public partial class MainMenu : Control
 
         var builds = GetNode<BuildsMenu>("BuildsMenu");
         buildsButton.Pressed += builds.Open;
+
+        // Same refresh-on-close hook as CharacterSelectMenu above — the shop is the other place Libras
+        // can be spent, and this is the label that has to notice.
+        var cosmeticsShop = GetNode<CosmeticsShopMenu>("CosmeticsShopMenu");
+        tiendaButton.Pressed += cosmeticsShop.Open;
+        cosmeticsShop.VisibilityChanged += () =>
+        {
+            if (!cosmeticsShop.Visible) RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
+        };
 
         PopulateRecords();
         PlayEntranceAnimation(highScoreLabel);

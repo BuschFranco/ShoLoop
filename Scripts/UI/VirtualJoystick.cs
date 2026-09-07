@@ -107,7 +107,22 @@ public partial class VirtualJoystick : Control
     private bool IsEligiblePress(Vector2 position)
     {
         if (position.Y < GetViewportRect().Size.Y / 2f) return false;
+        if (IsNearUltimateButton(position)) return false;
         return !HasInteractiveControlUnder(GetTree().Root, position);
+    }
+
+    // A thumb aiming for the Ultimate button that lands just outside its exact rect used to spawn
+    // the joystick right there instead — the finger then barely moves from that spot (it was
+    // reaching for a button, not steering), which reads in-game as the ship going completely still.
+    // Grown well past the button's own bounds rather than relying on HasInteractiveControlUnder's
+    // exact-rect check above, which only protects taps that land squarely on the button itself.
+    private const float UltimateButtonExclusionMargin = 60f;
+
+    private bool IsNearUltimateButton(Vector2 position)
+    {
+        var button = GetTree().GetFirstNodeInGroup("ultimate_button") as Control;
+        if (button == null || !button.IsVisibleInTree()) return false;
+        return button.GetGlobalRect().Grow(UltimateButtonExclusionMargin).HasPoint(position);
     }
 
     private bool HasInteractiveControlUnder(Node root, Vector2 position)

@@ -133,35 +133,43 @@ public partial class Enemy : CharacterBody2D
         CreateEliteMarker();
     }
 
-    // A glyph over the enemy naming its modifier, because the aura's colour was the ONLY thing
+    // The modifier's own name over the enemy, because the aura's colour was the ONLY thing
     // distinguishing the five kinds — and Explosive (orange) versus Fast (yellow) are nearly the same
     // hue under common colour-vision deficiency, made worse by the WorldEnvironment's bloom washing
     // both toward white. Explosive means "killing this next to you hurts you", so guessing wrong on
     // that one costs a life. Now the colour is reinforcement rather than the whole signal.
+    //
+    // Spelled out rather than a single glyph (a cryptic "V"/"S" read as a rendering glitch, not a
+    // label) — centered on a fixed width so "Regenerante" and "!" alike sit centered over the enemy
+    // instead of growing off to one side from a fixed-left anchor.
+    private const float EliteMarkerWidth = 140f;
+
     private void CreateEliteMarker()
     {
         var marker = new Label();
         marker.Text = GetEliteMarker(EliteModifier);
         marker.AddThemeColorOverride("font_color", Colors.White);
         marker.AddThemeColorOverride("font_outline_color", Colors.Black);
-        marker.AddThemeConstantOverride("outline_size", 4);
-        marker.AddThemeFontSizeOverride("font_size", 16);
+        marker.AddThemeConstantOverride("outline_size", 3);
+        marker.AddThemeFontSizeOverride("font_size", 13);
+        marker.HorizontalAlignment = HorizontalAlignment.Center;
+        marker.CustomMinimumSize = new Vector2(EliteMarkerWidth, 0f);
         marker.ZIndex = 12;
 
         // Offset off HealthBarOffset like the damage numbers do, so it clears each enemy's own visual
         // radius rather than sitting on top of a big one and floating away from a small one.
-        marker.Position = new Vector2(-6f, HealthBarOffset - 20f);
+        marker.Position = new Vector2(-EliteMarkerWidth / 2f, HealthBarOffset - 20f);
         AddChild(marker);
     }
 
     private static string GetEliteMarker(EliteModifier modifier) => modifier switch
     {
-        EliteModifier.Vampiric => "V",
-        EliteModifier.Shielded => "S",
-        EliteModifier.Explosive => "!",   // the one that punishes killing it up close
-        EliteModifier.Fast => "»",
-        EliteModifier.Regenerating => "+",
-        _ => "*",
+        EliteModifier.Vampiric => "Vampírico",
+        EliteModifier.Shielded => "Blindado",
+        EliteModifier.Explosive => "Explosivo",   // the one that punishes killing it up close
+        EliteModifier.Fast => "Rápido",
+        EliteModifier.Regenerating => "Regenerante",
+        _ => "",
     };
 
     private const float EliteGlowScale = 1.15f;

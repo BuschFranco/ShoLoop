@@ -16,6 +16,7 @@ public partial class Player : CharacterBody2D
     [Export] public PackedScene PlayerMineScene;
     [Export] public PackedScene OrbitBladeScene;
     [Export] public PackedScene CompanionScene;
+    [Export] public PackedScene SpeedTrailSegmentScene;
     [Export] public Vector2 ArenaHalfExtents = new(2200f, 1400f);
     [Export] public float LevelUpBurstRadius = 220f;
 
@@ -25,6 +26,10 @@ public partial class Player : CharacterBody2D
     // without any single stat spiraling unboundedly over a long run.
     private const float MaxBulletDamageBonus = 200f;
     private const float MaxFireRangeBonus = 230f;
+
+    // +70 over the 290 base (~+24%) — enough for Movement Speed picks to feel meaningfully faster
+    // without a fully-invested late-round build turning into an unreadable blur ("flash").
+    private const float MaxMoveSpeedBonus = 70f;
 
     // Absolute ceiling on FireRange, separate from the bonus cap above. Without it the only limit
     // was "base + 500", which isn't a stated ceiling so much as a side effect — and a range that
@@ -227,6 +232,49 @@ public partial class Player : CharacterBody2D
     private Node2D _bulletsContainer;
     private readonly List<OrbitShield> _orbitBlades = new();
     private Companion _companion;
+    private Companion _companion2; // Legendary Drone only — see EnsureCompanion
+    public bool HasSecondCompanion => _companion2 != null;
+
+    // "COMBATE"/"DEFENSAS"/"PODERES" — the full build readout, shared by PauseMenu (which prepends its
+    // own "ESTADO" section, round-in-progress info that doesn't apply once a run has ended) and
+    // GameOverStatsMenu (which shows this alone — the round already ended, GameOverScreen's own
+    // summary already covers what round/score/kills were reached). One source so the two screens'
+    // wording can't drift apart.
+    public List<string> BuildCombatStatsLines()
+    {
+        var lines = new List<string>
+        {
+            "── COMBATE ──",
+            $"{Glossary.Damage}: {BulletDamage}   {Glossary.FireRate}: {FireRate:0.0}/s   {Glossary.Crit}: {CritChance:0}%",
+            $"{Glossary.Range}: {FireRange:0}   {Glossary.Pierce}: {BulletPierce}   Rebote: {RicochetCount}",
+            $"Retroceso: {BulletKnockback:0}   {Glossary.Dodge}: {DodgeChance:0}%",
+            $"Disparo en Diagonal: {(HasExtraProjectile ? "Sí" : "No")}   Disparo Paralelo: {ExtraFiringLines}/{MaxExtraFiringLinesCap}",
+            $"Cuchillas Orbitales: {OrbitCount}   Escudo Voltáico: {(ThornsDamage > 0 ? $"{ThornsDamage:0} daño" : "No")}",
+            "",
+            "── DEFENSAS ──",
+            $"Vidas: {CurrentLives}/{MaxLives}   Escudos: {CurrentShieldCharges}/{MaxShieldCharges}",
+            $"Regeneración: {(ShieldRegenPerMinute > 0 ? $"{ShieldRegenPerMinute:0.#}/min" : "No")}",
+            "",
+            "── PODERES ──",
+        };
+
+        string companionSuffix = HasSecondCompanion ? " (x2)" : "";
+        lines.Add($"Dron: {(CompanionStatPercent > 0 ? $"{CompanionStatPercent * 100:0}%{companionSuffix}" : "No")}");
+
+        // "Nv" here too — this block used to be the one place in the game that said "Lv", three
+        // lines below its own "Nv 5" in the status section above. Mina was also simply missing:
+        // the loadout panel and the HUD both showed it, this didn't.
+        if (LaserLevel > 0) lines.Add($"Láser: {Glossary.LevelPrefix}{LaserLevel}");
+        if (MissileLevel > 0) lines.Add($"Misil: {Glossary.LevelPrefix}{MissileLevel}");
+        if (MineLevel > 0) lines.Add($"Mina: {Glossary.LevelPrefix}{MineLevel}");
+        if (BurnLevel > 0) lines.Add($"Incendiario: {Glossary.LevelPrefix}{BurnLevel}");
+        if (OndaLevel > 0) lines.Add($"Onda de Choque: {Glossary.LevelPrefix}{OndaLevel}");
+        if (VendavalLevel > 0) lines.Add($"Vendaval: {Glossary.LevelPrefix}{VendavalLevel}");
+        if (EquippedUltimate != null) lines.Add($"Ultimate: {UltimateKindNames.Display(EquippedUltimate.Value)}");
+
+        return lines;
+    }
+
     private Polygon2D _shieldAura;
     private bool _hasExtraProjectile = false;
     private float _invulnTimer = 0f;
@@ -245,6 +293,12 @@ public partial class Player : CharacterBody2D
     // within the first second of every run.
     private Vector2 _visualBaseScale = Vector2.One;
     private Sprite2D _shadow;
+    private Sprite2D _outline;
+
+    // Same halo-behind-a-flat-shape it looks like from a distance, scaled up slightly rather than
+    // outlined per-pixel — cheap, and consistent with how icon.svg/BootSplash fake a glow.
+    private const float OutlineScaleMultiplier = 1.12f;
+    private const float OutlineAlpha = 0.6f;
     private Tween _breatheTween;
     private Tween _launchPunchTween;
     private bool _wasInputMoving = false;
@@ -299,16 +353,26 @@ public partial class Player : CharacterBody2D
     private const float MoveAcceleration = 600f;
     private const float MoveDeceleration = 750f;
 
-    // Per-type, per-tier accumulated bonus. Same tier stacks additively (2 Rare picks of the
-    // same reward add up); different tiers do NOT sum on top of each other — the final bonus is
-    // whichever single tier-bucket is currently highest. This caps how far a stat can snowball
-    // from freely mixing every tier ever picked, while still rewarding deliberately re-rolling
-    // the same tier.
+    // Per-type accumulated bonus for FireRange/FireRate/BulletDamage — every pick adds its Value,
+    // any tier, same as Side Shot's ExtraFiringLines. Used to bucket by RewardTier and take only the
+    // highest bucket (a Common pick contributed nothing once you'd found a Legendary); that's gone
+    // for these three specifically — the flat per-stat cap applied where this is read
+    // (MaxFireRangeBonus/MaxFireRate/MaxBulletDamageBonus) is what bounds the total now, same as it
+    // already bounds Side Shot. BulletKnockback still wants the old tier-bucketing (see
+    // _tierStackTotals below) — it wasn't part of this change, so it keeps its own dictionary and
+    // helper methods rather than sharing this one.
+    private readonly Dictionary<UpgradeType, float> _stackTotals = new();
+
+    // BulletKnockback's own per-tier bucket totals — same shape ApplyTieredStack/PreviewTieredBonus
+    // implemented for all four stats before FireRange/FireRate/BulletDamage moved to the flat
+    // accumulator above. Same tier stacks additively; different tiers don't sum on top of each
+    // other, the final bonus is whichever single tier-bucket is currently highest.
     private readonly Dictionary<UpgradeType, Dictionary<RewardTier, float>> _tierStackTotals = new();
 
     private float _baseFireRate;
     private float _baseBulletDamage;
     private float _baseFireRange;
+    private float _baseMoveSpeed;
     private Timer _shieldRegenTimer;
     private Line2D _fireRangeRing;
     private Timer _frenzyTimer;
@@ -354,6 +418,7 @@ public partial class Player : CharacterBody2D
         _baseFireRate = FireRate;
         _baseBulletDamage = BulletDamage;
         _baseFireRange = FireRange;
+        _baseMoveSpeed = MoveSpeed;
 
         _fireCooldown = GetNode<Timer>("FireCooldown");
         _fireCooldown.WaitTime = 1f / FireRate;
@@ -388,6 +453,22 @@ public partial class Player : CharacterBody2D
         // Snapshotted after the scale is settled — the breathe loop returns to this value, so
         // capturing the scene's placeholder instead would undo the line above on the first tween.
         _visualBaseScale = _visual.Scale;
+
+        // Hidden unless the player has actually equipped a border color — with Original equipped
+        // (the default for everyone who's never opened the shop) the game looks exactly as it did
+        // before this cosmetic existed. A flat-shape halo behind the same texture, not a real edge
+        // outline — same trick as icon.svg's glow layer, and it works on any portrait, not just ship.svg.
+        _outline = GetNode<Sprite2D>("Outline");
+        _outline.Texture = _visual.Texture;
+        _outline.Scale = _visualBaseScale * OutlineScaleMultiplier;
+        string outlineCosmetic = GameManager.Instance.EquippedOutlineCosmetic;
+        _outline.Visible = outlineCosmetic != CosmeticCatalog.DefaultId;
+        if (_outline.Visible)
+        {
+            Color outlineColor = CosmeticCatalog.ColorFor(outlineCosmetic);
+            outlineColor.A = OutlineAlpha;
+            _outline.Modulate = outlineColor;
+        }
 
         // Attached to the player root, NOT to Visual. As a child of Visual it would inherit the
         // facing rotation, which would swing the shadow around the ship as it turned and destroy the
@@ -647,6 +728,14 @@ public partial class Player : CharacterBody2D
             _shadow.Rotation = _visual.Rotation;
             _shadow.Skew = _visual.Skew;
         }
+
+        // Same sibling-not-child reasoning as the shadow above: outline follows facing without
+        // inheriting it structurally. Position never needs copying — it sits at the origin either way.
+        if (_outline != null)
+        {
+            _outline.Rotation = _visual.Rotation;
+            _outline.Skew = _visual.Skew;
+        }
     }
 
     // A trail of small fading puffs behind the ship while it's actually moving, not a constant
@@ -659,6 +748,13 @@ public partial class Player : CharacterBody2D
     private const float ThrusterMinSpeedRatio = 0.35f;
     private const float ThrusterPuffOffset = 14f;
 
+    // Legendary Movement Speed's Tron trail — a much longer interval than the cosmetic thruster
+    // puff above, since each segment is a real Area2D with its own damage tick (SpeedTrailSegment.cs)
+    // rather than a throwaway Polygon2D; spawning one every 0.05s the way the puff does would leave
+    // dozens alive at once for no gameplay benefit.
+    private float _speedTrailAccumulator = 0f;
+    private const float SpeedTrailInterval = 0.12f;
+
     private void UpdateThruster(float delta)
     {
         float topSpeed = MoveSpeed * GetClassSpeedMultiplier();
@@ -667,14 +763,47 @@ public partial class Player : CharacterBody2D
         if (speedRatio < ThrusterMinSpeedRatio || DangerLevel.Reduced)
         {
             _thrusterAccumulator = 0f;
+            _speedTrailAccumulator = 0f;
             return;
         }
 
         _thrusterAccumulator += delta;
-        if (_thrusterAccumulator < ThrusterInterval) return;
-        _thrusterAccumulator = 0f;
+        if (_thrusterAccumulator >= ThrusterInterval)
+        {
+            _thrusterAccumulator = 0f;
+            SpawnThrusterPuff(speedRatio);
+        }
 
-        SpawnThrusterPuff(speedRatio);
+        if (HasLegendarySpeedTrail())
+        {
+            _speedTrailAccumulator += delta;
+            if (_speedTrailAccumulator >= SpeedTrailInterval)
+            {
+                _speedTrailAccumulator = 0f;
+                SpawnSpeedTrailSegment();
+            }
+        }
+        else
+        {
+            _speedTrailAccumulator = 0f;
+        }
+    }
+
+    // Checked live off the best-tier-ever-owned map rather than a cached flag set once at pick time —
+    // same gate Laser uses for its own tier-3+ behavior switch (LaserLevel >= 3).
+    private bool HasLegendarySpeedTrail() =>
+        _ownedTiers.TryGetValue(UpgradeType.MovementSpeed, out var tier) && tier == RewardTier.Legendary;
+
+    private void SpawnSpeedTrailSegment()
+    {
+        if (SpeedTrailSegmentScene == null) return;
+        var parent = GetParent();
+        if (parent == null) return;
+
+        var segment = SpeedTrailSegmentScene.Instantiate<SpeedTrailSegment>();
+        segment.GlobalPosition = GlobalPosition;
+        parent.AddChild(segment);
+        segment.Launch(this);
     }
 
     private void SpawnThrusterPuff(float speedRatio)
@@ -685,10 +814,20 @@ public partial class Player : CharacterBody2D
         Vector2 backward = -_moveVelocity.Normalized();
         float size = Mathf.Lerp(3f, 6f, speedRatio);
 
+        // One fixed color for every pilot, Original included — same green as the player's own
+        // weapon family (Palette.PlayerBullet), so the trail reads as "exhaust" independent of
+        // whichever ship color happens to be equipped. Used to copy _visual.Modulate (the ship's own
+        // color) instead, which meant "Original" looked different per pilot and made the shop's
+        // preview swatch depend on whoever was currently selected — confusing to compare against.
+        string trailCosmetic = GameManager.Instance.EquippedTrailCosmetic;
+        Color puffColor = trailCosmetic == CosmeticCatalog.DefaultId
+            ? Palette.PlayerBullet
+            : CosmeticCatalog.ColorFor(trailCosmetic);
+
         var puff = new Polygon2D
         {
             Polygon = Juice.CirclePoints(size, segments: 8),
-            Color = _visual.Modulate,
+            Color = puffColor,
             GlobalPosition = GlobalPosition + backward * ThrusterPuffOffset,
             ZIndex = -1,
         };
@@ -1481,25 +1620,15 @@ public partial class Player : CharacterBody2D
         _frenzyTimer.Start();
     }
 
-    // Re-derives the permanent FireRate/BulletDamage from base + tier-bucket totals — the same
+    // Re-derives the permanent FireRate/BulletDamage from base + accumulated bonus — the same
     // formula ApplyUpgrade uses, but without recording a new pick. Called when the Sobrecarga
     // ultimate's temporary doubling expires, so it reverts to whatever the real permanent stat is
     // at that moment (correct even if a permanent Fire Rate/Damage upgrade was picked mid-buff),
     // not a stale pre-buff snapshot.
     private void RecomputeFireRateAndDamage()
     {
-        FireRate = Mathf.Min(_baseFireRate + GetCurrentTierBonus(UpgradeType.FireRate), MaxFireRate);
-        BulletDamage = Mathf.RoundToInt(_baseBulletDamage + Mathf.Min(GetCurrentTierBonus(UpgradeType.BulletDamage), MaxBulletDamageBonus));
-    }
-
-    // Current winning bucket total for a type, with no new pick recorded — 0 if never picked.
-    private float GetCurrentTierBonus(UpgradeType type)
-    {
-        if (!_tierStackTotals.TryGetValue(type, out var tierTotals)) return 0f;
-        float best = 0f;
-        foreach (var total in tierTotals.Values)
-            if (total > best) best = total;
-        return best;
+        FireRate = Mathf.Min(_baseFireRate + _stackTotals.GetValueOrDefault(UpgradeType.FireRate, 0f), MaxFireRate);
+        BulletDamage = Mathf.RoundToInt(_baseBulletDamage + Mathf.Min(_stackTotals.GetValueOrDefault(UpgradeType.BulletDamage, 0f), MaxBulletDamageBonus));
     }
 
     private void OnFireCooldownTimeout()
@@ -1666,7 +1795,19 @@ public partial class Player : CharacterBody2D
         // Rolled per bullet, not per volley, so a Twin/Side Shot spread can crit on some lines and
         // not others — more visible feedback than an all-or-nothing volley.
         bullet.Damage = ApplyCrit(BulletDamage, out bool isCrit);
-        if (isCrit) bullet.Modulate = Palette.CritBullet;
+        // Crit always wins over the cosmetic — it's a gameplay signal (an extra-damage hit), not a
+        // style choice, so it can't be customized away.
+        //
+        // Original resolves to Palette.PlayerBullet explicitly rather than CosmeticCatalog's own
+        // White for that id: Bullet.tscn's Visual/Halo are plain white (Modulate is the only thing
+        // that ever colours a bullet), so an unresolved White here would paint bullets white instead
+        // of leaving them the game's actual default green.
+        string bulletCosmetic = GameManager.Instance.EquippedBulletCosmetic;
+        bullet.Modulate = isCrit
+            ? Palette.CritBullet
+            : bulletCosmetic == CosmeticCatalog.DefaultId
+                ? Palette.PlayerBullet
+                : CosmeticCatalog.ColorFor(bulletCosmetic);
 
         _bulletsContainer.AddChild(bullet);
     }
@@ -1680,16 +1821,16 @@ public partial class Player : CharacterBody2D
     public void ApplyUpgrade(UpgradeData upgrade)
     {
         // Only ever raises the recorded tier, never lowers it. Used to overwrite unconditionally —
-        // buying a Common of a type you already had at Legendary (legitimate; see the stacking rules
-        // in docs/rewards.md) would silently "forget" the Legendary here even though the stat itself
-        // keeps using the higher tier bucket underneath. BuildCatalog's Loadout hint relies on this
-        // being accurate.
+        // buying a Common of a type you already had at Legendary (legitimate; every pick of
+        // FireRange/FireRate/BulletDamage adds to the total regardless of tier, see docs/rewards.md)
+        // would silently "forget" the Legendary here even though the stat itself keeps accumulating
+        // the Common's value on top. BuildCatalog's Loadout hint relies on this being accurate.
         if (!_ownedTiers.TryGetValue(upgrade.Type, out var existingTier) || upgrade.Tier > existingTier)
             _ownedTiers[upgrade.Type] = upgrade.Tier;
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                FireRange = Mathf.Min(_baseFireRange + Mathf.Min(ApplyTieredStack(upgrade), MaxFireRangeBonus), MaxFireRange);
+                FireRange = Mathf.Min(_baseFireRange + Mathf.Min(ApplyFlatStack(upgrade), MaxFireRangeBonus), MaxFireRange);
                 RebuildFireRangeIndicator();
                 break;
             case UpgradeType.ExtraProjectile:
@@ -1700,11 +1841,16 @@ public partial class Player : CharacterBody2D
                 RefreshOrbitBlades();
                 break;
             case UpgradeType.FireRate:
-                FireRate = Mathf.Min(_baseFireRate + ApplyTieredStack(upgrade), MaxFireRate);
+                FireRate = Mathf.Min(_baseFireRate + ApplyFlatStack(upgrade), MaxFireRate);
                 _fireCooldown.WaitTime = 1f / FireRate;
                 break;
             case UpgradeType.BulletDamage:
-                BulletDamage = Mathf.RoundToInt(_baseBulletDamage + Mathf.Min(ApplyTieredStack(upgrade), MaxBulletDamageBonus));
+                BulletDamage = Mathf.RoundToInt(_baseBulletDamage + Mathf.Min(ApplyFlatStack(upgrade), MaxBulletDamageBonus));
+                break;
+            // Legendary additionally arms the Tron-style speed trail — see UpdateThruster/
+            // SpawnSpeedTrailSegment, gated live off _ownedTiers rather than a cached flag here.
+            case UpgradeType.MovementSpeed:
+                MoveSpeed = Mathf.Min(_baseMoveSpeed + ApplyFlatStack(upgrade), _baseMoveSpeed + MaxMoveSpeedBonus);
                 break;
             // Heart is a single Legendary tier now, so the old "max tracks the best tier ever
             // picked" rule is meaningless (every pick is the same tier) — it's straightforwardly
@@ -1764,7 +1910,9 @@ public partial class Player : CharacterBody2D
                 XpBonusPercent = Mathf.Min(XpBonusPercent + upgrade.Value, MaxXpBonusPercent);
                 break;
 
-            // Magnitude stat, so it uses the same tier-bucketing as FireRange/FireRate/BulletDamage.
+            // Magnitude stat — unlike FireRange/FireRate/BulletDamage (flat-additive, see
+            // ApplyFlatStack), this one still uses the older tier-bucketing (ApplyTieredStack):
+            // same tier stacks, different tiers don't sum, the highest bucket wins.
             case UpgradeType.BulletKnockback:
                 BulletKnockback = Mathf.Min(ApplyTieredStack(upgrade), MaxBulletKnockbackBonus);
                 break;
@@ -1845,11 +1993,13 @@ public partial class Player : CharacterBody2D
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:
-                return Mathf.Min(_baseFireRange + Mathf.Min(PreviewTieredBonus(upgrade), MaxFireRangeBonus), MaxFireRange) > FireRange;
+                return Mathf.Min(_baseFireRange + Mathf.Min(PreviewFlatBonus(upgrade), MaxFireRangeBonus), MaxFireRange) > FireRange;
             case UpgradeType.BulletDamage:
-                return Mathf.Min(PreviewTieredBonus(upgrade), MaxBulletDamageBonus) > (BulletDamage - _baseBulletDamage);
+                return Mathf.Min(PreviewFlatBonus(upgrade), MaxBulletDamageBonus) > (BulletDamage - _baseBulletDamage);
             case UpgradeType.FireRate:
-                return Mathf.Min(PreviewTieredBonus(upgrade), MaxFireRate - _baseFireRate) > (FireRate - _baseFireRate);
+                return Mathf.Min(PreviewFlatBonus(upgrade), MaxFireRate - _baseFireRate) > (FireRate - _baseFireRate);
+            case UpgradeType.MovementSpeed:
+                return Mathf.Min(PreviewFlatBonus(upgrade), MaxMoveSpeedBonus) > (MoveSpeed - _baseMoveSpeed);
             // Helps if it can still raise the ceiling, or if there's any damage for its full heal
             // to undo — only a player at the cap *and* on full lives gains nothing.
             case UpgradeType.Heart:
@@ -1953,6 +2103,8 @@ public partial class Player : CharacterBody2D
                 return BulletDamage - _baseBulletDamage >= MaxBulletDamageBonus;
             case UpgradeType.FireRate:
                 return FireRate >= MaxFireRate;
+            case UpgradeType.MovementSpeed:
+                return MoveSpeed - _baseMoveSpeed >= MaxMoveSpeedBonus;
             // Same hard-cap rule as the three above; it was absent, so a maxed-out Knockback offer
             // stayed enabled and could be bought for nothing.
             case UpgradeType.BulletKnockback:
@@ -2047,9 +2199,11 @@ public partial class Player : CharacterBody2D
             case UpgradeType.FireRange:
                 return $"Tenés: {FireRange:0} de rango (tope {MaxFireRange:0}) — {(helps ? "se suma" : $"no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.BulletDamage:
-                return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : $"no suma (ya tenés una de mejor {Glossary.Rarity})")}";
+                return $"Tenés: +{BulletDamage - Mathf.RoundToInt(_baseBulletDamage)} (tope +{(int)MaxBulletDamageBonus}) — {(helps ? "se suma" : $"no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.FireRate:
-                return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : $"no suma (ya tenés una de mejor {Glossary.Rarity})")}";
+                return $"Tenés: {FireRate:0.0}/s (tope {MaxFireRate:0}/s) — {(helps ? "se suma" : $"no suma ({Glossary.AtCapSentence})")}";
+            case UpgradeType.MovementSpeed:
+                return $"Tenés: +{MoveSpeed - _baseMoveSpeed:0} (tope +{(int)MaxMoveSpeedBonus}) — {(helps ? "se suma" : $"no suma ({Glossary.AtCapSentence})")}";
             case UpgradeType.Heart:
                 return $"Tenés: {CurrentLives}/{MaxLives} vidas (tope {MaxLivesCap}) — {(helps ? "+1 al máximo y cura total" : $"no suma ({Glossary.AtCapSentence} y con vidas llenas)")}";
             case UpgradeType.HitShield:
@@ -2118,7 +2272,22 @@ public partial class Player : CharacterBody2D
         }
     }
 
-    // Non-mutating version of ApplyTieredStack: what would the winning bucket total become if this
+    // Non-mutating version of ApplyFlatStack: what the accumulated total would become if this pick
+    // were applied, without actually recording it. Used for the "would this help" preview.
+    private float PreviewFlatBonus(UpgradeData upgrade) =>
+        _stackTotals.GetValueOrDefault(upgrade.Type, 0f) + upgrade.Value;
+
+    // Adds this pick's Value to its running total for the type — any tier, always summed, same shape
+    // as Side Shot's ExtraFiringLines — and returns the new total. FireRange/FireRate/BulletDamage
+    // only; BulletKnockback still wants ApplyTieredStack below.
+    private float ApplyFlatStack(UpgradeData upgrade)
+    {
+        float total = _stackTotals.GetValueOrDefault(upgrade.Type, 0f) + upgrade.Value;
+        _stackTotals[upgrade.Type] = total;
+        return total;
+    }
+
+    // Non-mutating version of ApplyTieredStack: what the winning bucket total would become if this
     // pick were applied, without actually recording it. Used for the "would this help" preview.
     private float PreviewTieredBonus(UpgradeData upgrade)
     {
@@ -2134,6 +2303,7 @@ public partial class Player : CharacterBody2D
 
     // Adds this pick's Value to its (Type, Tier) bucket, then returns the highest bucket total
     // across all tiers seen so far for that Type — same-tier picks stack, cross-tier ones don't.
+    // BulletKnockback only; FireRange/FireRate/BulletDamage use the flat ApplyFlatStack above.
     private float ApplyTieredStack(UpgradeData upgrade)
     {
         if (!_tierStackTotals.TryGetValue(upgrade.Type, out var tierTotals))
@@ -2178,5 +2348,22 @@ public partial class Player : CharacterBody2D
         }
 
         _companion.StatPercent = CompanionStatPercent;
+
+        // Legendary Drone's qualitative upgrade: a second drone, mirrored on the other side, rather
+        // than a bigger number — same "top tier changes the mechanism, not just the magnitude"
+        // pattern as Laser's tier 3+ behavior and Movement Speed's Legendary trail. Gated the same
+        // way those are: the best tier ever owned for this type, not a cached flag.
+        if (_companion2 == null
+            && _ownedTiers.TryGetValue(UpgradeType.Companion, out var companionTier)
+            && companionTier == RewardTier.Legendary)
+        {
+            _companion2 = CompanionScene.Instantiate<Companion>();
+            _companion2.OwnerPlayer = this;
+            _companion2.BulletScene = BulletScene;
+            _companion2.Position = new Vector2(36f, -36f);
+            AddChild(_companion2);
+        }
+
+        if (_companion2 != null) _companion2.StatPercent = CompanionStatPercent;
     }
 }

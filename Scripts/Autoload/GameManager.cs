@@ -108,11 +108,25 @@ public partial class GameManager : Node
         ApplyOrientation();
         LoadSettings();
 
+        // Not started here — this runs at app boot, while the player is still in the main menu.
+        // Starting it immediately meant it could burn all the way down before Arena.tscn even
+        // loaded (character select, reading options, etc. all ate into round 1's 60s for free),
+        // surfacing as "round 1 shows 0 time and jumps straight to round 2". See
+        // StartRoundOneTimer, called once Arena/the spawner actually exists.
         _roundTimer = new Timer();
         _roundTimer.OneShot = true;
         _roundTimer.WaitTime = RoundDuration;
         AddChild(_roundTimer);
         _roundTimer.Timeout += OnRoundTimeout;
+    }
+
+    // Called by EnemySpawner._Ready() — the one thing that only exists once Arena.tscn has actually
+    // loaded, i.e. gameplay has genuinely begun. Every later round instead goes through
+    // StartNextRound()'s own countdown-then-arm sequence; round 1 has no such trigger of its own; this
+    // is that trigger.
+    public void StartRoundOneTimer()
+    {
+        _roundTimer.Stop();
         _roundTimer.Start();
     }
 
@@ -843,6 +857,47 @@ public partial class GameManager : Node
         return true;
     }
 
+    // Libras' second sink, alongside UnlockedCharacters — same shape (a HashSet of permanent
+    // purchases, no signal, UI re-reads on its own). Keyed by CosmeticCatalog.ItemKey(category, id)
+    // rather than by id alone, since owning a color for Bullet says nothing about owning it for Trail.
+    public HashSet<string> OwnedCosmetics { get; private set; } = new();
+    public string EquippedBulletCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
+    public string EquippedTrailCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
+    public string EquippedOutlineCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
+    public string EquippedArenaCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
+
+    // "Original" is always owned without an OwnedCosmetics entry — it's the free, no-purchase-needed
+    // way back to how the game looked before this feature existed, not something anyone had to buy.
+    public bool IsCosmeticOwned(CosmeticCategory category, string id) =>
+        id == CosmeticCatalog.DefaultId || OwnedCosmetics.Contains(CosmeticCatalog.ItemKey(category, id));
+
+    public bool TryBuyCosmetic(CosmeticCategory category, string id, int cost)
+    {
+        if (IsCosmeticOwned(category, id) || Libras < cost) return false;
+
+        Libras -= cost;
+        OwnedCosmetics.Add(CosmeticCatalog.ItemKey(category, id));
+        SaveMetaProgress();
+        return true;
+    }
+
+    // No-op (not a false return) if the id isn't owned — the shop UI never offers an Equip action on
+    // an unowned swatch, so reaching this without ownership would be a caller bug, not a user action
+    // to report false for.
+    public void EquipCosmetic(CosmeticCategory category, string id)
+    {
+        if (!IsCosmeticOwned(category, id)) return;
+
+        switch (category)
+        {
+            case CosmeticCategory.Bullet: EquippedBulletCosmetic = id; break;
+            case CosmeticCategory.Trail: EquippedTrailCosmetic = id; break;
+            case CosmeticCategory.Outline: EquippedOutlineCosmetic = id; break;
+            case CosmeticCategory.Arena: EquippedArenaCosmetic = id; break;
+        }
+        SaveMetaProgress();
+    }
+
     // A second, independent track of permanent progression — separate from Libras (spendable) the
     // same way in-run Level is separate from Coins. Nothing consumes AccountLevel yet; it exists so
     // the player has a number that only ever goes up across their whole history with the game, ahead
@@ -928,6 +983,11 @@ public partial class GameManager : Node
         config.Load(SettingsFilePath);
         config.SetValue(SettingsSection, "libras", Libras);
         config.SetValue(SettingsSection, "unlocked_characters", new List<string>(UnlockedCharacters).ToArray());
+        config.SetValue(SettingsSection, "owned_cosmetics", new List<string>(OwnedCosmetics).ToArray());
+        config.SetValue(SettingsSection, "equipped_bullet_cosmetic", EquippedBulletCosmetic);
+        config.SetValue(SettingsSection, "equipped_trail_cosmetic", EquippedTrailCosmetic);
+        config.SetValue(SettingsSection, "equipped_outline_cosmetic", EquippedOutlineCosmetic);
+        config.SetValue(SettingsSection, "equipped_arena_cosmetic", EquippedArenaCosmetic);
         config.SetValue(SettingsSection, "account_level", AccountLevel);
         config.SetValue(SettingsSection, "account_xp", AccountXp);
         config.SetValue(SettingsSection, "account_xp_to_next", AccountXpToNextLevel);
@@ -980,6 +1040,13 @@ public partial class GameManager : Node
             config.GetValue(SettingsSection, "meta_currency", 0));
         var unlocked = (string[])config.GetValue(SettingsSection, "unlocked_characters", System.Array.Empty<string>());
         UnlockedCharacters = new HashSet<string>(unlocked);
+
+        var ownedCosmetics = (string[])config.GetValue(SettingsSection, "owned_cosmetics", System.Array.Empty<string>());
+        OwnedCosmetics = new HashSet<string>(ownedCosmetics);
+        EquippedBulletCosmetic = (string)config.GetValue(SettingsSection, "equipped_bullet_cosmetic", CosmeticCatalog.DefaultId);
+        EquippedTrailCosmetic = (string)config.GetValue(SettingsSection, "equipped_trail_cosmetic", CosmeticCatalog.DefaultId);
+        EquippedOutlineCosmetic = (string)config.GetValue(SettingsSection, "equipped_outline_cosmetic", CosmeticCatalog.DefaultId);
+        EquippedArenaCosmetic = (string)config.GetValue(SettingsSection, "equipped_arena_cosmetic", CosmeticCatalog.DefaultId);
 
         AccountLevel = (int)config.GetValue(SettingsSection, "account_level", 1);
         AccountXp = (int)config.GetValue(SettingsSection, "account_xp", 0);
@@ -1167,8 +1234,10 @@ public partial class GameManager : Node
         _bossUltimateGranted = false;
         _pickerIsUltimateChoice = false;
         _shopPurchaseCounts.Clear();
+        // Stopped, not restarted — this runs on returning to the main menu, before Arena.tscn (and
+        // therefore round 1) has loaded again. StartRoundOneTimer (called from EnemySpawner._Ready)
+        // is what actually arms it once the player is back in gameplay.
         _roundTimer.Stop();
-        _roundTimer.Start();
         EnemySpeedMultiplier = 1f;
         BaseEnemySpeedMultiplier = 1f;
         EventRewardMultiplier = 1f;

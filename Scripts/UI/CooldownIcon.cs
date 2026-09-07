@@ -5,12 +5,13 @@ namespace ShooterLoop;
 // clears. No texture/art asset involved, just _Draw(), matching the rest of the game's
 // procedural-only visuals.
 //
-// Kind and colour are plain fields set from HUD._Ready, NOT [Export]s read from HUD.tscn. That is
-// deliberate: the previous version exported an icon_color and a one-letter glyph, the scene set both
-// on all seven icons, and they silently never arrived — every icon rendered with the compiled-in
-// defaults, i.e. a white circle with a "?" in it. Setting them in code removes a whole class of
-// failure (stale export metadata, a scene saved against an older build of the assembly) and matches
-// what UltimateButtonIcon already does with its own Kind.
+// Kind is a plain field set once from HUD._Ready; Accent is set from there too but re-set every
+// frame in HUD.UpdateCooldownIcons (it tracks the best tier reached, which changes mid-run). Neither
+// is an [Export] read from HUD.tscn. That is deliberate: the previous version exported an icon_color
+// and a one-letter glyph, the scene set both on all seven icons, and they silently never arrived —
+// every icon rendered with the compiled-in defaults, i.e. a white circle with a "?" in it. Setting
+// them in code removes a whole class of failure (stale export metadata, a scene saved against an
+// older build of the assembly) and matches what UltimateButtonIcon already does with its own Kind.
 public partial class CooldownIcon : Control
 {
     public enum Ability { Laser, Missile, ShieldRegen, Ultimate, Onda, Vendaval, Mine }
@@ -22,22 +23,15 @@ public partial class CooldownIcon : Control
 
     private float _lastFraction = -1f;
     private Ability _lastKind = (Ability)(-1);
+    private Color _lastAccent = Colors.Transparent;
 
-    // Per-ability, and deliberately NOT each weapon's projectile colour: every player weapon is green
-    // now (see Palette), so colouring these by their projectile would leave five identical green
-    // discs in a row. These icons only have to be distinguishable *from each other*, which is a
-    // different job from what the projectile colours do.
-    private static Color ColorFor(Ability kind) => kind switch
-    {
-        Ability.Laser => new Color(1f, 0.184f, 0.725f),      // magenta
-        Ability.Missile => new Color(1f, 0.541f, 0.886f),    // pink
-        Ability.ShieldRegen => Palette.ShieldPickupColor,    // blue
-        Ability.Ultimate => Palette.BossHealthBarFill,       // gold
-        Ability.Onda => new Color(0.777f, 0.357f, 1f),       // violet
-        Ability.Vendaval => new Color(1f, 0.294f, 0.169f),   // red-orange
-        Ability.Mine => new Color(1f, 0.655f, 0.169f),       // orange
-        _ => Colors.White,
-    };
+    // Set by HUD every frame from Player.OwnedTiers[the ability's UpgradeType] via
+    // RewardTierRoller.GetTierColor — the icon now reads "how strong is this" (which tier you've
+    // reached) rather than "which ability is this". Used to be a fixed per-Ability colour so the 5-7
+    // icons stayed distinguishable from each other despite every player weapon being green; now two
+    // different abilities at the same tier do share a colour, but each still has its own silhouette
+    // (see DrawAbility below), so they stay tellable apart by shape instead of by colour.
+    public Color Accent = Colors.White;
 
     public override void _Ready()
     {
@@ -46,7 +40,7 @@ public partial class CooldownIcon : Control
 
     public override void _Process(double delta)
     {
-        if (!Mathf.IsEqualApprox(CooldownFraction, _lastFraction) || Kind != _lastKind)
+        if (!Mathf.IsEqualApprox(CooldownFraction, _lastFraction) || Kind != _lastKind || Accent != _lastAccent)
             QueueRedraw();
     }
 
@@ -54,13 +48,14 @@ public partial class CooldownIcon : Control
     {
         _lastFraction = CooldownFraction;
         _lastKind = Kind;
+        _lastAccent = Accent;
 
         Vector2 center = Size / 2f;
         float radius = Mathf.Min(Size.X, Size.Y) / 2f - 2f;
         if (radius <= 0f) return;
 
         bool ready = CooldownFraction <= 0f;
-        Color accent = ColorFor(Kind);
+        Color accent = Accent;
 
         // Dark disc with a coloured rim, rather than the old solid-colour disc. A filled disc left
         // the glyph fighting the fill for contrast; an outlined one gives the symbol a dark field to

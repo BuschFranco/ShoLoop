@@ -48,6 +48,36 @@ public static class BuildCatalog
         return $"{value * 100f:0}%";
     }
 
+    // Would picking this exact offer right now complete a build class that isn't active yet? Returns
+    // the class it would complete, or null. Simulates only this one pick's Value against whichever
+    // requirement shares its UpgradeType (same Additive/max-style semantics RewardsThatFulfill already
+    // uses below) — every other requirement is read live off the player's real current stats, same as
+    // IsUpgradeOverCurrent's per-type simulation in Player.cs. Used by RewardCard to show "con esta
+    // recompensa armás la build X" on the one offer that would actually tip a class over.
+    public static Player.BuildClass? WouldComplete(UpgradeData data, Player p)
+    {
+        foreach (var cls in ClassOrder)
+        {
+            if (p.IsClassActive(cls)) continue;
+
+            bool matchesThisPick = false;
+            bool allMet = true;
+            foreach (var req in Player.GetBuildRequirements(cls))
+            {
+                float current = req.Current(p);
+                if (req.Type == data.Type)
+                {
+                    matchesThisPick = true;
+                    current = req.Additive ? current + data.Value : Mathf.Max(current, data.Value);
+                }
+                if (current < req.Needed) { allMet = false; break; }
+            }
+
+            if (matchesThisPick && allMet) return cls;
+        }
+        return null;
+    }
+
     // For an unmet requirement: which catalog rewards (by display name, ascending tier) would
     // satisfy it on their own. Additive stats need an offer covering at least the remaining gap;
     // max-style stats just need any offer at or above the required level.

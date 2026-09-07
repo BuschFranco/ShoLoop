@@ -467,27 +467,41 @@ public partial class HUD : Control
 
         SetCooldownVisible(_laserIcon, _player.LaserLevel > 0, "Láser");
         _laserIcon.CooldownFraction = _player.LaserCooldownFraction;
+        _laserIcon.Accent = TierAccent(UpgradeType.Laser);
 
         SetCooldownVisible(_missileIcon, _player.MissileLevel > 0, "Misil");
         _missileIcon.CooldownFraction = _player.MissileCooldownFraction;
+        _missileIcon.Accent = TierAccent(UpgradeType.Missile);
 
         SetCooldownVisible(_shieldRegenIcon, _player.ShieldRegenPerMinute > 0f, "Regeneración");
         _shieldRegenIcon.CooldownFraction = _player.ShieldRegenCooldownFraction;
+        _shieldRegenIcon.Accent = TierAccent(UpgradeType.ShieldRegen);
 
         SetCooldownVisible(_ondaIcon, _player.OndaLevel > 0, "Onda de Choque");
         _ondaIcon.CooldownFraction = _player.OndaCooldownFraction;
+        _ondaIcon.Accent = TierAccent(UpgradeType.ShockwaveAura);
 
         SetCooldownVisible(_vendavalIcon, _player.VendavalLevel > 0, "Vendaval");
         _vendavalIcon.CooldownFraction = _player.VendavalCooldownFraction;
+        _vendavalIcon.Accent = TierAccent(UpgradeType.Vendaval);
 
         SetCooldownVisible(_mineIcon, _player.MineLevel > 0, "Mina");
         _mineIcon.CooldownFraction = _player.MineCooldownFraction;
+        _mineIcon.Accent = TierAccent(UpgradeType.Mine);
 
         bool hasUltimate = _player.EquippedUltimate != null;
         SetCooldownVisible(_ultimateIcon, hasUltimate, "Ultimate");
         if (hasUltimate)
             _ultimateIcon.CooldownFraction = _player.UltimateCooldownRemaining / _player.UltimateCooldownDuration;
+        _ultimateIcon.Accent = TierAccent(UpgradeType.Ultimate);
     }
+
+    // The icon's colour follows the highest tier ever reached for that ability
+    // (Player.OwnedTiers never lowers, see docs/rewards.md), not a fixed per-ability colour anymore —
+    // reuses the same 4 tier colours the reward cards already use, rather than inventing a second
+    // palette just for the HUD.
+    private Color TierAccent(UpgradeType type) =>
+        _player.OwnedTiers.TryGetValue(type, out var tier) ? RewardTierRoller.GetTierColor(tier) : Colors.White;
 
     // Announces the ability by name the first time its icon appears. The icon is a wordless symbol
     // with no legend on screen, so without this the player's first encounter with a new ability is an

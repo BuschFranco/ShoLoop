@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/UI/BuildsMenu.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/CharacterSelectMenu.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/ConfirmDialog.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/CosmeticsShopMenu.tscn" id="6"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
 content_margin_left = 14.0
@@ -190,6 +191,16 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_button")
 theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
 text = "Comenzar"
 
+[node name="TiendaButton" type="Button" parent="VBoxContainer/ButtonsRow"]
+custom_minimum_size = Vector2(150, 52)
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_hover")
+text = "Tienda"
+
 [node name="OptionsButton" type="Button" parent="VBoxContainer/ButtonsRow" unique_id=1835502869]
 custom_minimum_size = Vector2(150, 52)
 layout_mode = 2
@@ -223,5 +234,9 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="ConfirmDialog" parent="." instance=ExtResource("5")]
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CosmeticsShopMenu" parent="." instance=ExtResource("6")]
 grow_horizontal = 2
 grow_vertical = 2

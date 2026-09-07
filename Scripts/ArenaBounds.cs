@@ -25,7 +25,7 @@ public partial class ArenaBounds : Line2D
         AddPoint(new Vector2(-e.X, -e.Y));
 
         Width = 6f;
-        DefaultColor = Palette.ArenaBounds;
+        DefaultColor = ResolveAccentColor(GameManager.Instance.EquippedArenaCosmetic, Palette.ArenaBounds);
         ZIndex = -2;
 
         DrawGrid(e);
@@ -57,9 +57,17 @@ public partial class ArenaBounds : Line2D
     }
 
     // edgeRatio: 0 through the middle of the arena, 1 out at the boundary.
+    // Keeps the base color's own alpha (bounds vs. grid have very different opacity by design) and
+    // only swaps the hue when the player has actually equipped something — Original reproduces
+    // baseColor exactly, same as every other cosmetic category's "untouched" state.
+    private static Color ResolveAccentColor(string cosmeticId, Color baseColor) =>
+        cosmeticId == CosmeticCatalog.DefaultId
+            ? baseColor
+            : new Color(CosmeticCatalog.ColorFor(cosmeticId), baseColor.A);
+
     private void AddGridLine(Vector2 from, Vector2 to, float edgeRatio)
     {
-        Color color = Palette.GridLine;
+        Color color = ResolveAccentColor(GameManager.Instance.EquippedArenaCosmetic, Palette.GridLine);
         color.A *= Mathf.Lerp(1f, GridEdgeFade, edgeRatio);
 
         var line = new Line2D();

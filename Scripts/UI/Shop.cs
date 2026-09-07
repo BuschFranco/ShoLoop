@@ -214,6 +214,23 @@ public partial class Shop : Control
             int finalCost = GetCost(i);
             _cards[i].Configure(_items[i], finalCost, finalCost - roundCost, highlight[i], "Comprar", _purchased[i]);
         }
+
+        SyncCardContentHeights();
+    }
+
+    // Every card in the row gets the same description/stack-info height — the max needed across the
+    // whole batch — so a short-text card doesn't end up shorter than its neighbours, and so a long
+    // one never gets clipped (RewardCard.ApplyContentHeights). Re-run whenever Configure runs, not
+    // just on the initial build: stack-info text ("Tenés: ...") can change length after a purchase.
+    private void SyncCardContentHeights()
+    {
+        float maxDesc = 0f, maxStack = 0f;
+        foreach (var card in _cards)
+        {
+            maxDesc = Mathf.Max(maxDesc, card.MeasureDescriptionHeight());
+            maxStack = Mathf.Max(maxStack, card.MeasureStackHeight());
+        }
+        foreach (var card in _cards) card.ApplyContentHeights(maxDesc, maxStack);
     }
 
     private void OnCoinsChanged(int coins)
