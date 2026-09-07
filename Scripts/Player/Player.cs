@@ -244,6 +244,7 @@ public partial class Player : CharacterBody2D
     // here, not to Vector2.One — doing the latter blew the ship up to its texture's full resolution
     // within the first second of every run.
     private Vector2 _visualBaseScale = Vector2.One;
+    private Sprite2D _shadow;
     private Tween _breatheTween;
     private Tween _launchPunchTween;
     private bool _wasInputMoving = false;
@@ -387,6 +388,12 @@ public partial class Player : CharacterBody2D
         // Snapshotted after the scale is settled — the breathe loop returns to this value, so
         // capturing the scene's placeholder instead would undo the line above on the first tween.
         _visualBaseScale = _visual.Scale;
+
+        // Attached to the player root, NOT to Visual. As a child of Visual it would inherit the
+        // facing rotation, which would swing the shadow around the ship as it turned and destroy the
+        // fixed-light illusion the whole effect rests on. Kept as a sibling, its offset stays put and
+        // UpdateFacing copies just the rotation across — silhouette turns, light doesn't.
+        _shadow = Juice.AttachShadow(this, _visual, _visualBaseScale);
 
         _shieldAura = GetNode<Polygon2D>("ShieldAura");
 
@@ -632,6 +639,14 @@ public partial class Player : CharacterBody2D
         // stopped — no separate idle case needed to un-bank it.
         _visualBankSkew = Mathf.Lerp(_visualBankSkew, targetSkew, 1f - Mathf.Exp(-BankSmoothingRate * delta));
         _visual.Skew = _visualBankSkew;
+
+        // Rotation and lean only — never Position. The shadow's offset is what encodes the light
+        // direction, so it has to stay fixed while the silhouette above it turns.
+        if (_shadow != null)
+        {
+            _shadow.Rotation = _visual.Rotation;
+            _shadow.Skew = _visual.Skew;
+        }
     }
 
     // A trail of small fading puffs behind the ship while it's actually moving, not a constant
@@ -670,17 +685,9 @@ public partial class Player : CharacterBody2D
         Vector2 backward = -_moveVelocity.Normalized();
         float size = Mathf.Lerp(3f, 6f, speedRatio);
 
-        const int segments = 8;
-        var points = new Vector2[segments];
-        for (int i = 0; i < segments; i++)
-        {
-            float angle = i / (float)segments * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * size;
-        }
-
         var puff = new Polygon2D
         {
-            Polygon = points,
+            Polygon = Juice.CirclePoints(size, segments: 8),
             Color = _visual.Modulate,
             GlobalPosition = GlobalPosition + backward * ThrusterPuffOffset,
             ZIndex = -1,
@@ -730,6 +737,11 @@ public partial class Player : CharacterBody2D
         // Dodge: chance to avoid the hit entirely
         if (DodgeChance > 0f && _dodgeRng.NextDouble() < DodgeChance / 100f)
         {
+            // A dodge has no visual tell at all — no flash, no number, nothing. Until now the only
+            // way to know Esquiva had done anything was to notice a hit that didn't cost you, which
+            // is indistinguishable from never having been hit. This sound is the whole feedback.
+            AudioManager.Instance?.Play(AudioManager.Sfx.Dodge);
+
             _invulnTimer = InvulnDuration * 0.5f; // shorter invuln on dodge
             return;
         }
@@ -784,6 +796,11 @@ public partial class Player : CharacterBody2D
         {
             if (CurrentShieldCharges > 0)
             {
+                // Deliberately a different sound from losing a life, not a quieter version of it.
+                // "The shield ate that" and "that cost you a heart" are different facts about your
+                // run, and the player is usually looking at the enemy, not at the HUD.
+                AudioManager.Instance?.Play(AudioManager.Sfx.Shield);
+
                 CurrentShieldCharges--;
                 RaiseShieldChanged();
                 _blinkShieldInstead = true;
@@ -829,7 +846,13 @@ public partial class Player : CharacterBody2D
         if (CurrentLives <= 0)
         {
             GameManager.Instance?.NotifyPlayerDied();
+            return;
         }
+
+        // After the death check, so the last life lost plays the death sting instead of stacking the
+        // hurt sound underneath it. Hooked here rather than on the LivesChanged event, which also
+        // fires on heals and on AddLife.
+        AudioManager.Instance?.Play(AudioManager.Sfx.PlayerHurt);
     }
 
     private void RaiseShieldChanged()
@@ -989,26 +1012,12 @@ public partial class Player : CharacterBody2D
         SpawnBurstVisual();
     }
 
-    private void SpawnBurstVisual()
-    {
-        var visual = new Polygon2D();
-        var points = new Vector2[24];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * LevelUpBurstRadius;
-        }
-        visual.Polygon = points;
-        visual.Color = Palette.LevelUpNova;
-        visual.Scale = Vector2.Zero;
-        AddChild(visual);
-
-        var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.35f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
-    }
+    // Parented to the player rather than to the arena, unlike the projectile blasts: the player is
+    // still alive and moving, and these read as coming off them, so they should travel with them.
+    // zIndex 0 keeps the previous layering — the burst covers the ship instead of sitting under it.
+    private void SpawnBurstVisual() =>
+        Juice.Blast(this, GlobalPosition, LevelUpBurstRadius, Palette.LevelUpNova,
+            growTime: 0.3f, fadeTime: 0.35f, zIndex: 0);
 
     // From the Epic tier up (LaserLevel 3+), the Laser couples to the player's current attack
     // stats instead of using its own fixed numbers — its damage scales with BulletDamage and its
@@ -1356,23 +1365,8 @@ public partial class Player : CharacterBody2D
             }
         }
 
-        var visual = new Polygon2D();
-        var points = new Vector2[32];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * UltimateNovaRadius;
-        }
-        visual.Polygon = points;
-        visual.Color = Palette.UltimateNova;
-        visual.Scale = Vector2.Zero;
-        AddChild(visual);
-
-        var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.35f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.5f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
+        Juice.Blast(this, GlobalPosition, UltimateNovaRadius, Palette.UltimateNova,
+            growTime: 0.35f, fadeTime: 0.5f, segments: 32, zIndex: 0);
     }
 
     // Onda de Choque: the periodic small AoE reward. Same enemies-in-radius loop as
@@ -1406,26 +1400,9 @@ public partial class Player : CharacterBody2D
         SpawnOndaVisual(radius, isCrit);
     }
 
-    private void SpawnOndaVisual(float radius, bool isCrit)
-    {
-        var visual = new Polygon2D();
-        var points = new Vector2[24];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
-        }
-        visual.Polygon = points;
-        visual.Color = isCrit ? Palette.CritBullet : Palette.OndaBlast;
-        visual.Scale = Vector2.Zero;
-        AddChild(visual);
-
-        var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.25f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.4f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
-    }
+    private void SpawnOndaVisual(float radius, bool isCrit) =>
+        Juice.Blast(this, GlobalPosition, radius, isCrit ? Palette.CritBullet : Palette.OndaBlast,
+            growTime: 0.25f, fadeTime: 0.4f, zIndex: 0);
 
     // Vendaval: shop-exclusive Epic/Legendary reward. A directional cone in front of the player
     // (facing direction, same angle the player's own triangle sprite is already turned to — see
@@ -1548,6 +1525,7 @@ public partial class Player : CharacterBody2D
         if (nearestDist > EffectiveFireRange * EffectiveFireRange) return;
 
         Vector2 baseDir = (nearest.GlobalPosition - GlobalPosition).Normalized();
+        SpawnMuzzleFlash(baseDir);
         FireInDirection(baseDir);
 
         if (_hasExtraProjectile)
@@ -1567,6 +1545,31 @@ public partial class Player : CharacterBody2D
                 FireInDirection(baseDir, offset, isSideShot: true);
             }
         }
+    }
+
+    // Bullets spawn at the player's exact centre (FireInDirection applies no forward offset), so the
+    // flash is pushed out to roughly the nose to read as coming from a barrel rather than from inside
+    // the hull.
+    private const float MuzzleFlashOffset = 20f;
+    private const float MuzzleFlashSize = 13f;
+
+    // Deliberately called once per volley from OnFireCooldownTimeout, NOT from FireInDirection: with
+    // Disparo en Diagonal plus Disparo Paralelo maxed, one volley is five FireInDirection calls, and
+    // five overlapping flashes on the same frame are noise and wasted nodes rather than five times the
+    // feedback. The player reads "I fired", which happens once.
+    //
+    // The shot sound rides along here for exactly the same reason, and it matters more for audio than
+    // for the flash: five copies of one 85ms blip on a single frame don't sound five times louder,
+    // they sound like a broken speaker.
+    private void SpawnMuzzleFlash(Vector2 dir)
+    {
+        AudioManager.Instance?.Play(AudioManager.Sfx.Shoot);
+
+        // Into the Bullets container, alongside the shot it belongs to, rather than as a child of the
+        // player — a flash parented to the ship would slide along with it for its whole (short) life
+        // instead of staying where the gun actually went off.
+        Juice.Spark(_bulletsContainer, GlobalPosition + dir * MuzzleFlashOffset, dir,
+            Palette.PlayerBullet.Lightened(0.4f), MuzzleFlashSize);
     }
 
     private readonly Random _critRng = new();

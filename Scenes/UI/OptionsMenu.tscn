@@ -131,6 +131,64 @@ autowrap_mode = 2
 custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 
+[node name="MasterVolumeLabel" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Volumen general: 100%"
+
+[node name="MasterVolumeSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+min_value = 0.0
+max_value = 100.0
+step = 5.0
+value = 100.0
+
+[node name="MasterVolumeHint" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 13
+text = "Controla todo el audio. En 0% el juego queda en silencio."
+autowrap_mode = 2
+
+[node name="SepMaster" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+
+[node name="VolumeLabel" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Efectos: 100%"
+
+[node name="VolumeSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+min_value = 0.0
+max_value = 100.0
+step = 5.0
+value = 100.0
+
+[node name="SepSfx" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+
+[node name="MusicVolumeLabel" type="Label" parent="CenterContainer/Panel/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Música: 70%"
+
+[node name="MusicVolumeSlider" type="HSlider" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+min_value = 0.0
+max_value = 100.0
+step = 5.0
+value = 70.0
+
+[node name="SepVolume" type="Control" parent="CenterContainer/Panel/Box"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+
 [node name="CameraDistanceLabel" type="Label" parent="CenterContainer/Panel/Box"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 16

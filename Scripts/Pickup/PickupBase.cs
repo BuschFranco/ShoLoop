@@ -79,6 +79,12 @@ public abstract partial class PickupBase : Area2D
     private void OnBodyEntered(Node2D body)
     {
         if (body is not Player player) return;
+
+        // One sound for all four pickup types rather than four near-identical blips. The magnet pull
+        // means several can land in the same instant, and the per-sound cooldown in AudioManager
+        // collapses that into one ding instead of a chord.
+        AudioManager.Instance?.Play(AudioManager.Sfx.Pickup);
+
         OnCollected(player);
         QueueFree();
     }

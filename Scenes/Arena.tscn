@@ -1,4 +1,4 @@
-[gd_scene load_steps=28 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="1"]
 [ext_resource type="Script" path="res://Scripts/Enemy/EnemySpawner.cs" id="2"]
@@ -26,6 +26,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonStalker.tscn" id="25"]
 [ext_resource type="Script" path="res://Scripts/RoundEventDirector.cs" id="26"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/ConfirmDialog.tscn" id="27"]
+[ext_resource type="Script" path="res://Scripts/DustField.cs" id="28"]
 
 [sub_resource type="Environment" id="Environment_neon"]
 background_mode = 3
@@ -60,6 +61,9 @@ color = Color(0.043, 0.024, 0.078, 1)
 [node name="Bullets" type="Node2D" parent="."]
 
 [node name="Enemies" type="Node2D" parent="."]
+
+[node name="DustField" type="Node2D" parent="."]
+script = ExtResource("28")
 
 [node name="ArenaBounds" type="Line2D" parent="."]
 script = ExtResource("19")

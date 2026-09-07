@@ -8,6 +8,9 @@ public partial class ShooterEnemy : Enemy
     [Export] public PackedScene EnemyBulletScene;
     [Export] public float FireRate = 0.3f;
 
+    private const float MuzzleFlashOffset = 16f;
+    private const float MuzzleFlashSize = 11f;
+
     public override void _Ready()
     {
         base._Ready();
@@ -32,5 +35,14 @@ public partial class ShooterEnemy : Enemy
         bullet.GlobalPosition = GlobalPosition;
         bullet.Direction = (player.GlobalPosition - GlobalPosition).Normalized();
         GetParent().AddChild(bullet);
+
+        // Doubles as a tell: a shooter that just fired now flags itself for a beat, which is the
+        // information a player needs to know which silhouette in a crowd is the one shooting at them.
+        Juice.Spark(GetParent(), GlobalPosition + bullet.Direction * MuzzleFlashOffset,
+            bullet.Direction, Palette.EnemyBullet.Lightened(0.4f), MuzzleFlashSize);
+
+        // Lower and duller than the player's shot on purpose (see tools/gen_sfx.py) — incoming fire
+        // has to be distinguishable from your own without looking away from where you're aiming.
+        AudioManager.Instance?.Play(AudioManager.Sfx.EnemyShoot);
     }
 }

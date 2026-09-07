@@ -355,56 +355,42 @@ visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(1, 0.184, 0.725, 1)
-glyph = "L"
 
 [node name="MissileIcon" type="Control" parent="CooldownIcons"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(1, 0.541, 0.886, 1)
-glyph = "M"
 
 [node name="ShieldRegenIcon" type="Control" parent="CooldownIcons"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(0.31, 0.659, 1, 1)
-glyph = "R"
 
 [node name="UltimateIcon" type="Control" parent="CooldownIcons"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(1, 0.878, 0.4, 1)
-glyph = "U"
 
 [node name="OndaIcon" type="Control" parent="CooldownIcons"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(0.777, 0.357, 1, 1)
-glyph = "O"
 
 [node name="VendavalIcon" type="Control" parent="CooldownIcons"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(1, 0.294, 0.169, 1)
-glyph = "V"
 
 [node name="MineIcon" type="Control" parent="CooldownIcons"]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("3")
-icon_color = Color(1, 0.655, 0.169, 1)
-glyph = "N"
 
 [node name="BossHealthBar" type="VBoxContainer" parent="."]
 visible = false

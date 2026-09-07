@@ -83,31 +83,13 @@ public partial class Missile : Area2D
     }
 
     // Parented to the Bullets container rather than to the missile, because the missile frees itself
-    // on this same frame and would take the visual down with it. Same approach as
-    // Enemy.SpawnScorePopup.
+    // on this same frame and would take the visual down with it — Juice.Blast is built around exactly
+    // that constraint, which is why it takes the parent instead of finding one itself.
+    // The sound is hooked here rather than inside Juice.Blast: that helper is also what draws the
+    // level-up nova, Onda, Vendaval and the boss shockwave, none of which are explosions.
     private void SpawnBlastVisual()
     {
-        var parent = GetParent();
-        if (parent == null) return;
-
-        var visual = new Polygon2D();
-        var points = new Vector2[24];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * ExplosionRadius;
-        }
-        visual.Polygon = points;
-        visual.Color = Palette.PlayerBlast;
-        visual.Scale = Vector2.Zero;
-        visual.ZIndex = 5;
-        parent.AddChild(visual);
-        visual.GlobalPosition = GlobalPosition;
-
-        var tween = visual.CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.2f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.35f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
+        AudioManager.Instance?.Play(AudioManager.Sfx.Explosion);
+        Juice.Blast(GetParent(), GlobalPosition, ExplosionRadius, Palette.PlayerBlast);
     }
 }

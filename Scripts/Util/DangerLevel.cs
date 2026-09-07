@@ -24,9 +24,11 @@ public static class DangerLevel
     // curve above this now lands on round 6 (0.30 clears at -0.2 + 5*0.1), where it used to be round 9.
     public const float AlarmThreshold = 0.30f;
 
-    // Accessibility escape hatch. When true the alarm holds at its dim trough instead of pulsing and
-    // camera shake is halved. Nothing sets it today (there's no settings menu to hang a toggle off
-    // yet) — it exists so wiring one later is a single line rather than a refactor of every consumer.
+    // Accessibility escape hatch. When true the alarm holds at its dim trough instead of pulsing,
+    // camera shake is halved, and every Juice helper drops its movement while keeping its meaning.
+    // Lives here rather than on GameManager because the consumers are static and know nothing about
+    // the scene tree; GameManager owns the persisted, user-facing half (SetReducedMotion), and the
+    // Options screen has the toggle.
     public static bool Reduced;
 
     // --- Arena tone ---

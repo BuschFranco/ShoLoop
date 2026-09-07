@@ -1,18 +1,43 @@
 namespace ShooterLoop;
 
-// A small circular icon that draws its own "clock" cooldown overlay — a dark pie sector that
+// A small circular ability icon that draws its own "clock" cooldown overlay — a dark pie sector that
 // covers the icon right after use and sweeps away (clockwise, from 12 o'clock) as the cooldown
 // clears. No texture/art asset involved, just _Draw(), matching the rest of the game's
 // procedural-only visuals.
+//
+// Kind and colour are plain fields set from HUD._Ready, NOT [Export]s read from HUD.tscn. That is
+// deliberate: the previous version exported an icon_color and a one-letter glyph, the scene set both
+// on all seven icons, and they silently never arrived — every icon rendered with the compiled-in
+// defaults, i.e. a white circle with a "?" in it. Setting them in code removes a whole class of
+// failure (stale export metadata, a scene saved against an older build of the assembly) and matches
+// what UltimateButtonIcon already does with its own Kind.
 public partial class CooldownIcon : Control
 {
-    [Export] public Color IconColor = Colors.White;
-    [Export] public string Glyph = "?";
+    public enum Ability { Laser, Missile, ShieldRegen, Ultimate, Onda, Vendaval, Mine }
+
+    public Ability Kind = Ability.Laser;
 
     // 1 = just used (fully covered), 0 = ready (fully clear).
     public float CooldownFraction = 0f;
 
     private float _lastFraction = -1f;
+    private Ability _lastKind = (Ability)(-1);
+
+    // Per-ability, and deliberately NOT each weapon's projectile colour: every player weapon is green
+    // now (see Palette), so colouring these by their projectile would leave five identical green
+    // discs in a row. These icons only have to be distinguishable *from each other*, which is a
+    // different job from what the projectile colours do.
+    private static Color ColorFor(Ability kind) => kind switch
+    {
+        Ability.Laser => new Color(1f, 0.184f, 0.725f),      // magenta
+        Ability.Missile => new Color(1f, 0.541f, 0.886f),    // pink
+        Ability.ShieldRegen => Palette.ShieldPickupColor,    // blue
+        Ability.Ultimate => Palette.BossHealthBarFill,       // gold
+        Ability.Onda => new Color(0.777f, 0.357f, 1f),       // violet
+        Ability.Vendaval => new Color(1f, 0.294f, 0.169f),   // red-orange
+        Ability.Mine => new Color(1f, 0.655f, 0.169f),       // orange
+        _ => Colors.White,
+    };
 
     public override void _Ready()
     {
@@ -21,21 +46,29 @@ public partial class CooldownIcon : Control
 
     public override void _Process(double delta)
     {
-        if (!Mathf.IsEqualApprox(CooldownFraction, _lastFraction))
+        if (!Mathf.IsEqualApprox(CooldownFraction, _lastFraction) || Kind != _lastKind)
             QueueRedraw();
     }
 
     public override void _Draw()
     {
         _lastFraction = CooldownFraction;
+        _lastKind = Kind;
+
         Vector2 center = Size / 2f;
         float radius = Mathf.Min(Size.X, Size.Y) / 2f - 2f;
         if (radius <= 0f) return;
 
         bool ready = CooldownFraction <= 0f;
+        Color accent = ColorFor(Kind);
 
-        DrawCircle(center, radius, ready ? IconColor : IconColor.Darkened(0.35f));
-        DrawArc(center, radius, 0f, Mathf.Tau, 32, Colors.Black.Lightened(0.1f), 2f, true);
+        // Dark disc with a coloured rim, rather than the old solid-colour disc. A filled disc left
+        // the glyph fighting the fill for contrast; an outlined one gives the symbol a dark field to
+        // sit on and reads better at 36px over a bright arena.
+        DrawCircle(center, radius, new Color(0.102f, 0.0588f, 0.1686f, 0.88f));
+        DrawArc(center, radius, 0f, Mathf.Tau, 32, ready ? accent : accent.Darkened(0.5f), 2f, true);
+
+        DrawAbility(center, radius * 0.62f, ready ? accent : accent.Darkened(0.45f));
 
         if (CooldownFraction > 0.002f)
         {
@@ -52,19 +85,119 @@ public partial class CooldownIcon : Control
             }
             DrawPolygon(points, new[] { new Color(0f, 0f, 0f, 0.72f) });
         }
+    }
 
-        // GetThemeDefaultFont() rather than ThemeDB.FallbackFont: the latter always returns the engine's
-        // built-in font and ignores the project theme entirely, so these cooldown letters would have
-        // stayed in the old typeface while every Label in the game switched.
-        var font = GetThemeDefaultFont();
-        int fontSize = 14;
-        Vector2 textSize = font.GetStringSize(Glyph, HorizontalAlignment.Center, -1f, fontSize);
-        Vector2 textPos = center - textSize / 2f + new Vector2(0f, textSize.Y * 0.35f);
+    // Every shape below is drawn inside a radius-r box around center. They're built as silhouettes
+    // rather than outlines because at 36px an outline collapses into a smudge.
+    private void DrawAbility(Vector2 center, float r, Color color)
+    {
+        switch (Kind)
+        {
+            case Ability.Laser: DrawBeam(center, r, color); break;
+            case Ability.Missile: DrawDart(center, r, color); break;
+            case Ability.ShieldRegen: DrawShield(center, r, color); break;
+            case Ability.Ultimate: DrawStar(center, r, color); break;
+            case Ability.Onda: DrawRings(center, r, color); break;
+            case Ability.Vendaval: DrawCone(center, r, color); break;
+            case Ability.Mine: DrawMine(center, r, color); break;
+        }
+    }
 
-        // Outlined, unlike every other DrawString in the project — this letter is the ONLY thing
-        // identifying which ability the icon belongs to, and it sits over the live arena. A white
-        // glyph on top of a bright cyan or pink explosion simply disappears without this.
-        DrawStringOutline(font, textPos, Glyph, HorizontalAlignment.Center, -1f, fontSize, 4, Colors.Black);
-        DrawString(font, textPos, Glyph, HorizontalAlignment.Center, -1f, fontSize, Colors.White);
+    // Láser: a horizontal beam with a tapered tip — long and thin, which is the one silhouette
+    // nothing else here shares.
+    private void DrawBeam(Vector2 center, float r, Color color)
+    {
+        float h = r * 0.28f;
+        DrawPolygon(new[]
+        {
+            center + new Vector2(-r, -h),
+            center + new Vector2(r * 0.45f, -h),
+            center + new Vector2(r, 0f),
+            center + new Vector2(r * 0.45f, h),
+            center + new Vector2(-r, h),
+        }, new[] { color });
+    }
+
+    // Misil: the projectile's own silhouette from Missile.tscn, normalised — notched tail included,
+    // since that notch is what separates it from Vendaval's cone at this size.
+    private void DrawDart(Vector2 center, float r, Color color)
+    {
+        var raw = new[]
+        {
+            new Vector2(1f, 0f),
+            new Vector2(-0.67f, -0.5f),
+            new Vector2(-0.33f, 0f),
+            new Vector2(-0.67f, 0.5f),
+        };
+        var points = new Vector2[raw.Length];
+        for (int i = 0; i < raw.Length; i++) points[i] = center + raw[i] * r;
+        DrawPolygon(points, new[] { color });
+    }
+
+    // Regeneración de escudo: a shield outline with a cross in it, so it reads as "shield coming
+    // back" rather than just "shield".
+    private void DrawShield(Vector2 center, float r, Color color)
+    {
+        DrawPolygon(new[]
+        {
+            center + new Vector2(0f, -r),
+            center + new Vector2(r * 0.8f, -r * 0.5f),
+            center + new Vector2(r * 0.8f, r * 0.2f),
+            center + new Vector2(0f, r),
+            center + new Vector2(-r * 0.8f, r * 0.2f),
+            center + new Vector2(-r * 0.8f, -r * 0.5f),
+        }, new[] { color });
+
+        var dark = new Color(0.102f, 0.0588f, 0.1686f, 0.95f);
+        DrawLine(center + new Vector2(-r * 0.35f, 0f), center + new Vector2(r * 0.35f, 0f), dark, 2f);
+        DrawLine(center + new Vector2(0f, -r * 0.35f), center + new Vector2(0f, r * 0.35f), dark, 2f);
+    }
+
+    // Ultimate: the same 8-point starburst the Ultimate button uses, so the HUD's two references to
+    // the same ability agree with each other.
+    private void DrawStar(Vector2 center, float r, Color color)
+    {
+        const int spikes = 8;
+        var points = new Vector2[spikes * 2];
+        for (int i = 0; i < points.Length; i++)
+        {
+            float angle = i / (float)points.Length * Mathf.Tau - Mathf.Pi / 2f;
+            points[i] = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (i % 2 == 0 ? r : r * 0.45f);
+        }
+        DrawPolygon(points, new[] { color });
+    }
+
+    // Onda de Choque: concentric rings radiating out — the blast expanding, which is literally what
+    // the ability draws in the arena.
+    private void DrawRings(Vector2 center, float r, Color color)
+    {
+        DrawCircle(center, r * 0.22f, color);
+        DrawArc(center, r * 0.6f, 0f, Mathf.Tau, 20, color, 1.8f, true);
+        DrawArc(center, r, 0f, Mathf.Tau, 24, color, 1.8f, true);
+    }
+
+    // Vendaval: a wide forward cone. Deliberately short and fat where the missile dart is long and
+    // thin — that proportion is the whole distinction between them at icon size.
+    private void DrawCone(Vector2 center, float r, Color color)
+    {
+        DrawPolygon(new[]
+        {
+            center + new Vector2(r, -r * 0.9f),
+            center + new Vector2(r, r * 0.9f),
+            center + new Vector2(-r * 0.75f, 0f),
+        }, new[] { color });
+    }
+
+    // Mina: the classic spiked sea mine — a disc with spokes, unmistakable even this small.
+    private void DrawMine(Vector2 center, float r, Color color)
+    {
+        const int spikes = 6;
+        for (int i = 0; i < spikes; i++)
+        {
+            float angle = i / (float)spikes * Mathf.Tau;
+            var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            DrawLine(center + dir * r * 0.45f, center + dir * r, color, 2f);
+        }
+        DrawCircle(center, r * 0.55f, color);
     }
 }

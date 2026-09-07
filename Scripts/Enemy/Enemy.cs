@@ -166,6 +166,34 @@ public partial class Enemy : CharacterBody2D
 
     private const float EliteGlowScale = 1.15f;
 
+    // The everyday version of the elite aura: the enemy's own silhouette a shade bigger, peeking out
+    // around the body as a neon rim. It costs nothing to light because the sprites are white and
+    // Modulate paints them — the copy comes out in the enemy's own identity colour, and every one of
+    // those colours carries a channel at 1.0, so the rim clears the WorldEnvironment's 0.85 bloom
+    // threshold and lights itself. No shader, no Light2D.
+    //
+    // Read off _visualBaseColor rather than the live Modulate so a rim built mid-hit-flash doesn't
+    // freeze at flash-white forever — the same snapshot rule the hit flash and dash telegraphs follow.
+    private const float RimFlareScale = 1.08f;
+    private const float RimFlareAlpha = 0.38f;
+
+    private void CreateRimFlare()
+    {
+        if (_visual == null) return;
+
+        Color tint = _visualBaseColor;
+        tint.A = RimFlareAlpha;
+
+        var rim = new Sprite2D
+        {
+            Texture = _visual.Texture,
+            Scale = _visualBaseScale * RimFlareScale,
+            Modulate = tint,
+            ZIndex = -1,
+        };
+        AddChild(rim);
+    }
+
     private static Color GetEliteColor(EliteModifier modifier) => modifier switch
     {
         EliteModifier.Vampiric => new Color(1f, 0.2f, 0.2f, 0.7f),
@@ -358,7 +386,23 @@ public partial class Enemy : CharacterBody2D
             && (Category == EnemyCategory.Special || Category == EnemyCategory.Demon))
             CreateHealthBar();
 
+        // Built here rather than in the scenes so every enemy gets them from one place, and here
+        // rather than in MakeElite for the reason spelled out there: MakeElite runs before the node is
+        // in the tree, so "Visual" can't be resolved yet.
+        //
+        // The shadow sits at ZIndex -2 and the rim/aura at -1, which keeps them ordered against each
+        // other without depending on child order. z_as_relative defaults to true, so both resolve
+        // relative to this enemy and stay glued to it instead of sinking behind unrelated hazards that
+        // also live at -1.
+        Juice.AttachShadow(this, _visual, _visualBaseScale);
+
+        // Never both: the elite aura is the louder version of exactly the same effect, so stacking
+        // them would cost a draw call per elite and muddy the modifier colour that has to stay
+        // readable at a glance. The boss is skipped too — its Visual is a photo, not a white
+        // silhouette, so a scaled-up tinted copy reads as a doubled image rather than a rim. (Its
+        // shadow is fine: black multiplies a photo flat.)
         if (IsElite) CreateEliteGlow();
+        else if (Category != EnemyCategory.Boss) CreateRimFlare();
 
         PlaySpawnAnimation();
     }
@@ -760,6 +804,11 @@ public partial class Enemy : CharacterBody2D
 
         if (CurrentHp <= 0)
         {
+            // The boss gets its own fanfare from GameManager.RegisterKill instead — playing both
+            // would bury the fanfare under the same pop every trash mob makes.
+            if (Category != EnemyCategory.Boss)
+                AudioManager.Instance?.Play(AudioManager.Sfx.EnemyDie);
+
             bool willSplit = CanSplit && SplitGeneration < MaxSplitGenerations && SelfScene != null;
             if (willSplit)
                 Split();
@@ -814,6 +863,12 @@ public partial class Enemy : CharacterBody2D
     // nothing left to animate.
     private void PlayHitFeedback()
     {
+        // Before the _visual guard, since a hit landing is worth hearing whether or not this
+        // particular enemy has a sprite to flash. Burn ticks call TakeDamage with showFlash: false
+        // and so never reach here — which is the behaviour we want, a damage-over-time effect
+        // shouldn't be machine-gunning the impact sound in the background.
+        AudioManager.Instance?.Play(AudioManager.Sfx.Hit);
+
         if (_visual == null) return;
 
         // Rapid hits (a laser volley, a blade sweep) would otherwise stack tweens that fight over

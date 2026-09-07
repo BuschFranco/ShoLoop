@@ -4,6 +4,11 @@ public partial class MainMenu : Control
 {
     public override void _Ready()
     {
+        // Character select, Options and Builds are overlay *children* of this scene rather than
+        // separate scenes, so this runs once per actual visit to the menu — opening a submenu won't
+        // restart the track. (PlayMusic also no-ops when the requested track is already playing.)
+        AudioManager.Instance?.PlayMusic(AudioManager.MusicTrack.Menu);
+
         var startButton = GetNode<Button>("VBoxContainer/ButtonsRow/StartButton");
         var optionsButton = GetNode<Button>("VBoxContainer/ButtonsRow/OptionsButton");
         var buildsButton = GetNode<Button>("VBoxContainer/ButtonsRow/BuildsButton");

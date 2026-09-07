@@ -66,27 +66,13 @@ public partial class MissileZone : Node2D
         SpawnBlast();
     }
 
-    // Same expanding-and-fading shape as the missile/nova blasts, kept as its own node so this one can
-    // free itself the moment the flash is done.
+    // Same expanding-and-fading shape as the missile/nova blasts. Handed to the parent so the zone —
+    // which has already done its damage by this point — can go now instead of being kept alive purely
+    // to host its own farewell animation.
     private void SpawnBlast()
     {
-        var blast = new Polygon2D();
-        var points = new Vector2[28];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * Radius;
-        }
-        blast.Polygon = points;
-        blast.Color = Palette.MissileBlast;
-        blast.Scale = Vector2.One * 0.4f;
-        AddChild(blast);
-
-        var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(blast, "scale", Vector2.One, 0.22f)
-            .SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(blast, "modulate:a", 0f, 0.35f);
-        tween.Chain().TweenCallback(Callable.From(QueueFree));
+        AudioManager.Instance?.Play(AudioManager.Sfx.Explosion);
+        Juice.Blast(GetParent(), GlobalPosition, Radius, Palette.MissileBlast, growTime: 0.22f, segments: 28);
+        QueueFree();
     }
 }

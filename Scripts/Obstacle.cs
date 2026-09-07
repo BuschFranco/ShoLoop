@@ -27,15 +27,45 @@ public partial class Obstacle : StaticBody2D
             new Vector2(-hw, hh),
         };
 
+        // Added before the fill so it draws underneath, and offset in the same direction as every
+        // sprite shadow (see Juice.AttachShadow). Obstacles are the largest objects in the arena, so
+        // if their shadows disagreed with the enemies' the fake light would read as broken rather than
+        // as depth. ZIndex -1 puts it on the floor — over the grid at -3, under everything that walks.
+        var shadow = new Polygon2D();
+        shadow.Polygon = corners;
+        shadow.Color = Juice.ShadowColor;
+        shadow.Position = Juice.ShadowOffsetFor(Size.Y);
+        shadow.ZIndex = -1;
+        AddChild(shadow);
+
+        // The top face is offset toward the light — the exact opposite of where the shadow falls —
+        // and the gap between it and the footprint is filled with two darker "walls". That's the
+        // whole trick: the block stops reading as a shape painted on the floor and starts reading as
+        // one standing on it.
+        //
+        // Collision deliberately stays on the base footprint. The extrusion is a dozen pixels of
+        // paint, and a wall you collide with somewhere other than where its base is drawn would feel
+        // worse than a wall whose top overlaps a little of the floor behind it.
+        Vector2 lift = -Juice.ShadowDirection * ExtrudeHeight;
+        var top = new Vector2[corners.Length];
+        for (int i = 0; i < corners.Length; i++) top[i] = corners[i] + lift;
+
+        // Only two of the four walls are ever visible, and which two follows from the light being up
+        // and to the left: the ones facing down and right. The down-facing one is darker because the
+        // light is mostly overhead, so a wall facing straight away from it catches least.
+        AddWall(new[] { corners[3], corners[2], top[2], top[3] }, Palette.ObstacleFill.Darkened(0.55f));
+        AddWall(new[] { corners[1], corners[2], top[2], top[1] }, Palette.ObstacleFill.Darkened(0.35f));
+
         var fill = new Polygon2D();
-        fill.Polygon = corners;
+        fill.Polygon = top;
         fill.Color = Palette.ObstacleFill;
         AddChild(fill);
 
-        // Neon outline, same visual language as the enemies and the fire-range ring.
+        // Neon outline, same visual language as the enemies and the fire-range ring. On the top face
+        // only — that's what identifies it as the lit surface rather than the silhouette.
         var outline = new Line2D();
-        foreach (var corner in corners) outline.AddPoint(corner);
-        outline.AddPoint(corners[0]);
+        foreach (var corner in top) outline.AddPoint(corner);
+        outline.AddPoint(top[0]);
         outline.Width = 3f;
         outline.DefaultColor = Palette.ObstacleOutline;
         AddChild(outline);
@@ -43,5 +73,17 @@ public partial class Obstacle : StaticBody2D
         var collision = new CollisionShape2D();
         collision.Shape = new RectangleShape2D { Size = Size };
         AddChild(collision);
+    }
+
+    // Uniform across every obstacle rather than derived from Size: blocks that got taller as they got
+    // wider would read as an inconsistent world instead of as furniture at one wall height.
+    private const float ExtrudeHeight = 15f;
+
+    private void AddWall(Vector2[] quad, Color color)
+    {
+        var wall = new Polygon2D();
+        wall.Polygon = quad;
+        wall.Color = color;
+        AddChild(wall);
     }
 }

@@ -1,0 +1,26 @@
+[gd_resource type="AudioBusLayout" format=3]
+
+; Three buses so the options screen can offer three sliders that behave the way players expect.
+;
+; SFX and Music both send to Master, which is what makes the "General" slider work with no
+; arithmetic anywhere: turning Master down attenuates both children by definition of a send. If
+; instead there were one bus and three numbers multiplied together in C#, every new sound source
+; would have to remember to apply that multiplication.
+;
+; Volumes are left at 0 dB here on purpose -- they are runtime state owned by GameManager's saved
+; settings (master_volume / sfx_volume / music_volume), pushed in through AudioManager.ApplyBusVolume
+; on boot. Baking a level into this file would give the same setting two sources of truth.
+
+[resource]
+bus/1/name = &"SFX"
+bus/1/solo = false
+bus/1/mute = false
+bus/1/bypass_fx = false
+bus/1/volume_db = 0.0
+bus/1/send = &"Master"
+bus/2/name = &"Music"
+bus/2/solo = false
+bus/2/mute = false
+bus/2/bypass_fx = false
+bus/2/volume_db = 0.0
+bus/2/send = &"Master"

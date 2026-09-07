@@ -85,25 +85,22 @@ public partial class LoadoutMenu : PanelContainer
         Row(p => p.MaxShieldCharges > 0, "Escudos", p => $"{p.MaxShieldCharges} cargas (tope {Player.MaxShieldChargesCap})");
         Row(p => p.ShieldRegenPerMinute > 0, "Regeneración", p => $"{p.ShieldRegenPerMinute:0.#} cargas/min");
 
-        // The HUD identifies each of these by a single letter and nothing else — no legend, and no
-        // hover to hang a tooltip off since this is a touch game. Printing the glyph beside the name
-        // here turns the pause screen into that legend, in the one place the player is already
-        // looking when they wonder what "N" was.
-        void PowerRow(Func<Player, bool> owned, string glyph, string name, Func<Player, string> value)
-        {
-            if (!owned(p)) return;
-            lines.Add($"[color=#cfd8e8]• [{glyph}] {name}[/color]  [color=#9aa8ba]{value(p)}[/color]");
-        }
-
+        // These used to print a bracketed letter beside the name ("[N] Mina"), because the HUD
+        // identified each cooldown icon by exactly that letter and there was no legend anywhere else.
+        // The icons draw real symbols now, so the letters would be a legend for something that no
+        // longer exists — worse than no legend. They're plain rows like everything else, and the
+        // HUD's own first-appearance callout is what teaches each symbol.
         Section("PODERES");
         Row(p => p.OrbitCount > 0, "Cuchillas Orbitales", p => $"{p.OrbitCount}");
         Row(p => p.CompanionStatPercent > 0, "Dron", p => $"{p.CompanionStatPercent * 100f:0}% de tus estadísticas");
-        PowerRow(p => p.LaserLevel > 0, "L", "Láser", p => $"{Glossary.LevelPrefix}{p.LaserLevel}");
-        PowerRow(p => p.MissileLevel > 0, "M", "Misil", p => $"{Glossary.LevelPrefix}{p.MissileLevel}");
-        PowerRow(p => p.MineLevel > 0, "N", "Mina", p => $"{Glossary.LevelPrefix}{p.MineLevel}");
-        PowerRow(p => p.OndaLevel > 0, "O", "Onda de Choque", p => $"{Glossary.LevelPrefix}{p.OndaLevel}");
-        PowerRow(p => p.VendavalLevel > 0, "V", "Vendaval", p => $"{Glossary.LevelPrefix}{p.VendavalLevel}");
-        PowerRow(p => p.ShieldRegenPerMinute > 0, "R", "Regeneración de escudo", p => $"{p.ShieldRegenPerMinute:0.#}/min");
+        Row(p => p.LaserLevel > 0, "Láser", p => $"{Glossary.LevelPrefix}{p.LaserLevel}");
+        Row(p => p.MissileLevel > 0, "Misil", p => $"{Glossary.LevelPrefix}{p.MissileLevel}");
+        Row(p => p.MineLevel > 0, "Mina", p => $"{Glossary.LevelPrefix}{p.MineLevel}");
+        Row(p => p.OndaLevel > 0, "Onda de Choque", p => $"{Glossary.LevelPrefix}{p.OndaLevel}");
+        Row(p => p.VendavalLevel > 0, "Vendaval", p => $"{Glossary.LevelPrefix}{p.VendavalLevel}");
+        // Shield regen is NOT repeated here. It was listed in both sections — once under DEFENSAS
+        // with its rate, once here purely to carry its "[R]" legend entry — and with the letters gone
+        // the second copy is the same predicate and the same number under a longer name.
         Row(p => p.BurnLevel > 0, "Incendiario", p => $"{Glossary.LevelPrefix}{p.BurnLevel}");
         Row(p => p.ThornsDamage > 0, "Escudo Voltáico", p => $"{p.ThornsDamage:0} daño");
 

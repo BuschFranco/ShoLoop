@@ -26,8 +26,17 @@ public partial class Bullet : Area2D
     private float _timeAlive = 0f;
     private readonly HashSet<ulong> _hitEnemies = new();
 
+    // Read off the scene rather than from Palette so the impact spark tracks whatever colour the
+    // bullet is actually painted — Bullet.tscn's colour is hand-kept in sync with Palette.PlayerBullet,
+    // and this way a drift between the two can't make the spark disagree with the projectile.
+    private Polygon2D _visual;
+
+    private const float EnemyImpactSize = 11f;
+    private const float WallImpactSize = 6f;
+
     public override void _Ready()
     {
+        _visual = GetNodeOrNull<Polygon2D>("Visual");
         BodyEntered += OnBodyEntered;
         Rotation = Direction.Angle();
     }
@@ -40,11 +49,27 @@ public partial class Bullet : Area2D
             QueueFree();
     }
 
+    // Purely cosmetic: no damage, no knockback, nothing gameplay-visible reads it. Colour is the
+    // bullet's own on-screen colour (the crit tint rides on the root's Modulate, so the product is
+    // exactly what the player sees), lightened because a spark should read hotter than the projectile
+    // that threw it — and because the arena's bloom only catches pixels above 0.85.
+    private void SpawnImpact(float size)
+    {
+        Color color = (_visual?.Color ?? Palette.PlayerBullet) * Modulate;
+        Juice.Spark(GetParent(), GlobalPosition, Direction, color.Lightened(0.35f), size);
+    }
+
     private void OnBodyEntered(Node2D body)
     {
         if (body is Enemy enemy)
         {
             _hitEnemies.Add(enemy.GetInstanceId());
+
+            // Fired here, above all three of this method's exits, rather than next to the QueueFree at
+            // the bottom: a ricochet and a pierce each return early, so hanging the effect off the
+            // bottom would silently skip every bounce and every enemy a piercing shot passes through —
+            // precisely the builds that land the most hits.
+            SpawnImpact(EnemyImpactSize);
 
             if (Knockback > 0f)
                 enemy.ApplyKnockback(Direction * Knockback);
@@ -78,6 +103,14 @@ public partial class Bullet : Area2D
 
         // The collision mask only lets enemies (layer 2) and obstacles (layer 8) through, so
         // anything that isn't an Enemy is a wall. Walls stop even a fully-pierced bullet.
+        //
+        // A wall hit gets its own, smaller spark: it's a miss, so it shouldn't read as loud as
+        // connecting with something. Skipped when the bullet already sparked on an enemy this frame
+        // (the pierce/ricochet paths return above, so reaching here after the Enemy branch means the
+        // shot is genuinely spent on that enemy and has already flashed).
+        if (body is not Enemy)
+            SpawnImpact(WallImpactSize);
+
         QueueFree();
     }
 

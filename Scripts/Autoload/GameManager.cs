@@ -145,6 +145,8 @@ public partial class GameManager : Node
 
         if (category == EnemyCategory.Boss)
         {
+            AudioManager.Instance?.Play(AudioManager.Sfx.BossDie);
+
             // Beating the very first boss is what unlocks Ultimates as a mechanic — a free choice
             // between three of them, once per run. Queued *before* BeginRoundEnd so it's already in
             // the queue when that drains it, and so the recap is up when the picker opens.
@@ -256,7 +258,14 @@ public partial class GameManager : Node
         XpChanged?.Invoke(Xp, XpToNextLevel);
 
         if (levelsGained > 0)
+        {
             LevelsGained?.Invoke(levelsGained);
+
+            // Here rather than in OnLevelGained, which runs once per threshold crossed: a kill that
+            // grants three levels at once should chime once, not stack three copies of the same
+            // arpeggio on one frame. Exactly the reasoning the "+3" popup above already follows.
+            AudioManager.Instance?.Play(AudioManager.Sfx.LevelUp);
+        }
     }
 
     private void OnLevelGained()
@@ -325,6 +334,10 @@ public partial class GameManager : Node
 
     private void BeginRoundEnd()
     {
+        // The single entry point for "the round is over", whether it ended on the timer or on the
+        // boss dying — so one hook covers both without either path needing to know about audio.
+        AudioManager.Instance?.Play(AudioManager.Sfx.RoundComplete);
+
         _pendingRoundEnd = true;
 
         // The recap used to be its own floating panel on its own CanvasLayer, shown here and left up
@@ -448,6 +461,10 @@ public partial class GameManager : Node
 
     private void BeginRoundAfterCountdown()
     {
+        // The "GO" at the end of the 3-2-1 the HUD is beeping out — same note family an octave up,
+        // so it lands as the resolution of that sequence rather than as an unrelated noise.
+        AudioManager.Instance?.Play(AudioManager.Sfx.RoundStart);
+
         var spawner = GetTree().GetFirstNodeInGroup("enemy_spawner") as EnemySpawner;
         var director = DangerDirectorNode;
 
@@ -549,6 +566,10 @@ public partial class GameManager : Node
     {
         if (IsPaused) return;
         PlayerDied?.Invoke();
+
+        // Only audible because AudioManager runs with ProcessMode.Always — Pause() four lines down
+        // freezes the tree, and a Pausable audio node would be cut off mid-sting.
+        AudioManager.Instance?.Play(AudioManager.Sfx.PlayerDie);
 
         RegisterFinalScore();
 
@@ -747,6 +768,44 @@ public partial class GameManager : Node
         config.Save(SettingsFilePath);
     }
 
+    // Three sliders, each 0 = silent and 1 = full, each mapped onto its own audio bus. None of them
+    // gets a mute toggle: reaching 0 already is the mute, exactly as it is for the two opacity
+    // settings above.
+    //
+    // Master needs no multiplication against the other two — SFX and Music send to it in
+    // default_bus_layout.tres, so the mixing is the bus graph's job, not this class's.
+    //
+    // The defaults live here on the declarations rather than in LoadSettings, because that method
+    // returns early when there's no settings file yet and never reaches its own defaults on a
+    // first-ever launch.
+    public float MasterVolume { get; private set; } = 1f;
+    public float SfxVolume { get; private set; } = 1f;
+    public float MusicVolume { get; private set; } = 0.7f;
+
+    public void SetMasterVolume(float volume) =>
+        SetVolume(volume, "master_volume", AudioManager.MasterBus, v => MasterVolume = v);
+
+    public void SetSfxVolume(float volume) =>
+        SetVolume(volume, "sfx_volume", AudioManager.SfxBus, v => SfxVolume = v);
+
+    public void SetMusicVolume(float volume) =>
+        SetVolume(volume, "music_volume", AudioManager.MusicBus, v => MusicVolume = v);
+
+    // The three setters differ only in which key they write and which bus they drive, so the shape
+    // (clamp → ConfigFile → Load → SetValue → Save → apply) lives once.
+    private void SetVolume(float volume, string key, string bus, Action<float> assign)
+    {
+        float clamped = Mathf.Clamp(volume, 0f, 1f);
+        assign(clamped);
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, key, clamped);
+        config.Save(SettingsFilePath);
+
+        AudioManager.Instance?.ApplyBusVolume(bus, clamped);
+    }
+
     // The persistent, cross-run currency — deliberately not Coins (which resets to 0 every run,
     // AddCoins/SpendCoins never touch disk) and not Score (a run-scoped counter whose only
     // persistence is a read-only high score/records list). Named "Libras" everywhere player-facing
@@ -899,6 +958,12 @@ public partial class GameManager : Node
         // any UI exists to set it.
         ReducedMotion = (bool)config.GetValue(SettingsSection, "reduced_motion", false);
         DangerLevel.Reduced = ReducedMotion;
+
+        // Not pushed to AudioManager here: that autoload is declared after this one and doesn't
+        // exist yet on the first boot frame. It reads these values itself in its own _Ready.
+        MasterVolume = Mathf.Clamp((float)config.GetValue(SettingsSection, "master_volume", 1f), 0f, 1f);
+        SfxVolume = Mathf.Clamp((float)config.GetValue(SettingsSection, "sfx_volume", 1f), 0f, 1f);
+        MusicVolume = Mathf.Clamp((float)config.GetValue(SettingsSection, "music_volume", 0.7f), 0f, 1f);
 
         // The selection used to be stored as an index into the built-in cast. Fall back to it when
         // the slug key is absent, so an existing settings.cfg keeps whoever it had picked instead of

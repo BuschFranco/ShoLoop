@@ -76,6 +76,11 @@ public partial class HUD : Control
 
     public override void _Ready()
     {
+        // The arena's music starts here rather than from a script on Arena.tscn's root, which has
+        // none. The HUD is the one node guaranteed to exist in every arena, and hanging it here also
+        // covers the Game Over screen's ReloadCurrentScene() retry path for free.
+        AudioManager.Instance?.PlayMusic(AudioManager.MusicTrack.Arena);
+
         _roundLabel = GetNode<Label>("TopBarPanel/TopBar/RoundLabel");
         _roundTimerLabel = GetNode<Label>("RoundTimerLabel");
         _levelLabel = GetNode<Label>("TopBarPanel/TopBar/LevelLabel");
@@ -122,6 +127,19 @@ public partial class HUD : Control
         _ondaIcon = GetNode<CooldownIcon>("CooldownIcons/OndaIcon");
         _vendavalIcon = GetNode<CooldownIcon>("CooldownIcons/VendavalIcon");
         _mineIcon = GetNode<CooldownIcon>("CooldownIcons/MineIcon");
+
+        // Which ability each icon draws is assigned here rather than exported from HUD.tscn. The
+        // scene used to carry an icon_color and a one-letter glyph per icon and they never actually
+        // reached the script — all seven rendered as the compiled-in default, a white disc with a
+        // "?". Set from code it simply can't silently not apply. See CooldownIcon's header.
+        _laserIcon.Kind = CooldownIcon.Ability.Laser;
+        _missileIcon.Kind = CooldownIcon.Ability.Missile;
+        _shieldRegenIcon.Kind = CooldownIcon.Ability.ShieldRegen;
+        _ultimateIcon.Kind = CooldownIcon.Ability.Ultimate;
+        _ondaIcon.Kind = CooldownIcon.Ability.Onda;
+        _vendavalIcon.Kind = CooldownIcon.Ability.Vendaval;
+        _mineIcon.Kind = CooldownIcon.Ability.Mine;
+
         _bossHealthBar = GetNode<Control>("BossHealthBar");
         _bossHpBar = GetNode<ProgressBar>("BossHealthBar/BossHpBar");
         _bossNameLabel = GetNode<Label>("BossHealthBar/BossNameLabel");
@@ -275,6 +293,10 @@ public partial class HUD : Control
             {
                 _countdownLabel.Text = countdownText;
                 Juice.ValuePop(_countdownLabel, 1.3f, 0.3f);
+
+                // This `if` is already a once-per-second change detector — it's what drives the pop.
+                // Reusing it is what keeps the beep at three beeps rather than one per frame.
+                AudioManager.Instance?.Play(AudioManager.Sfx.Countdown);
             }
             _roundTimerLabel.Text = "Preparate...";
             ResetRoundTimerLook();
@@ -467,11 +489,11 @@ public partial class HUD : Control
             _ultimateIcon.CooldownFraction = _player.UltimateCooldownRemaining / _player.UltimateCooldownDuration;
     }
 
-    // Announces the ability by name the first time its icon appears. The icon itself is a single
-    // letter with no legend on screen, so without this the player's first encounter with a new
-    // ability is an unexplained glyph materialising in the corner. Saying it once, at the moment it
-    // unlocks, is what makes the letter mean something afterwards — and the pause menu's loadout
-    // panel repeats the glyph→name pairing for anyone who missed it.
+    // Announces the ability by name the first time its icon appears. The icon is a wordless symbol
+    // with no legend on screen, so without this the player's first encounter with a new ability is an
+    // unexplained shape materialising in the corner. Saying it once, at the moment it unlocks, is
+    // what teaches the symbol — and the pause menu's loadout panel lists the same abilities by name
+    // for anyone who missed it.
     private void SetCooldownVisible(CooldownIcon icon, bool visible, string abilityName)
     {
         bool wasVisible = _cooldownWasVisible.TryGetValue(icon, out var prev) && prev;
@@ -506,10 +528,12 @@ public partial class HUD : Control
         // reads oddly, it just wants the fade. Not a scale-punch modal like everything else.
         if (bossAlive != _bossBarWasVisible)
         {
+            // sound: false — this is a health bar, not a modal. The boss arrival has its own sting;
+            // a menu whoosh on top of it would read as a UI screen opening that never opened.
             if (bossAlive)
-                Juice.ModalIn(_bossHealthBar, 0.25f, 1f);
+                Juice.ModalIn(_bossHealthBar, 0.25f, 1f, sound: false);
             else
-                Juice.ModalOut(_bossHealthBar, null, 0.25f, 1f);
+                Juice.ModalOut(_bossHealthBar, null, 0.25f, 1f, sound: false);
             _bossBarWasVisible = bossAlive;
         }
 

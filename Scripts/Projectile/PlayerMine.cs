@@ -90,27 +90,7 @@ public partial class PlayerMine : Node2D
     // this same frame and would take the visual down with it — same approach as Missile.
     private void SpawnBlastVisual()
     {
-        var parent = GetParent();
-        if (parent == null) return;
-
-        var visual = new Polygon2D();
-        var points = new Vector2[24];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * Radius;
-        }
-        visual.Polygon = points;
-        visual.Color = Palette.MineBlast;
-        visual.Scale = Vector2.Zero;
-        visual.ZIndex = 5;
-        parent.AddChild(visual);
-        visual.GlobalPosition = GlobalPosition;
-
-        var tween = visual.CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.2f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.35f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
+        AudioManager.Instance?.Play(AudioManager.Sfx.Explosion);
+        Juice.Blast(GetParent(), GlobalPosition, Radius, Palette.MineBlast);
     }
 }

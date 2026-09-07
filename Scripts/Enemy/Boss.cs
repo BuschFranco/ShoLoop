@@ -466,30 +466,13 @@ public partial class Boss : ShooterEnemy
         SpawnShockwaveVisual();
     }
 
-    private void SpawnShockwaveVisual()
-    {
-        var parent = GetParent();
-        if (parent == null) return;
-
-        var visual = new Polygon2D();
-        var points = new Vector2[28];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * ShockwaveRadius;
-        }
-        visual.Polygon = points;
-        visual.Color = Palette.EnemyBullet;
-        visual.ZIndex = 5;
-        parent.AddChild(visual);
-        visual.GlobalPosition = GlobalPosition;
-
-        var tween = visual.CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(visual, "scale", Vector2.One, 0.3f).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(visual, "modulate:a", 0f, 0.4f);
-        tween.Chain().TweenCallback(Callable.From(() => visual.QueueFree()));
-    }
+    // This used to be the one copy of the shared blast pattern that never set its starting Scale, so
+    // it popped in at full size and its expand tween — animating toward a Vector2.One it was already
+    // at — did nothing. The shockwave now actually rolls outward, which is what a shockwave has to do
+    // to read as one you should be running away from.
+    private void SpawnShockwaveVisual() =>
+        Juice.Blast(GetParent(), GlobalPosition, ShockwaveRadius, Palette.EnemyBullet,
+            growTime: 0.3f, fadeTime: 0.4f, segments: 28);
 
     // Scattered around the player like MeteorRain, but with a minimum clearance — a mine dropped
     // directly underfoot would be undodgeable, the whole point of Mine.cs's pulse is to bait a step

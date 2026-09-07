@@ -11,6 +11,11 @@ public partial class Companion : Node2D
     // the drone should read as part of the same visual language, not its own thing.
     private const float FacingTurnRate = 16f;
 
+    // Same idea for the muzzle flash, scaled down: the drone is a smaller gun, so it gets a smaller
+    // flash pushed a shorter distance out.
+    private const float MuzzleFlashOffset = 13f;
+    private const float MuzzleFlashSize = 8f;
+
     private Timer _fireCooldown;
     private Node2D _bulletsContainer;
     private Polygon2D _visual;
@@ -82,6 +87,11 @@ public partial class Companion : Node2D
         var bullet = BulletScene.Instantiate<Bullet>();
         bullet.GlobalPosition = GlobalPosition;
         bullet.Direction = (nearest.GlobalPosition - GlobalPosition).Normalized();
+
+        // Smaller than the player's own flash, in proportion to the drone being a scaled-down version
+        // of the same gun — it should read as the drone contributing, not as a second player.
+        Juice.Spark(_bulletsContainer, GlobalPosition + bullet.Direction * MuzzleFlashOffset,
+            bullet.Direction, Palette.PlayerBullet.Lightened(0.4f), MuzzleFlashSize);
 
         // Rebote reward: the drone shares the player's bounce count at any tier — ricochet is a
         // build-defining stat, and the drone is just a scaled-down version of the player's gun.

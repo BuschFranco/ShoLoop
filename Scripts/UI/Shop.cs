@@ -274,7 +274,14 @@ public partial class Shop : Control
         if (player != null && player.IsRewardUseless(item)) return;
 
         int cost = GetCost(index);
-        if (GameManager.Instance.Coins < cost) return;
+        if (GameManager.Instance.Coins < cost)
+        {
+            // The one branch a player can reach by tapping a card that looks buyable — the other two
+            // returns above are already-bought or maxed-out cards, which say so on their face. This
+            // is the case that otherwise produces a tap and total silence.
+            AudioManager.Instance?.Play(AudioManager.Sfx.UiDenied);
+            return;
+        }
 
         // The purchase itself lands immediately — only the modal's *exit* waits for the flare, so the
         // confirmation animation never delays gameplay state.
@@ -287,6 +294,7 @@ public partial class Shop : Control
 
         _cards[index].PlayConfirmFlare();
         PulseCoins(cost);
+        AudioManager.Instance?.Play(AudioManager.Sfx.UiBuy);
 
         RefreshCards();
         CheckAutoAdvance();

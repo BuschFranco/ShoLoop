@@ -80,25 +80,14 @@ public partial class Mine : Area2D
         SpawnBlast();
     }
 
+    // The blast now outlives the mine instead of the other way round: it used to be a child here, with
+    // the mine kept alive purely so its tween could finish and then free it. Handing the effect to the
+    // parent lets the spent mine go immediately, which is also what every other detonating thing in
+    // the project does.
     private void SpawnBlast()
     {
-        var blast = new Polygon2D();
-        var points = new Vector2[24];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * BlastRadius;
-        }
-        blast.Polygon = points;
-        blast.Color = Palette.MissileBlast;
-        blast.Scale = Vector2.One * 0.3f;
-        AddChild(blast);
-
-        var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(blast, "scale", Vector2.One, 0.2f)
-            .SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(blast, "modulate:a", 0f, 0.3f);
-        tween.Chain().TweenCallback(Callable.From(QueueFree));
+        AudioManager.Instance?.Play(AudioManager.Sfx.Explosion);
+        Juice.Blast(GetParent(), GlobalPosition, BlastRadius, Palette.MissileBlast, fadeTime: 0.3f);
+        QueueFree();
     }
 }
