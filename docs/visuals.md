@@ -49,11 +49,11 @@ Pink/magenta primary, cyan for the player, violet/purple for variety, deep purpl
 | Role | Colour | Notes |
 |---|---|---|
 | Player ship | `#7dfdfe` electric cyan | The one cold colour. The player must stay findable in a pink crowd — a pink ship wouldn't be. |
-| Player bullets | `#ff4fd8` hot pink | |
+| Player bullets | `#3dff8f` bright green | The whole player weapon family is green, so your own fire never reads as incoming. |
 | Crit bullets | `#ffe066` gold | Deliberately *outside* the pink family so a crit reads as different. |
-| Orbit blades | `#f9c2ff` pink lilac | |
-| Laser | `#ff2fb9` magenta | |
-| Missile / blast | `#ff8ae2` / `#ff6ec7` | |
+| Orbit blades | `#a8ffc8` pale green | |
+| Laser | `#3dff8f` green @ 0.85 | |
+| Missile / blast | `#3dff8f` / `#3dff8f` @ 0.5 | |
 | Grunt | `#ff2e88` hot pink | |
 | Rare | `#b14aed` violet | |
 | Tank | `#ff5c8a` coral pink | |
@@ -99,7 +99,12 @@ Contrast values tuned against that backdrop:
 
 `ArenaBounds` also draws a 200px grid across the playfield. The arena is several screens wide and
 the camera follows the player, so on an otherwise empty dark field there's nothing for the eye to
-measure motion against — you can be moving fast and not feel it. It's ~26 `Line2D`s created once.
+measure motion against — you can be moving fast and not feel it. It's 34 `Line2D`s created once.
+
+Grid lines fade toward the arena edge (`GridEdgeFade`, down to 30% of the base alpha at the
+boundary), so the floor reads as receding rather than as a flat sheet that simply stops. It is not
+taken to zero: the grid's actual job is giving the eye something to measure motion against, and that
+matters most out near the rim where there's least else on screen.
 
 ## Glow (the part that makes it "neon")
 
@@ -116,6 +121,82 @@ Two settings matter and are easy to get wrong:
 Glow is supported by Godot's **Mobile** renderer, which this project uses
 (`renderer/rendering_method = "mobile"`) — but it is not free. If framerate suffers on device, the
 cheapest wins are lowering `glow_strength`/`glow_bloom`, or disabling `adjustment_enabled`.
+
+The threshold is also the reason **"add a flare" here never means "add a shader"**. Anything painted
+with a channel near `1.0` blooms on its own. Every glow effect in the game is a plain `Polygon2D` or a
+tinted `Sprite2D` copy that happens to be bright enough — there is not one `.gdshader`,
+`ShaderMaterial` or `Light2D` in the project, and there does not need to be.
+
+## Fake depth
+
+The game is 2D and stays 2D. Depth is faked with three cheap, static tricks, all of which cost nothing
+per frame:
+
+**Drop shadows.** `Juice.AttachShadow` clones an entity's `Sprite2D` into a flat black copy offset
+behind it. One `Juice.ShadowDirection` (down-and-right, i.e. a light up and to the left) is shared by
+every caller — the illusion only holds while every shadow in the arena agrees, so the direction lives
+in exactly one place and the obstacles reach for it through `Juice.ShadowOffsetFor` rather than
+re-deciding it. The offset scales with each sprite's own on-screen height, because the cast runs from a
+0.25-scaled grunt to the 0.7-scaled boss and a flat pixel offset that reads right on one is invisible
+on the other.
+
+It works on the boss's photo portrait as well as on the white SVG silhouettes: `Modulate` multiplies,
+and black times anything is black. This is also why a burning enemy's shadow doesn't turn orange —
+`TickBurn` tints the enemy *root*, which multiplies down onto a shadow whose RGB is already 0.
+
+**Rim flare.** `Enemy.CreateRimFlare` puts a slightly larger copy of the enemy's own silhouette behind
+it in the enemy's own identity colour. Since those colours all carry a channel at 1.0, the rim clears
+the bloom threshold and lights itself. It is the everyday version of the elite aura
+(`CreateEliteGlow`), which is the same trick louder — and the two are mutually exclusive on purpose:
+stacking them costs a draw per elite and muddies the modifier colour that has to stay readable at a
+glance. The **boss is skipped**, because its `Visual` is a photo rather than a tintable silhouette, so
+a scaled-up copy reads as a doubled image instead of a rim.
+
+**Extruded obstacles.** `Obstacle` draws its top face offset *toward* the light — the exact opposite
+of where its shadow falls — and fills the gap between that and the base footprint with two darker
+walls. Only two of the four walls are ever visible, and which two follows from the light being up and
+to the left: the ones facing down and right. The down-facing one is darker, because a light that's
+mostly overhead reaches it least.
+
+`ExtrudeHeight` is uniform across every obstacle rather than derived from `Size` — blocks that got
+taller as they got wider would read as an inconsistent world instead of furniture at one wall height.
+**Collision deliberately stays on the base footprint**: the extrusion is a dozen pixels of paint, and
+a wall you collide with somewhere other than where its base is drawn feels worse than a top face that
+overlaps a little of the floor behind it.
+
+**Parallax dust.** `DustField` scatters faint dots and tracks the camera at a fraction of its rate, so
+panning separates the layer from the floor. Drawn in a single `_Draw` pass rather than as N nodes.
+
+### Where the new layers sit
+
+`z_index` only orders siblings within a `CanvasLayer` (see the layering note below), and
+`z_as_relative` defaults to true — so a child at `-2` resolves relative to its own parent and stays
+glued under that entity rather than sinking behind unrelated hazards that also live at `-1`.
+
+| ZIndex | What |
+|---|---|
+| −4 | `DustField` |
+| −3 | Grid lines |
+| −2 | Arena outline · **entity drop shadows** |
+| −1 | Floor hazards, fire-range ring, thruster puffs · **enemy rim flare / elite aura** · obstacle shadows |
+| 0 | Entity bodies, bullets, obstacles |
+| 4 | `Juice.Spark` (muzzle flashes, impacts) |
+| 5 | `Juice.Blast` (explosions, novas, shockwaves) |
+
+Spark sits just under Blast so that when a missile detonates on an enemy a bullet just sparked, the
+bigger explosion is the thing on top.
+
+### One-shot world effects
+
+`Juice.Blast` / `Juice.Spark` / `Juice.CirclePoints` replaced eight hand-copied versions of the same
+"build a circle `Polygon2D`, expand it, fade it, free it" block. That duplication was not harmless:
+one copy (the boss shockwave) had quietly lost its `Scale = Vector2.Zero` line, so it popped in at full
+size and its expand tween animated toward a value it was already at.
+
+Both helpers take the **parent** rather than finding one, because the thing that triggers an effect
+usually `QueueFree`s on the same frame and a child of a freed node dies before its tween can run. For
+the same reason the tween is created on the visual, not on the caller — and `GlobalPosition` is
+assigned *after* `AddChild`, since before that there's no parent transform to resolve against.
 
 ## Animation
 
@@ -209,9 +290,9 @@ trough and a bright peak. The peak blooms, the trough doesn't, and that contrast
 - **Pulse rate is bounded at 0.56–1.19 Hz with a hard 0.40s floor per leg**, well inside WCAG 2.3.1's
   three-flashes-per-second limit even allowing for bloom enlarging the perceived flashing area. The bars
   cover ~1.7% of the screen.
-- **`DangerLevel.Reduced`** holds the alarm at its trough and halves camera shake. Nothing sets it yet —
-  there's no settings menu to hang a toggle off — but every consumer already honours it, so wiring one
-  later is a single line rather than a refactor.
+- **`DangerLevel.Reduced`** holds the alarm at its trough, halves camera shake, and makes every `Juice`
+  helper drop its movement while keeping its meaning. Toggled from the Options screen and persisted via
+  `GameManager.SetReducedMotion`, which pushes onto the static flag the consumers actually read.
 
 ### Layering and the pause interaction
 
@@ -272,8 +353,9 @@ style (`StyleBoxFlat_orientation_selected`, applied via `theme_override_styles/p
 of the same subdued outline as the unselected one, so which orientation is currently active is
 obvious at a glance.
 
-- `project.godot` sets an explicit base viewport of **1152×648** (was previously Godot's implicit
-  default of the same size, now spelled out since code needs an exact reference to swap against)
+- The base viewport is **1152×648** — Godot's implicit default, which `project.godot` does *not*
+  spell out. The numbers live in `GameManager.LandscapeBaseSize`/`PortraitBaseSize`, which is the
+  reference code actually swaps against
   with `window/stretch/mode="canvas_items"` + `aspect="expand"`. That combination scales UI, and
   reveals extra world through the camera, relative to whichever size is currently set as the root
   `Window`'s `ContentScaleSize` — landscape uses the base 1152×648, portrait swaps to 648×1152.
