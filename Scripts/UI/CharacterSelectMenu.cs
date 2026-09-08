@@ -300,7 +300,12 @@ public partial class CharacterSelectMenu : Control
             float lineHeight = font.GetHeight(fontSize);
             float needed = font.GetMultilineStringSize(text, HorizontalAlignment.Left,
                                DescriptionTextWidth, fontSize).Y + lineHeight;
-            target = new Vector2(0, Mathf.Min(needed, MaxDescriptionHeight));
+            // The ceiling is whatever the viewport leaves once the rest of the panel has taken its
+            // share, not a constant. MaxDescriptionHeight caps it further so a short panel on a tall
+            // screen doesn't hand the description half the display.
+            float ceiling = Mathf.Min(MaxDescriptionHeight,
+                UIUtil.AvailableScrollHeight(_panel, _descScroll));
+            target = new Vector2(0, Mathf.Min(needed, ceiling));
         }
 
         // Eased instead of snapped, so switching between a short and a long description doesn't

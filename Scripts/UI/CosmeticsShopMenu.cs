@@ -6,11 +6,11 @@ using Godot;
 // Where Libras' second sink lives: swap purely cosmetic colours for a currency whose only other use
 // is the three "secreto" pilot slots.
 //
-// WHY THIS IS A TAB PICKER AND NOT EIGHT ROWS
-// -------------------------------------------
+// WHY THIS IS A TAB PICKER AND NOT ONE ROW PER CATEGORY
+// -----------------------------------------------------
 // Every category offers the same colour list, so the obvious layout -- one row of swatches per
-// category -- means printing the identical palette eight times over. At four categories and six
-// colours that was merely repetitive; at eight and sixteen it's 128 squares in a scroll view, and
+// category -- means printing the identical palette once per category. At four categories and six
+// colours that was merely repetitive; at six and sixteen it's 96 squares in a scroll view, and
 // finding the one you want means counting rows.
 //
 // So the category is chosen first, on a compact grid of tabs, and only that category's palette is
@@ -35,12 +35,6 @@ public partial class CosmeticsShopMenu : Control
     private readonly List<(Button Button, string Id)> _swatches = new();
     private Label _sectionLabel;
     private VBoxContainer _paletteBox;
-
-    // Same bound-the-ScrollContainer fix OptionsMenu/PauseMenu already use for the same reason: a
-    // CenterContainer never bounds a ScrollContainer's height on its own, so without this the panel
-    // would grow past the screen.
-    private const float ScrollHeightLandscape = 560f;
-    private const float ScrollHeightPortrait = 1000f;
 
     private const float SwatchSize = 44f;
 
@@ -310,10 +304,12 @@ public partial class CosmeticsShopMenu : Control
         return luma > 0.6f ? Colors.Black : Colors.White;
     }
 
+    // Derived from the live viewport rather than a pair of hardcoded landscape/portrait numbers. Those
+    // were measured against 648px and were only ever right for the text that existed when they were
+    // written -- see UIUtil.FitScrollToViewport.
     private void FitToOrientation()
     {
-        bool landscape = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Landscape;
-        _scroll.CustomMinimumSize = new Vector2(0f, landscape ? ScrollHeightLandscape : ScrollHeightPortrait);
+        UIUtil.FitScrollToViewport(_scroll, _panel);
     }
 
     public void Open()

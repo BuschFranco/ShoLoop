@@ -53,19 +53,15 @@ public partial class PauseMenu : Control
         // (a CenterContainer never bounds a ScrollContainer's height on its own). Bounding Scroll to
         // the same height already used for the loadout panel on the right keeps both columns the same
         // height instead of one overflowing past the other.
+        // One height for both columns, derived from the live viewport rather than a landscape/portrait
+        // pair of constants. They stay equal on purpose (see above); only where the number comes from
+        // changed -- see UIUtil.AvailableScrollHeight.
         bool portrait = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
-        if (portrait)
-        {
-            _pausePanel.CustomMinimumSize = new Vector2(250f, 0f);
-            _scroll.CustomMinimumSize = new Vector2(0f, 940f);
-            _loadoutMenu.CustomMinimumSize = new Vector2(360f, 940f);
-        }
-        else
-        {
-            _pausePanel.CustomMinimumSize = new Vector2(340f, 0f);
-            _scroll.CustomMinimumSize = new Vector2(0f, 520f);
-            _loadoutMenu.CustomMinimumSize = new Vector2(460f, 520f);
-        }
+        _pausePanel.CustomMinimumSize = new Vector2(portrait ? 250f : 340f, 0f);
+
+        float height = UIUtil.AvailableScrollHeight(_pausePanel, _scroll);
+        _scroll.CustomMinimumSize = new Vector2(0f, height);
+        _loadoutMenu.CustomMinimumSize = new Vector2(portrait ? 360f : 460f, height);
     }
 
     public void Open()

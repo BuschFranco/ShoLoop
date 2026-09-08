@@ -50,8 +50,6 @@ public partial class OptionsMenu : Control
     // The hint the feedback line falls back to when nothing has been submitted yet.
     private const string CodeIdleHint = "Los códigos se canjean una sola vez.";
 
-    private const float ScrollHeightLandscape = 560f;
-    private const float ScrollHeightPortrait = 1000f;
 
     public override void _Ready()
     {
@@ -157,10 +155,12 @@ public partial class OptionsMenu : Control
         _codeFeedback.AddThemeColorOverride("font_color", color);
     }
 
+    // Derived from the live viewport rather than a pair of hardcoded landscape/portrait numbers. Those
+    // were measured against 648px and were only ever right for the text that existed when they were
+    // written -- see UIUtil.FitScrollToViewport.
     private void FitToOrientation()
     {
-        bool landscape = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Landscape;
-        _scroll.CustomMinimumSize = new Vector2(0f, landscape ? ScrollHeightLandscape : ScrollHeightPortrait);
+        UIUtil.FitScrollToViewport(_scroll, _panel);
     }
 
     public void Open()

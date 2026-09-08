@@ -15,13 +15,11 @@ public partial class GameOverStatsMenu : Control
     private LoadoutMenu _loadoutMenu;
     private Control _hbox;
 
-    // Same numbers PauseMenu uses for the same reason — see PauseMenu.cs for the full rationale
-    // (a CenterContainer never bounds a ScrollContainer's height on its own).
+    // Same widths PauseMenu uses. The matching *heights* are gone: they're derived from the viewport
+    // now (UIUtil.AvailableScrollHeight), which is what stops this panel running off a short screen.
     private const float PortraitPanelWidth = 250f;
-    private const float PortraitScrollHeight = 940f;
     private const float PortraitLoadoutWidth = 360f;
     private const float LandscapePanelWidth = 340f;
-    private const float LandscapeScrollHeight = 520f;
     private const float LandscapeLoadoutWidth = 460f;
 
     public override void _Ready()
@@ -40,19 +38,16 @@ public partial class GameOverStatsMenu : Control
         _closeButton.Pressed += Close;
         Juice.WireButtonFeedback(_closeButton);
 
+        // One height for both columns, derived from the live viewport rather than a landscape/portrait
+        // pair of constants. They stay equal on purpose (see above); only where the number comes from
+        // changed -- see UIUtil.AvailableScrollHeight.
         bool portrait = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
-        if (portrait)
-        {
-            _panel.CustomMinimumSize = new Vector2(PortraitPanelWidth, 0f);
-            _scroll.CustomMinimumSize = new Vector2(0f, PortraitScrollHeight);
-            _loadoutMenu.CustomMinimumSize = new Vector2(PortraitLoadoutWidth, PortraitScrollHeight);
-        }
-        else
-        {
-            _panel.CustomMinimumSize = new Vector2(LandscapePanelWidth, 0f);
-            _scroll.CustomMinimumSize = new Vector2(0f, LandscapeScrollHeight);
-            _loadoutMenu.CustomMinimumSize = new Vector2(LandscapeLoadoutWidth, LandscapeScrollHeight);
-        }
+        _panel.CustomMinimumSize = new Vector2(portrait ? PortraitPanelWidth : LandscapePanelWidth, 0f);
+
+        float height = UIUtil.AvailableScrollHeight(_panel, _scroll);
+        _scroll.CustomMinimumSize = new Vector2(0f, height);
+        _loadoutMenu.CustomMinimumSize =
+            new Vector2(portrait ? PortraitLoadoutWidth : LandscapeLoadoutWidth, height);
     }
 
     public void Open()

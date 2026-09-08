@@ -128,8 +128,10 @@ public partial class MainMenu : Control
     private const int MaxRecordsShown = 10;
 
     // How many monospaced characters fit across RecordsPanel: 340px wide, less 14px content margin
-    // and a 2px border on each side, over a 12px character advance at font_size 16 (see
-    // tools/gen_font.py -- at 16 the font's block is exactly 2px, which is why that size was picked).
+    // and a 2px border on each side, leaves 308px. PixelFont's advance is 0.6 em (6 blocks of 10 to
+    // the em, see tools/gen_font.py), so at font_size 16 that's 9.6px per character and about 32 fit.
+    // Held at 25 deliberately -- the budget only decides whether the column gap is one space or two,
+    // and leaving headroom means a longer date format or a wider score can't start wrapping rows.
     private const int CharBudget = 25;
 
     private void PopulateRecords()

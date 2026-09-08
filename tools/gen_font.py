@@ -12,14 +12,31 @@ scaling, which we explicitly decided not to change.
 
 THE GRID
 --------
-Glyphs are 5 wide by 7 tall, the last row sitting on the baseline. One grid pixel is 125 font units
-against an em of 1000, i.e. **8 grid pixels to the em**. That ratio is chosen so the game's most-used
-size lands exactly: at font_size 16 one grid pixel is exactly 2.0 screen pixels, and 20/24/32/40/72
-come out whole too. Sizes like 13 land on a fraction and the rasterizer rounds them -- squares end up
-1 or 2 px wide rather than uniformly 1.6 -- which reads as pixel-art rather than as blur.
+Glyphs are 5 wide by 7 tall, the last row sitting on the baseline. One grid pixel is 100 font units
+against an em of 1000, i.e. **10 grid pixels to the em**, laid out so that everything the font draws
+fits inside a 1.0 em line box:
 
-Accents and descenders deliberately overflow the em box (up to 1125 units up, 125 down). That is
-legal TrueType; the hhea/OS/2 ascender and descender below are set to cover them so lines never clip.
+    rows -2, -1   accent zone (uppercase acute and tilde)   ascent  = 900
+    rows 0 .. 6   the letter itself                         cap     = 700
+    row  7        descenders                                descent = 100
+
+LINE HEIGHT IS THE CONSTRAINT, and it is not a free choice. This font replaced a SystemFont resolving
+to Consolas, whose line height is exactly 1.000 em -- and every hardcoded height budget in the UI
+(CharacterSelectMenu's panel, RewardCard's clipped boxes, the bounded ScrollContainers) was measured
+against that. An earlier version of this file used 8 grid pixels to the em with the accent zone
+*outside* the box, giving 1.250 em lines: every line of text in the game grew 25%, and panels that
+had fitted for months started running off the bottom of the screen.
+
+The obvious repair -- keep the 8-pixel grid and just declare a shorter ascent -- is worse than it
+looks. Godot places the first baseline using the ascent, so glyphs drawn above it render above the
+label's own rect, and any container with clip_contents (RewardCard's boxes, CharacterSelectMenu's
+RecordsBox) would simply cut the accent off "RÉCORDS" and "COMÚN". A shorter em pixel is the only
+arrangement where the lines are the right height *and* nothing draws outside the box.
+
+The cost is one lost nicety: at 8 pixels/em the game's most-used font_size (16) put a grid pixel at
+exactly 2.0 screen pixels. At 10 it lands on 1.6, so size 16 now rounds unevenly like the other
+fourteen sizes do. With antialiasing off that still rasterises to hard edges -- squares come out 1 or
+2 px rather than uniformly 1.6 -- which reads as pixel-art, not as blur. Sizes 20/30/40 land whole.
 
 Run:  python tools/gen_font.py
       python tools/gen_font.py --out /tmp/try   # write somewhere else first
@@ -44,16 +61,17 @@ except ImportError:
 # --- Metrics ---------------------------------------------------------------------------------
 
 UNITS_PER_EM = 1000
-PIXEL = 125                    # 8 grid pixels to the em; see the module docstring for why
+PIXEL = 100                    # 10 grid pixels to the em; see the module docstring for why
 GLYPH_COLS = 5
 BASELINE_ROW = 6               # the last row of the 7-row block rests on the baseline
 ADVANCE = (GLYPH_COLS + 1) * PIXEL   # one blank column of letter-spacing
 
-# Row -2 is the top of an uppercase accent; row 7 is the bottom of a descender.
-ASCENT = (BASELINE_ROW - (-2) + 1) * PIXEL   # 1125
-DESCENT = -(7 - BASELINE_ROW) * PIXEL        # -125
-CAP_HEIGHT = 7 * PIXEL                       # 875
-X_HEIGHT = 5 * PIXEL                         # 625, lowercase starts at row 2
+# Row -2 is the top of an uppercase accent; row 7 is the bottom of a descender. Ascent and descent
+# cover both, so ASCENT - DESCENT == UNITS_PER_EM exactly: a 1.0 em line box that nothing overflows.
+ASCENT = (BASELINE_ROW - (-2) + 1) * PIXEL   # 900
+DESCENT = -(7 - BASELINE_ROW) * PIXEL        # -100
+CAP_HEIGHT = 7 * PIXEL                       # 700
+X_HEIGHT = 5 * PIXEL                         # 500, lowercase starts at row 2
 
 FAMILY = "Infinitix Pixel"
 VERSION = "1.000"
