@@ -25,7 +25,10 @@ public partial class ArenaBounds : Line2D
         AddPoint(new Vector2(-e.X, -e.Y));
 
         Width = 6f;
-        DefaultColor = GameManager.Instance.CosmeticColor(CosmeticCategory.Arena, Palette.ArenaBounds);
+        // The boundary animates; the grid below does not. The grid is one Line2D per line across a
+        // multi-screen arena, and a looping tween on each would be a lot of tweens for something that
+        // sits at 0.16 alpha behind everything. The wall is the part you actually look at.
+        Juice.ApplyCosmetic(this, "default_color", CosmeticCategory.Arena, Palette.ArenaBounds);
         ZIndex = -2;
 
         DrawGrid(e);

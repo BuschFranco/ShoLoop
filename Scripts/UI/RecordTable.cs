@@ -29,7 +29,7 @@ public static class RecordTable
     /// the gap between columns tightens rather than letting a row wrap.
     /// </summary>
     public static string Build(IReadOnlyList<GameManager.ScoreRecord> records, int maxRows,
-        int charBudget, string emptyText)
+        int charBudget, string emptyText, bool animateFirst = false)
     {
         if (records == null || records.Count == 0) return emptyText;
 
@@ -73,6 +73,19 @@ public static class RecordTable
                 $"[color={ScoreColor}]{score[i].PadLeft(scoreWidth)}[/color]{pad}" +
                 $"[color={RoundColor}]{round[i].PadRight(roundWidth)}[/color]{pad}" +
                 $"[color={DateColor}]{date[i]}[/color]";
+
+            // The best run gets the same per-glyph bob the main menu's title has, so the two read as
+            // belonging to the same screen. [wave] only offsets each glyph's Y, never its advance, so
+            // the columns stay lined up underneath it -- which is the only reason this can be dropped
+            // onto an aligned table at all.
+            //
+            // Wrapped OUTSIDE the [color] tags: the effect takes a character range and the colours
+            // apply within it; the other order silently drops the colours.
+            if (i == 0 && animateFirst && !DangerLevel.Reduced)
+                // Same freq as the title so the two look related, but a third of the amplitude:
+                // rows sit 20px apart at this font size, and the title's +/-9px would have the best
+                // run wandering into second place.
+                lines[i] = $"[wave amp=35.0 freq=2.6]{lines[i]}[/wave]";
         }
         return string.Join("\n", lines);
     }

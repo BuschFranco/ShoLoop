@@ -100,14 +100,6 @@ public partial class Companion : Node2D
         int baseDamage = Mathf.Max(1, Mathf.RoundToInt(OwnerPlayer.BulletDamage * StatPercent * OwnerPlayer.GetClassCompanionMultiplier()));
         bullet.Damage = OwnerPlayer.ApplyCrit(baseDamage, out bool isCrit);
 
-        // Same cosmetic/crit resolution as the player's own gun (Player.cs) — the drone is a
-        // scaled-down version of it, and Bullet.tscn's Visual/Halo are plain white now (Modulate is
-        // the only thing that ever colours one), so this has to be set explicitly rather than left
-        // to whatever the scene's own base color used to be.
-        bullet.Modulate = isCrit
-            ? Palette.CritBullet
-            : GameManager.Instance.CosmeticColor(CosmeticCategory.Bullet, Palette.PlayerBullet);
-
         // Incendiario reward: the drone's shots burn too, at full DPS/duration — Incendiario is a
         // status the target catches, not a magnitude stat, so there's no "35% of the burn" to scale
         // it by the way Damage above is scaled.
@@ -115,5 +107,16 @@ public partial class Companion : Node2D
         bullet.BurnDuration = OwnerPlayer.CurrentBurnDuration;
 
         _bulletsContainer.AddChild(bullet);
+
+        // Same cosmetic/crit resolution as the player's own gun (Player.cs) — the drone is a
+        // scaled-down version of it, and Bullet.tscn's Visual/Halo are plain white now (Modulate is
+        // the only thing that ever colours one), so this has to be set explicitly rather than left
+        // to whatever the scene's own base color used to be.
+        //
+        // Applied after AddChild, not before: an animated Epico colour starts a Tween, and
+        // CreateTween on a node that isn't in the tree yet fails. A crit keeps its own fixed colour —
+        // crits have to stay instantly distinguishable, and a shimmering one wouldn't be.
+        if (isCrit) bullet.Modulate = Palette.CritBullet;
+        else Juice.ApplyCosmetic(bullet, "modulate", CosmeticCategory.Bullet, Palette.PlayerBullet);
     }
 }

@@ -31,6 +31,16 @@ public readonly struct CosmeticOption
     public Color Color { get; init; }
     public int Cost { get; init; }
     public CosmeticTier Tier { get; init; }
+
+    /// <summary>The far end of an Epico colour's animation. Unset (alpha 0) means it doesn't move.</summary>
+    public Color Pulse { get; init; }
+
+    /// <summary>Seconds for one full there-and-back cycle. This is the character of the effect: a
+    /// tenth of a second reads as an electrical crackle, a quarter as a flame, most of a second as
+    /// something breathing.</summary>
+    public float Period { get; init; }
+
+    public bool IsAnimated => Period > 0f && Pulse.A > 0f;
 }
 
 // Presentation only, same role as CharacterCatalog: no gameplay logic lives here.
@@ -80,10 +90,27 @@ public static class CosmeticCatalog
         new() { Id = "cian", Name = "Cian", Color = new Color("3dfff0"), Cost = 22, Tier = CosmeticTier.Raro },
         new() { Id = "rosa", Name = "Rosa", Color = new Color("ff5fa8"), Cost = 22, Tier = CosmeticTier.Raro },
 
-        // --- Epico: HDR, past 1.0 on purpose ---
-        new() { Id = "plasma", Name = "Plasma", Color = new Color(2.1f, 0.35f, 1.5f), Cost = 70, Tier = CosmeticTier.Epico },
-        new() { Id = "fusion", Name = "Fusión", Color = new Color(2.3f, 1.45f, 0.25f), Cost = 80, Tier = CosmeticTier.Epico },
-        new() { Id = "vacio", Name = "Vacío", Color = new Color(0.4f, 1.0f, 2.5f), Cost = 90, Tier = CosmeticTier.Epico },
+        // --- Epico: HDR, past 1.0 on purpose, and the only tier that moves ---
+        //
+        // Each one animates between Color and Pulse, and the period is what separates them: Plasma
+        // snaps white nine times a second and reads as electricity, Fusión rolls between orange and a
+        // deep ember at roughly the rate a flame gutters, and Vacío breathes. Without the differing
+        // periods all three would just be "a colour that pulses".
+        new()
+        {
+            Id = "plasma", Name = "Plasma", Cost = 70, Tier = CosmeticTier.Epico,
+            Color = new Color(2.1f, 0.35f, 1.5f), Pulse = new Color(3.2f, 2.4f, 3.4f), Period = 0.11f,
+        },
+        new()
+        {
+            Id = "fusion", Name = "Fusión", Cost = 80, Tier = CosmeticTier.Epico,
+            Color = new Color(2.3f, 1.45f, 0.25f), Pulse = new Color(3.0f, 0.55f, 0.08f), Period = 0.26f,
+        },
+        new()
+        {
+            Id = "vacio", Name = "Vacío", Cost = 90, Tier = CosmeticTier.Epico,
+            Color = new Color(0.4f, 1.0f, 2.5f), Pulse = new Color(1.7f, 0.45f, 3.2f), Period = 0.62f,
+        },
     };
 
     public static CosmeticOption Get(string id)
@@ -112,6 +139,15 @@ public static class CosmeticCatalog
         cosmeticId == DefaultId
             ? baseColor
             : new Color(ColorFor(cosmeticId), baseColor.A);
+
+    /// <summary>The other end of an animated colour, or the same colour when it doesn't move — so a
+    /// caller can ask for both ends unconditionally and let the period decide whether to animate.</summary>
+    public static Color ResolvePulse(string cosmeticId, Color baseColor)
+    {
+        if (cosmeticId == DefaultId) return baseColor;
+        var option = Get(cosmeticId);
+        return option.IsAnimated ? new Color(option.Pulse, baseColor.A) : new Color(option.Color, baseColor.A);
+    }
 
     // Row headings for the shop, kept here rather than in CosmeticsShopMenu.tscn so a new category
     // needs no scene edit at all.

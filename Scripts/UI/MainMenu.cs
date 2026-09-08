@@ -54,8 +54,38 @@ public partial class MainMenu : Control
             if (!cosmeticsShop.Visible) RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
         };
 
+        AnimateTitle();
         PopulateRecords();
         PlayEntranceAnimation(highScoreLabel);
+    }
+
+    // The title bobs letter by letter and breathes between cyan and white, which is the attract-mode
+    // look the screen was missing.
+    //
+    // Godot's built-in RichTextLabel effects do the per-letter part -- [wave] offsets each glyph on
+    // its own phase, which a Label can't do at all without being split into one node per character.
+    // That's the whole reason Title is a RichTextLabel now. The colour breath stays a Tween, because
+    // [rainbow] is the only built-in colour effect and it would throw away the game's palette.
+    //
+    // Both are skipped under reduced motion: a title that never stops moving is exactly what that
+    // setting exists to turn off.
+    private void AnimateTitle()
+    {
+        var title = GetNode<RichTextLabel>("VBoxContainer/Title");
+
+        if (DangerLevel.Reduced)
+        {
+            title.Text = "[center]INFINITIX[/center]";
+            return;
+        }
+
+        // Godot divides amp by 10 internally (offset = sin(...) * amp/10), so 90 is a +/-9px bob on
+        // a 40px title -- enough to read as movement across the room. The default 5.0 freq reads as a
+        // glitch at this size; 2.6 reads as a sign swaying.
+        title.Text = "[center][wave amp=90.0 freq=2.6]INFINITIX[/wave][/center]";
+
+        Juice.Shimmer(title, "theme_override_colors/default_color",
+            new Color(0.3f, 1f, 1f), new Color(0.85f, 1f, 1f), 2.2f);
     }
 
     // The title screen's own "arrival" — the first thing a player sees, so it fades+scales up as a
@@ -106,6 +136,6 @@ public partial class MainMenu : Control
     {
         var list = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/RecordsPanel/RecordsBox/RecordsList");
         list.Text = RecordTable.Build(GameManager.LoadRecords(), MaxRecordsShown, CharBudget,
-            "Todavía no hay récords");
+            "Todavía no hay récords", animateFirst: true);
     }
 }

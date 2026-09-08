@@ -334,6 +334,55 @@ public static class Juice
         return points.ToArray();
     }
 
+    // --- Cosmetics ---
+
+    /// <summary>
+    /// Paints <paramref name="target"/>'s colour property for a cosmetic category, and starts the
+    /// looping animation if the equipped colour is an animated Epico one.
+    /// </summary>
+    /// <param name="property">The colour property's *engine* name, since it's driven by a Tween:
+    /// "modulate", "color" or "default_color" depending on the node type.</param>
+    // One call per render site, so the "resolve, assign, and maybe animate" sequence can't be got
+    // half-right somewhere. Every site already had the first two steps hand-written; this is what
+    // stopped the third from being hand-written six more times.
+    public static Tween ApplyCosmetic(CanvasItem target, string property, CosmeticCategory category,
+        Color baseColor)
+    {
+        if (target == null) return null;
+
+        string equipped = GameManager.Instance?.EquippedCosmetic(category) ?? CosmeticCatalog.DefaultId;
+        Color from = CosmeticCatalog.Resolve(equipped, baseColor);
+        target.Set(property, from);
+
+        var option = CosmeticCatalog.Get(equipped);
+        if (!option.IsAnimated) return null;
+
+        Color to = CosmeticCatalog.ResolvePulse(equipped, baseColor);
+        return Shimmer(target, property, from, to, option.Period);
+    }
+
+    /// <summary>An endless there-and-back tween between two colours. Null under reduced motion.</summary>
+    // Reduced motion turns this off entirely rather than slowing it down, unlike the helpers above
+    // that merely shorten. A colour that pulses forever is precisely what the setting's own
+    // description promises to remove ("animaciones que se repiten"), and the cosmetic still reads
+    // as itself sitting at its resting colour.
+    //
+    // Deliberately not routed through StartTween: that keys one tween per target so a new call kills
+    // the old, and a shimmer has to coexist with whatever else is animating the same node (the shield
+    // aura's pulse, a bullet's own travel).
+    public static Tween Shimmer(CanvasItem target, string property, Color from, Color to, float period)
+    {
+        if (target == null || Reduced || period <= 0f) return null;
+
+        var tween = target.CreateTween();
+        tween.SetLoops();
+        tween.TweenProperty(target, property, to, period * 0.5f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+        tween.TweenProperty(target, property, from, period * 0.5f)
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+        return tween;
+    }
+
     // --- Block-grid drawing, for _Draw() overrides ---
     //
     // These replace DrawCircle/DrawArc at every site the player reads as a *shape*: ability icons,

@@ -60,8 +60,20 @@ Núcleos; renamed with no change to the underlying mechanism beyond the earn for
   has `glow_hdr_threshold = 0.85`, so a colour's brightest channel decides what it does to the bloom:
   **Común** stays under the threshold and never blooms (matte), **Raro** peaks at 1.0 and blooms, and
   **Épico** carries channels *above* 1.0 — Godot's `Color` doesn't clamp — so it blows out in a way
-  no ordinary colour reaches. The catch: the main menu has no `WorldEnvironment`, so an Épico swatch
-  previews like a Raro one and only separates in the arena. That's what the tier frame is for.
+  no ordinary colour reaches.
+- **Épico is also the only tier that moves.** Each one animates between its `Color` and its `Pulse`,
+  and the *period* is what gives each its character rather than the hues: Plasma snaps toward white
+  nine times a second and reads as electricity, Fusión rolls between orange and a deep ember at about
+  the rate a flame gutters, and Vacío breathes. `Juice.ApplyCosmetic` is the single entry point —
+  it resolves the colour, assigns it, and starts the loop if there is one — so the six render sites
+  can't each get the "and maybe animate" step half-right. Skipped entirely under reduced motion,
+  which promises to remove animations that repeat.
+  - Two consequences worth knowing. Transient nodes (bullets, trail puffs) must have the cosmetic
+    applied *after* `AddChild`, since `CreateTween` fails on a node that isn't in the tree. And the
+    arena's grid stays static while its boundary animates: the grid is one `Line2D` per line across a
+    multi-screen arena, which is a lot of looping tweens for something at 0.16 alpha.
+  - The main menu has no `WorldEnvironment`, so an Épico swatch previews like a Raro one and only
+    separates in the arena. That's what the tier frame on the swatch is for.
 - **Secret codes** ([SecretCodeCatalog.cs](../Scripts/Player/SecretCodeCatalog.cs)) are the one way
   meta progression is granted without being paid for. Redeemed from Options, once each
   (`GameManager.RedeemedCodes`), and every code goes through `GrantCharacter`/`GrantCosmetic`/

@@ -33,8 +33,8 @@ public partial class OrbitShield : Area2D
         // The scene's own colour is the Original look; a cosmetic replaces it. Resolved per blade at
         // spawn rather than once on the player, since RefreshOrbitBlades creates and frees these as
         // the orbit count changes.
-        GetNode<Polygon2D>("Visual").Color =
-            GameManager.Instance.CosmeticColor(CosmeticCategory.Blades, Palette.OrbitBlade);
+        Juice.ApplyCosmetic(GetNode<Polygon2D>("Visual"), "color",
+            CosmeticCategory.Blades, Palette.OrbitBlade);
     }
 
     public override void _PhysicsProcess(double delta)

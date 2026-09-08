@@ -465,9 +465,10 @@ public partial class Player : CharacterBody2D
         _outline.Visible = outlineCosmetic != CosmeticCatalog.DefaultId;
         if (_outline.Visible)
         {
-            Color outlineColor = CosmeticCatalog.ColorFor(outlineCosmetic);
-            outlineColor.A = OutlineAlpha;
-            _outline.Modulate = outlineColor;
+            // The base colour passed in only carries the alpha here — the outline is hidden whenever
+            // "Original" is equipped, so the branch Resolve would take for it is unreachable.
+            Juice.ApplyCosmetic(_outline, "modulate", CosmeticCategory.Outline,
+                new Color(0f, 0f, 0f, OutlineAlpha));
         }
 
         // Attached to the player root, NOT to Visual. As a child of Visual it would inherit the
@@ -479,8 +480,7 @@ public partial class Player : CharacterBody2D
         _shieldAura = GetNode<Polygon2D>("ShieldAura");
         // CosmeticCatalog.ShieldAuraBase mirrors the colour Player.tscn sets on this node — see the
         // note there. Resolving against it keeps the aura's 0.35 alpha whichever colour is equipped.
-        _shieldAura.Color = GameManager.Instance.CosmeticColor(
-            CosmeticCategory.Shield, CosmeticCatalog.ShieldAuraBase);
+        Juice.ApplyCosmetic(_shieldAura, "color", CosmeticCategory.Shield, CosmeticCatalog.ShieldAuraBase);
 
         // Skipped under reduced motion — the aura's mere presence already says "you have a shield
         // charge"; the pulse is ambience on top of that, and it sits directly under the player's
@@ -575,8 +575,7 @@ public partial class Player : CharacterBody2D
         // Bullet, not a slot of its own: the ring exists to show how far your shots reach, so it
         // should always match them. Resolving against Palette.FireRangeRing keeps its 0.3 alpha, which
         // is what stops it competing with the bullets themselves.
-        _fireRangeRing.DefaultColor =
-            GameManager.Instance.CosmeticColor(CosmeticCategory.Bullet, Palette.FireRangeRing);
+        Juice.ApplyCosmetic(_fireRangeRing, "default_color", CosmeticCategory.Bullet, Palette.FireRangeRing);
         _fireRangeRing.ZIndex = -1;
         AddChild(_fireRangeRing);
         RebuildFireRangeIndicator();
@@ -843,16 +842,18 @@ public partial class Player : CharacterBody2D
         // whichever ship color happens to be equipped. Used to copy _visual.Modulate (the ship's own
         // color) instead, which meant "Original" looked different per pilot and made the shop's
         // preview swatch depend on whoever was currently selected — confusing to compare against.
-        Color puffColor = GameManager.Instance.CosmeticColor(CosmeticCategory.Trail, Palette.PlayerBullet);
-
         var puff = new Polygon2D
         {
             Polygon = Juice.CirclePoints(size),
-            Color = puffColor,
             GlobalPosition = GlobalPosition + backward * ThrusterPuffOffset,
             ZIndex = -1,
         };
         parent.AddChild(puff);
+
+        // After AddChild for the same reason the bullets are: an animated Epico colour needs a tree
+        // to tween in. The shimmer drives "color" while the fade below drives "modulate:a", so the
+        // two run on the same node without fighting over a property.
+        Juice.ApplyCosmetic(puff, "color", CosmeticCategory.Trail, Palette.PlayerBullet);
 
         var tween = puff.CreateTween();
         tween.SetParallel(true);
@@ -1823,11 +1824,13 @@ public partial class Player : CharacterBody2D
         // White for that id: Bullet.tscn's Visual/Halo are plain white (Modulate is the only thing
         // that ever colours a bullet), so an unresolved White here would paint bullets white instead
         // of leaving them the game's actual default green.
-        bullet.Modulate = isCrit
-            ? Palette.CritBullet
-            : GameManager.Instance.CosmeticColor(CosmeticCategory.Bullet, Palette.PlayerBullet);
-
         _bulletsContainer.AddChild(bullet);
+
+        // Applied after AddChild, not before: an animated Epico colour starts a Tween, and
+        // CreateTween on a node that isn't in the tree yet fails. A crit keeps its own fixed colour —
+        // crits have to stay instantly distinguishable, and a shimmering one wouldn't be.
+        if (isCrit) bullet.Modulate = Palette.CritBullet;
+        else Juice.ApplyCosmetic(bullet, "modulate", CosmeticCategory.Bullet, Palette.PlayerBullet);
     }
 
     // Every upgrade ever applied this run, mapped to its strongest tier — the single entry point
