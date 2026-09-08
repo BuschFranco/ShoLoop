@@ -1,8 +1,12 @@
 namespace ShooterLoop;
 
 // A solid block in the arena that both the player and enemies collide with. Sits on collision
-// layer 8 (see the layer map in docs/enemies.md); projectiles deliberately ignore it, so obstacles
-// shape movement and kiting routes without ever blocking your own shots.
+// layer 8 (see the layer map in docs/enemies.md); the player's own bullets mask it too and stop
+// dead on contact (Bullet.OnBodyEntered), and Player.FindNearestVisibleEnemy/Companion.
+// FindNearestEnemy raycast against it (Scripts/Util/Targeting.cs) so the gun/missile/drone don't
+// even choose a target they can't actually hit through it. Enemy bullets and Laser/Onda/Ultimate
+// still ignore it — see docs/player.md's Obstacles section for the full breakdown of what does and
+// doesn't respect this layer.
 //
 // Visual + collision shape are built procedurally from Size, matching how every other visual in
 // this project is made (no art assets). That means an obstacle is just a StaticBody2D with this

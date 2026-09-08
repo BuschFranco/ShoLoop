@@ -76,6 +76,12 @@ public partial class HUD : Control
 
     public override void _Ready()
     {
+        // Same reasoning Shop/UpgradePicker/PauseMenu already document: the tree now stays paused
+        // through the whole "get ready" countdown between rounds (see GameManager.StartNextRound/
+        // BeginRoundAfterCountdown), and without this the "Preparate... 3, 2, 1" label would freeze
+        // on whatever it showed the instant the pause began instead of counting down live.
+        ProcessMode = ProcessModeEnum.Always;
+
         // The arena's music starts here rather than from a script on Arena.tscn's root, which has
         // none. The HUD is the one node guaranteed to exist in every arena, and hanging it here also
         // covers the Game Over screen's ReloadCurrentScene() retry path for free.
@@ -107,9 +113,18 @@ public partial class HUD : Control
         // before the arena scene even loads). Same texture and tint the ship itself uses, so a white
         // silhouette picks up its Color while a photo portrait (Color = White) shows through untouched.
         var character = CharacterCatalog.Get(GameManager.Instance.SelectedCharacter);
-        var portrait = GetNode<TextureRect>("TopBarPanel/TopBar/StatusRow/Portrait");
+        var portrait = GetNode<TextureRect>("TopBarPanel/TopBar/StatusRow/PortraitFrame/Portrait");
         portrait.Texture = CharacterCatalog.Texture(character);
         portrait.Modulate = character.Color;
+
+        // Own StyleBoxFlat copy per instance (not the shared .tscn sub_resource) — same convention
+        // CharacterSelectMenu's Swatch just adopted, so the Marco cosmetic here can't affect anything
+        // beyond this one frame.
+        var portraitFrame = GetNode<Panel>("TopBarPanel/TopBar/StatusRow/PortraitFrame");
+        var portraitFrameStyle = new StyleBoxFlat { BgColor = new Color(0.043f, 0.024f, 0.078f, 0.85f) };
+        portraitFrameStyle.SetBorderWidthAll(2);
+        portraitFrame.AddThemeStyleboxOverride("panel", portraitFrameStyle);
+        Juice.ApplyCosmeticToStyleBox(portraitFrameStyle, CosmeticCategory.Marco, CosmeticCatalog.BaseColor(CosmeticCategory.Marco));
 
         _statsLabel = GetNode<Label>("TopBarPanel/TopBar/StatsLabel");
         _buildPanel = GetNode<PanelContainer>("TopBarPanel/TopBar/BuildPanel");
@@ -119,6 +134,12 @@ public partial class HUD : Control
         _scoreLabel = GetNode<Label>("TopBarPanel/TopBar/ScoreLabel");
         _countdownLabel = GetNode<Label>("CountdownLabel");
         _topBarPanel = GetNode<PanelContainer>("TopBarPanel");
+        // Duplicated rather than mutated in place — the original is a .tscn sub_resource, and cloning
+        // it before overriding keeps this instance's colour from leaking into anything else that
+        // might reference the same resource.
+        var topBarStyle = (StyleBoxFlat)_topBarPanel.GetThemeStylebox("panel").Duplicate();
+        _topBarPanel.AddThemeStyleboxOverride("panel", topBarStyle);
+        Juice.ApplyCosmeticToStyleBox(topBarStyle, CosmeticCategory.Hud, Palette.HudPanelBorder);
         _cooldownIcons = GetNode<Control>("CooldownIcons");
         _laserIcon = GetNode<CooldownIcon>("CooldownIcons/LaserIcon");
         _missileIcon = GetNode<CooldownIcon>("CooldownIcons/MissileIcon");

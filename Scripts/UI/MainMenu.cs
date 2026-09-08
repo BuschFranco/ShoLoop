@@ -54,6 +54,34 @@ public partial class MainMenu : Control
             if (!cosmeticsShop.Visible) RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
         };
 
+        // Same refresh-on-close hook — achievement/mission payouts also spend into the same Libras
+        // balance shown here.
+        var achievementsButton = GetNode<Button>("AchievementsButton");
+        var achievementsMenu = GetNode<AchievementsMenu>("AchievementsMenu");
+        achievementsButton.Pressed += achievementsMenu.Open;
+        Juice.WireButtonFeedback(achievementsButton);
+        achievementsMenu.VisibilityChanged += () =>
+        {
+            if (!achievementsMenu.Visible) RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
+        };
+
+        // Split out of the combined Logros screen into its own button/screen, immediately to the
+        // left of it — same refresh-on-close reasoning (missions also pay Libras).
+        var missionsButton = GetNode<Button>("MissionsButton");
+        var missionsMenu = GetNode<MissionsMenu>("MissionsMenu");
+        missionsButton.Pressed += missionsMenu.Open;
+        Juice.WireButtonFeedback(missionsButton);
+        missionsMenu.VisibilityChanged += () =>
+        {
+            if (!missionsMenu.Visible) RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
+        };
+
+        // Read-only — no VisibilityChanged refresh hook needed, nothing here spends or earns Libras.
+        var statsButton = GetNode<Button>("StatsButton");
+        var statsMenu = GetNode<StatsMenu>("StatsMenu");
+        statsButton.Pressed += statsMenu.Open;
+        Juice.WireButtonFeedback(statsButton);
+
         AnimateTitle();
         PopulateRecords();
         PlayEntranceAnimation(highScoreLabel);

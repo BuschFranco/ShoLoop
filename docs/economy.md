@@ -44,18 +44,38 @@ Núcleos; renamed with no change to the underlying mechanism beyond the earn for
   both write straight to `user://settings.cfg` (`libras` key) rather than waiting for some
   later save point, since the balance has to survive the app being killed mid-run on a phone.
 - **Spent on characters** — see [characters.md](characters.md#locked-characters--libras) for
-  `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`.
+  `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`. Bought from the
+  Tienda's own "Personajes" tab now, not from character select — see below.
 - **Spent on cosmetics** — [CosmeticCatalog.cs](../Scripts/Player/CosmeticCatalog.cs) lists a shared
-  set of 15 colours purchasable independently across 6 categories (bullets — which also colour the
+  set of 15 colours purchasable independently across 9 categories (bullets — which also colour the
   fire-range ring, since it marks where those bullets reach — ship trail, character outline,
-  arena/grid accent, shield aura and orbit blades), bought and equipped from the "Tienda" screen
-  ([CosmeticsShopMenu.cs](../Scripts/UI/CosmeticsShopMenu.cs)). 90 unlockables in total. Purely
-  visual — no category affects gameplay. `GameManager.TryBuyCosmetic`/`EquipCosmetic` are the
-  mutators, same no-signal shape as `TryUnlockCharacter`; ownership lives in
+  arena/grid accent, shield aura, orbit blades, portrait marco, HUD border, and the on-kill effect),
+  bought and equipped from the "Tienda" screen ([CosmeticsShopMenu.cs](../Scripts/UI/CosmeticsShopMenu.cs)).
+  135 unlockables in total. Purely visual — no category affects gameplay. `GameManager.TryBuyCosmetic`/
+  `EquipCosmetic` are the mutators, same no-signal shape as `TryUnlockCharacter`; ownership lives in
   `GameManager.OwnedCosmetics`, keyed by `CosmeticCatalog.ItemKey(category, id)` since owning a
   colour for one category says nothing about owning it for another. Each category also has a free,
   always-owned "Original" option that reverts to how that system looked before this feature existed —
-  the whole thing is opt-in.
+  the whole thing is opt-in. The one exception is `KillEffect`: there was no on-kill visual before
+  this category existed, so its "Original" is just a sensible default rather than a reproduction of
+  prior behaviour.
+- **Marco and HUD colour a UI panel border, not a `CanvasItem` property**, so they don't go through
+  `Juice.ApplyCosmetic` — `Juice.ApplyCosmeticToStyleBox(StyleBoxFlat, category, baseColor)` resolves
+  the equipped colour onto a `StyleBoxFlat.BorderColor` directly and, deliberately, never animates:
+  a UI border isn't in the arena's `WorldEnvironment` glow pass either way, so an Épico colour would
+  just read as one bright fixed tone regardless. Marco applies to two places — the character-select
+  carousel's `Swatch` and a new frame around the HUD's in-run portrait — so the purchase is visible
+  both while picking a pilot and for the whole run. `KillEffect` resolves inline
+  (`GameManager.CosmeticColor(CosmeticCategory.KillEffect, ...)`) right before the existing
+  `Juice.Blast` one-shot call in `Enemy.TakeDamage()`'s death branch — every enemy death, not just
+  ones that grant XP.
+- **Personajes moved from character select into the Tienda.** `CharacterSelectMenu` only shows lock
+  state now (dimmed portrait, "Bloqueado — cómpralo en la Tienda") — the actual purchase (still
+  `GameManager.TryUnlockCharacter`, unchanged) lives in `CosmeticsShopMenu`'s "Personajes" tab, a
+  view mode rather than a `CosmeticCategory` (a locked pilot has a portrait/name/cost, not a colour
+  to equip elsewhere), rendered as name/description/price rows — the same row shape
+  `AchievementsMenu`/`MissionsMenu` already use — instead of the colour-swatch grid every other tab
+  shows.
 - **Cosmetic tiers are a rendering difference, not a price label.** Arena.tscn's `WorldEnvironment`
   has `glow_hdr_threshold = 0.85`, so a colour's brightest channel decides what it does to the bloom:
   **Común** stays under the threshold and never blooms (matte), **Raro** peaks at 1.0 and blooms, and
@@ -85,6 +105,77 @@ Núcleos; renamed with no change to the underlying mechanism beyond the earn for
   the same way), plus `redeemed_codes` for secret codes. What's equipped is one string key per
   category, derived from the enum member's name (`equipped_bullet_cosmetic` and friends) so adding a
   category needs no persistence code at all.
+
+## Logros y Misiones ([AchievementCatalog.cs](../Scripts/Meta/AchievementCatalog.cs), [MissionCatalog.cs](../Scripts/Meta/MissionCatalog.cs))
+
+A third Libras sink/source, alongside characters and cosmetics — except these two *pay* Libras
+rather than spend it. Both are evaluated at different points, matching how cheaply each stat is
+available to check:
+
+- **Numeric achievements** (rounds, lifetime kills/bosses/crits, account level) are evaluated once,
+  in `RegisterFinalScore()` — the same end-of-run funnel that already finalizes Libras/AccountXp/
+  CharacterXp — via `EvaluateAchievements`. Nothing is checked per-kill or per-crit; the run's
+  in-memory counters (`GameManager.EnemiesKilled`/`BossesKilled`, `Player.CritsLandedThisRun`) are
+  rolled into the lifetime totals (`TotalEnemiesKilled`/`TotalBossesKilled`/`TotalCritsLanded`/
+  `TotalRoundsCleared`) right before the catalog runs against them.
+- **Build/legendary achievements** unlock instantly, the moment they happen —
+  `Player.TryActivate()` calls `GameManager.NotifyBuildCompleted` right after a build completes, and
+  `Player.ApplyUpgrade()` calls `NotifyLegendaryObtained` the moment a tier is newly raised to
+  Legendary — both idempotent HashSet adds (`EverCompletedBuilds`/`EverGotLegendary`), same shape as
+  `UnlockedCharacters`.
+- Newly-unlocked achievements this run are cached on `GameManager.LastRunNewAchievements` so
+  [GameOverScreen.cs](../Scripts/UI/GameOverScreen.cs) can reveal them in its existing one-line-at-a-
+  time recap without recomputing anything.
+- **Missions** are 3 daily slots (`GameManager.Missions`), rotated by comparing today's date
+  (`Time.GetDatetimeDictFromSystem()`, same source `FormatNow` already uses for records) against the
+  persisted `_missionsDate`, re-rolled with a date-seeded `Random` so relaunching the same day keeps
+  the same 3. Progress is checked at the same low-frequency points the rest of meta-progression
+  already touches — `RegisterKill()` (Kill/BossKill), `RegisterFinalScore()` (RoundReached),
+  `AddLibras()` (LibrasEarned), `TryBuyCosmetic()` (CosmeticPurchase) — no new per-frame or per-hit
+  hook. Completing one pays its Libras reward immediately, no claim step.
+- Two separate screens, two separate buttons in MainMenu's top-right corner — Misiones (left) and
+  Logros (right, outermost). [AchievementsMenu.cs](../Scripts/UI/AchievementsMenu.cs) is
+  Progreso/Combate/Builds tabs over `AchievementCatalog.All`; [MissionsMenu.cs](../Scripts/UI/MissionsMenu.cs)
+  is the fixed 3-row list, no tabs. They used to be one screen with a Logros/Misiones tab on top —
+  split out once there were enough achievements to want the extra room. All persisted in the same
+  `settings.cfg` as everything else above (`total_*` keys, `ever_completed_builds`/
+  `ever_got_legendary`/`unlocked_achievements` as `PackedStringArray`s, and a `missions` section with
+  one `slot_N` key per mission).
+
+### Estadísticas ([StatsMenu.cs](../Scripts/UI/StatsMenu.cs))
+
+Opened from its own "Estadísticas" button in MainMenu's top-left corner (mirroring "Logros"
+opposite it). Two sections, because not every stat means the same thing across a time window:
+
+**Actividad** — the numbers that are genuine sums over time, filterable by **Total / Mes / Semana**:
+enemigos eliminados, jefes derrotados, críticos, rondas superadas, monedas ganadas, Libras ganadas,
+partidas jugadas, tiempo jugado. Backed by `GameManager.GetStats(StatsPeriod)`:
+- "Total" reads 8 lifetime counters directly — the 4 achievement-era ones
+  (`TotalEnemiesKilled`/`TotalBossesKilled`/`TotalCritsLanded`/`TotalRoundsCleared`) plus
+  `TotalLibrasEarned` (bumped by `RecordLibrasEarned`, called from every existing `Libras +=` site:
+  `AddLibras`, `EvaluateAchievements`, `NotifyMissionProgress`/`NotifyMissionRoundReached`),
+  `TotalCoinsEarnedLifetime` (bumped by `RecordCoinsEarned`, called from `AddCoins` — distinct from
+  the per-run `TotalCoinsEarned` used for shop price inflation, which still resets every run),
+  `TotalRunsPlayed`, and `TotalPlayTimeSeconds` (real seconds from `StartRoundOneTimer` to
+  `RegisterFinalScore`, including time spent paused/shopping — an approximation, same tolerance the
+  rest of this catalog already accepts).
+- "Mes"/"Semana" can't read a running total — it has no notion of *when* it was earned — so a small
+  per-day breakdown (`GameManager._dailyStats`, keyed by the same `"aaaa-mm-dd"` `TodayKey()`
+  missions already use) is written alongside every lifetime-counter update and summed on demand,
+  filtered to entries on/after the current calendar week's Monday or the current calendar month's
+  1st (`System.DateTime`-based, boundary-based like the missions' daily rotation — not a rolling
+  7/30-day window). Persisted as its own `stats_daily` ConfigFile section (one key per date,
+  pipe-delimited), pruned past 40 days on every write/load since only "this month" is ever queried
+  from it — "Total" never touches this map at all.
+
+**Resumen general** — state/collection stats that don't have a meaningful per-period reading (stays
+the same across all 3 tabs): mejor puntaje (`GameManager.LoadHighScore()`), mejor ronda alcanzada
+(`BestRoundReached`, the max `RoundNumber` seen across every `RegisterFinalScore`), nivel de cuenta,
+precisión (`TotalCritsLanded`/`TotalEnemiesKilled`), logros desbloqueados
+(`UnlockedAchievementsCount`/`AchievementCatalog.All.Length`), misiones completadas
+(`TotalMissionsCompleted`, bumped alongside every mission payout), personajes desbloqueados,
+cosméticos comprados, builds completadas (`EverCompletedBuilds.Count`/`BuildCatalog.ClassOrder.Length`),
+and Legendarias distintas (`EverGotLegendary.Count`/27, one per `UpgradeType`).
 
 ## Account level (`GameManager.AccountLevel`)
 

@@ -11,6 +11,7 @@ public partial class GameManager : Node
     public int XpToNextLevel = 10;
     public int EnemiesKilled = 0;
     public int SpecialEnemiesKilled = 0;
+    public int BossesKilled = 0;
     public int Coins = 0;
     public int Score = 0;
     public int RoundNumber = 1;
@@ -107,6 +108,7 @@ public partial class GameManager : Node
         CurrentOrientation = LoadOrientationPreference();
         ApplyOrientation();
         LoadSettings();
+        EnsureMissionsForToday();
 
         // Not started here — this runs at app boot, while the player is still in the main menu.
         // Starting it immediately meant it could burn all the way down before Arena.tscn even
@@ -128,7 +130,14 @@ public partial class GameManager : Node
     {
         _roundTimer.Stop();
         _roundTimer.Start();
+
+        // Marks the start of this run for the Estadísticas screen's "Tiempo jugado" — the one stat
+        // that can't be summed from per-kill/per-round counters. Includes time spent in shops/paused,
+        // same "close enough, first guess" tolerance the rest of this catalog already accepts.
+        _runStartTimeMsec = Time.GetTicksMsec();
     }
+
+    private ulong _runStartTimeMsec;
 
     public bool IsBossRound => RoundNumber % 5 == 0;
 
@@ -140,6 +149,7 @@ public partial class GameManager : Node
     {
         EnemiesKilled++;
         if (category != EnemyCategory.Common) SpecialEnemiesKilled++;
+        NotifyMissionProgress(MissionKind.Kill, 1);
 
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
 
@@ -159,6 +169,8 @@ public partial class GameManager : Node
 
         if (category == EnemyCategory.Boss)
         {
+            BossesKilled++;
+            NotifyMissionProgress(MissionKind.BossKill, 1);
             AudioManager.Instance?.Play(AudioManager.Sfx.BossDie);
 
             // Beating the very first boss is what unlocks Ultimates as a mechanic — a free choice
@@ -180,6 +192,7 @@ public partial class GameManager : Node
     {
         Coins += amount;
         TotalCoinsEarned += amount;
+        RecordCoinsEarned(amount);
         CoinsChanged?.Invoke(Coins);
     }
 
@@ -449,6 +462,10 @@ public partial class GameManager : Node
         if (_roundStartTimer == null)
         {
             _roundStartTimer = new Timer { OneShot = true };
+            // The tree stays paused for the whole "get ready" delay now (see the Resume() move
+            // below), so this has to keep ticking through that pause the same way Shop/UpgradePicker
+            // already stay interactive through it — otherwise the countdown itself would freeze.
+            _roundStartTimer.ProcessMode = ProcessModeEnum.Always;
             AddChild(_roundStartTimer);
             _roundStartTimer.Timeout += BeginRoundAfterCountdown;
         }
@@ -464,7 +481,8 @@ public partial class GameManager : Node
         // before the round begins while the announcement still gets the screen to itself.
         RoundEventDirectorNode?.RollForRound(RoundNumber, IsBossRound);
 
-        Resume();
+        // Deliberately NOT Resume() here — see BeginRoundAfterCountdown. The tree stays paused
+        // through the whole "get ready" delay, not just while pickers/the shop are open.
     }
 
     private DangerDirector DangerDirectorNode =>
@@ -478,6 +496,13 @@ public partial class GameManager : Node
         // The "GO" at the end of the 3-2-1 the HUD is beeping out — same note family an octave up,
         // so it lands as the resolution of that sequence rather than as an unrelated noise.
         AudioManager.Instance?.Play(AudioManager.Sfx.RoundStart);
+
+        // This — not StartNextRound() — is the actual start of live gameplay: the tree has stayed
+        // paused since the round ended (through every picker, the shop, and the whole "get ready"
+        // countdown) specifically so nothing could move or collect a leftover pickup and sneak in one
+        // more level-up dialog after the player thought they were done. Resuming right where spawning
+        // is about to (re)start closes that gap.
+        Resume();
 
         var spawner = GetTree().GetFirstNodeInGroup("enemy_spawner") as EnemySpawner;
         var director = DangerDirectorNode;
@@ -680,6 +705,24 @@ public partial class GameManager : Node
         AddLibras(LastRunLibrasEarned);
         LastRunAccountLevelsGained = AddAccountXp(LastRunLibrasEarned);
         LastRunCharacterLevelsGained = AddCharacterXp(SelectedCharacter, LastRunLibrasEarned);
+
+        NotifyMissionRoundReached(RoundNumber);
+
+        var player = GetTree().GetFirstNodeInGroup("player") as Player;
+        int critsThisRun = player?.CritsLandedThisRun ?? 0;
+        int roundsClearedThisRun = Mathf.Max(0, RoundNumber - 1);
+        TotalEnemiesKilled += EnemiesKilled;
+        TotalBossesKilled += BossesKilled;
+        TotalCritsLanded += critsThisRun;
+        TotalRoundsCleared += roundsClearedThisRun;
+        BestRoundReached = Mathf.Max(BestRoundReached, RoundNumber);
+
+        int playTimeSeconds = _runStartTimeMsec > 0 ? (int)((Time.GetTicksMsec() - _runStartTimeMsec) / 1000) : 0;
+        _runStartTimeMsec = 0;
+        RecordRunStats(EnemiesKilled, BossesKilled, critsThisRun, roundsClearedThisRun, playTimeSeconds);
+
+        EvaluateAchievements(_unlockedAchievements);
+        SaveMetaProgress();
     }
 
     // Set by RegisterFinalScore just before Game Over is shown, so GameOverScreen can display "+N"
@@ -687,6 +730,322 @@ public partial class GameManager : Node
     public int LastRunLibrasEarned { get; private set; }
     public int LastRunAccountLevelsGained { get; private set; }
     public int LastRunCharacterLevelsGained { get; private set; }
+
+    // --- Achievements and missions ---
+    //
+    // Lifetime counters, alongside AccountLevel/Libras above: unlike EnemiesKilled/RoundNumber
+    // (purely per-run, zeroed by ResetRun), these only ever go up across the player's whole history.
+    // Rolled up once, in RegisterFinalScore, from the run that just ended — no per-kill/per-crit disk
+    // writes.
+    public int TotalEnemiesKilled { get; private set; }
+    public int TotalBossesKilled { get; private set; }
+    public int TotalCritsLanded { get; private set; }
+    public int TotalRoundsCleared { get; private set; }
+
+    // Unlike Libras (drops on spending) or TotalCoinsEarned (reset every run), these two only ever
+    // go up across the whole account. TotalLibrasEarned is bumped alongside every existing
+    // `Libras +=` site (AddLibras, EvaluateAchievements, NotifyMissionProgress/RoundReached) via
+    // RecordLibrasEarned; TotalRunsPlayed once per run end, in RecordRunStats.
+    public int TotalLibrasEarned { get; private set; }
+    public int TotalRunsPlayed { get; private set; }
+
+    // Rounds a life can't already answer: TotalRoundsCleared sums every round crossed across every
+    // run, but says nothing about any single run's best result. Updated in RegisterFinalScore
+    // alongside the others.
+    public int BestRoundReached { get; private set; }
+
+    // Lifetime coin income — distinct from TotalCoinsEarned above, which is per-run (reset by
+    // ResetRun, used for shop price inflation). Bumped by RecordCoinsEarned, called from AddCoins.
+    public int TotalCoinsEarnedLifetime { get; private set; }
+
+    // Real seconds spent in a run, from StartRoundOneTimer to RegisterFinalScore — includes
+    // shop/pause time, same "close enough" tolerance as the rest of this catalog.
+    public int TotalPlayTimeSeconds { get; private set; }
+
+    // Bumped once per completed mission slot, in NotifyMissionProgress/NotifyMissionRoundReached.
+    public int TotalMissionsCompleted { get; private set; }
+
+    // Permanent, per-run-instant unlock records — same shape as UnlockedCharacters/OwnedCosmetics
+    // above (a HashSet, nothing to accumulate), but sourced from Player rather than GameManager
+    // itself, since builds/tiers are tracked on the per-run Player instance.
+    public HashSet<Player.BuildClass> EverCompletedBuilds { get; private set; } = new();
+    public HashSet<UpgradeType> EverGotLegendary { get; private set; } = new();
+
+    // Newly unlocked achievements *this run*, filled by EvaluateAchievements (called from
+    // RegisterFinalScore) so GameOverScreen can reveal them without re-deriving anything itself.
+    public List<AchievementDef> LastRunNewAchievements { get; private set; } = new();
+
+    public void NotifyBuildCompleted(Player.BuildClass cls)
+    {
+        if (!EverCompletedBuilds.Add(cls)) return;
+        SaveMetaProgress();
+    }
+
+    public void NotifyLegendaryObtained(UpgradeType type)
+    {
+        if (!EverGotLegendary.Add(type)) return;
+        SaveMetaProgress();
+    }
+
+    // Compares every achievement's unlocked state before vs. after this run's lifetime counters were
+    // rolled up, pays out whichever newly crossed their threshold, and records them for GameOverScreen.
+    private void EvaluateAchievements(HashSet<string> alreadyUnlocked)
+    {
+        LastRunNewAchievements.Clear();
+        foreach (var def in AchievementCatalog.All)
+        {
+            if (alreadyUnlocked.Contains(def.Id)) continue;
+            if (!AchievementCatalog.IsUnlocked(def, this)) continue;
+
+            alreadyUnlocked.Add(def.Id);
+            LastRunNewAchievements.Add(def);
+            Libras += def.RewardLibras;
+            RecordLibrasEarned(def.RewardLibras);
+        }
+        _unlockedAchievements = alreadyUnlocked;
+    }
+
+    // Which achievement ids already paid out, so EvaluateAchievements never double-pays one across
+    // runs. Persisted the same "one HashSet, save/load as string[]" way as RedeemedCodes.
+    private HashSet<string> _unlockedAchievements = new();
+    public bool IsAchievementUnlocked(string id) => _unlockedAchievements.Contains(id);
+    public int UnlockedAchievementsCount => _unlockedAchievements.Count;
+
+    // --- Missions ---
+    //
+    // 3 slots, rotated daily. Progress only checked at the same low-frequency points the rest of the
+    // meta-progression already touches (kill, boss kill, round end, Libras earned, cosmetic bought) —
+    // no new per-frame or per-hit hook.
+    public class MissionSlot
+    {
+        public string TemplateId;
+        public int Target;
+        public int Reward;
+        public int Progress;
+        public bool Completed;
+    }
+
+    public MissionSlot[] Missions { get; private set; } = new MissionSlot[3];
+    private string _missionsDate = "";
+
+    // "aaaa-mm-dd", the same Time.GetDatetimeDictFromSystem() source FormatNow already uses —
+    // just unabbreviated and zero-order so string comparison across days works without parsing.
+    private static string TodayKey()
+    {
+        var now = Time.GetDatetimeDictFromSystem();
+        return $"{now["year"].AsInt32():D4}-{now["month"].AsInt32():D2}-{now["day"].AsInt32():D2}";
+    }
+
+    // Called from _Ready (via LoadSettings) and whenever the Achievements screen opens, so a
+    // still-running session picks up the new day's missions without needing a restart.
+    public void EnsureMissionsForToday()
+    {
+        string today = TodayKey();
+        if (_missionsDate == today && Missions[0] != null) return;
+
+        _missionsDate = today;
+
+        // Seeded off the date so re-launching the game the same day rolls the same 3 missions
+        // instead of re-randomizing on every boot.
+        var rng = new Random(today.GetHashCode());
+        var pool = new List<MissionTemplate>(MissionCatalog.Pool);
+        for (int i = 0; i < Missions.Length; i++)
+        {
+            if (pool.Count == 0) pool = new List<MissionTemplate>(MissionCatalog.Pool);
+            int idx = rng.Next(pool.Count);
+            var template = pool[idx];
+            pool.RemoveAt(idx);
+
+            int optionIdx = rng.Next(template.TargetOptions.Length);
+            Missions[i] = new MissionSlot
+            {
+                TemplateId = template.Id,
+                Target = template.TargetOptions[optionIdx],
+                Reward = template.RewardOptions[optionIdx],
+                Progress = 0,
+                Completed = false,
+            };
+        }
+
+        SaveMetaProgress();
+    }
+
+    private static MissionKind KindForTemplateId(string templateId)
+    {
+        foreach (var t in MissionCatalog.Pool)
+            if (t.Id == templateId) return t.Kind;
+        return MissionKind.Kill;
+    }
+
+    private void NotifyMissionProgress(MissionKind kind, int amount)
+    {
+        if (amount <= 0 || Missions[0] == null) return;
+
+        bool changed = false;
+        foreach (var slot in Missions)
+        {
+            if (slot == null || slot.Completed) continue;
+            if (KindForTemplateId(slot.TemplateId) != kind) continue;
+
+            slot.Progress = Math.Min(slot.Target, slot.Progress + amount);
+            if (slot.Progress >= slot.Target)
+            {
+                slot.Completed = true;
+                Libras += slot.Reward;
+                RecordLibrasEarned(slot.Reward);
+                TotalMissionsCompleted++;
+            }
+            changed = true;
+        }
+
+        if (changed) SaveMetaProgress();
+    }
+
+    // RoundReached is absolute (not incremental like Kill/LibrasEarned), so it goes through its own
+    // setter rather than NotifyMissionProgress's additive amount.
+    private void NotifyMissionRoundReached(int round)
+    {
+        if (Missions[0] == null) return;
+
+        bool changed = false;
+        foreach (var slot in Missions)
+        {
+            if (slot == null || slot.Completed) continue;
+            if (KindForTemplateId(slot.TemplateId) != MissionKind.RoundReached) continue;
+
+            slot.Progress = Math.Min(slot.Target, Math.Max(slot.Progress, round));
+            if (slot.Progress >= slot.Target)
+            {
+                slot.Completed = true;
+                Libras += slot.Reward;
+                RecordLibrasEarned(slot.Reward);
+                TotalMissionsCompleted++;
+            }
+            changed = true;
+        }
+
+        if (changed) SaveMetaProgress();
+    }
+
+    // --- Stats screen (Total / Mes / Semana) ---
+    //
+    // The 6 Total* counters above answer "how much, ever" but not "how much this week" — that needs
+    // a per-day breakdown. This is that breakdown: one entry per calendar day, summed on demand by
+    // GetStats. "Total" never reads this map (it reads the lifetime counters directly), so pruning
+    // old entries is always safe.
+    private struct DailyStats
+    {
+        public int EnemiesKilled, BossesKilled, CritsLanded, RoundsCleared, LibrasEarned, RunsPlayed,
+            CoinsEarned, PlayTimeSeconds;
+    }
+
+    private readonly Dictionary<string, DailyStats> _dailyStats = new();
+    private const int DailyStatsRetentionDays = 40;
+
+    private DailyStats TodayDailyStats() => _dailyStats.TryGetValue(TodayKey(), out var entry) ? entry : default;
+
+    // Called from every existing `Libras +=` site (AddLibras, EvaluateAchievements,
+    // NotifyMissionProgress/NotifyMissionRoundReached) so both the lifetime total and the daily log
+    // capture every source Libras can come from, not just the end-of-run payout.
+    private void RecordLibrasEarned(int amount)
+    {
+        if (amount <= 0) return;
+        TotalLibrasEarned += amount;
+        var entry = TodayDailyStats();
+        entry.LibrasEarned += amount;
+        _dailyStats[TodayKey()] = entry;
+    }
+
+    // Called from AddCoins — every source of coin income, not just kills — same shape as
+    // RecordLibrasEarned above but for the lifetime coin total.
+    private void RecordCoinsEarned(int amount)
+    {
+        if (amount <= 0) return;
+        TotalCoinsEarnedLifetime += amount;
+        var entry = TodayDailyStats();
+        entry.CoinsEarned += amount;
+        _dailyStats[TodayKey()] = entry;
+    }
+
+    // Called once per run end, from RegisterFinalScore — the same funnel that already rolls this
+    // run's counters into TotalEnemiesKilled/TotalBossesKilled/TotalCritsLanded/TotalRoundsCleared.
+    private void RecordRunStats(int enemiesKilled, int bossesKilled, int critsLanded, int roundsCleared, int playTimeSeconds)
+    {
+        TotalRunsPlayed++;
+        TotalPlayTimeSeconds += playTimeSeconds;
+        var entry = TodayDailyStats();
+        entry.EnemiesKilled += enemiesKilled;
+        entry.BossesKilled += bossesKilled;
+        entry.CritsLanded += critsLanded;
+        entry.RoundsCleared += roundsCleared;
+        entry.RunsPlayed += 1;
+        entry.PlayTimeSeconds += playTimeSeconds;
+        _dailyStats[TodayKey()] = entry;
+        PruneOldDailyStats();
+    }
+
+    private void PruneOldDailyStats()
+    {
+        string cutoff = DateTime.Today.AddDays(-DailyStatsRetentionDays).ToString("yyyy-MM-dd");
+        List<string> stale = null;
+        foreach (var key in _dailyStats.Keys)
+        {
+            if (string.CompareOrdinal(key, cutoff) >= 0) continue;
+            stale ??= new List<string>();
+            stale.Add(key);
+        }
+        if (stale == null) return;
+        foreach (var key in stale) _dailyStats.Remove(key);
+    }
+
+    public enum StatsPeriod { Total, Month, Week }
+
+    // The period-filterable "how much did I do" numbers. Everything that isn't a sum over time —
+    // current level, best-ever round, collection counts — lives directly on GameManager instead and
+    // is read straight from there by the UI, since "this week's account level" isn't a meaningful
+    // question.
+    public readonly record struct LifetimeStats(
+        int EnemiesKilled, int BossesKilled, int CritsLanded, int RoundsCleared,
+        int LibrasEarned, int RunsPlayed, int CoinsEarned, int PlayTimeSeconds);
+
+    public LifetimeStats GetStats(StatsPeriod period)
+    {
+        if (period == StatsPeriod.Total)
+            return new LifetimeStats(TotalEnemiesKilled, TotalBossesKilled, TotalCritsLanded,
+                TotalRoundsCleared, TotalLibrasEarned, TotalRunsPlayed, TotalCoinsEarnedLifetime,
+                TotalPlayTimeSeconds);
+
+        string cutoffKey = period == StatsPeriod.Week ? ThisWeekStartKey() : ThisMonthStartKey();
+        int enemies = 0, bosses = 0, crits = 0, rounds = 0, libras = 0, runs = 0, coins = 0, playTime = 0;
+        foreach (var kv in _dailyStats)
+        {
+            if (string.CompareOrdinal(kv.Key, cutoffKey) < 0) continue;
+            enemies += kv.Value.EnemiesKilled;
+            bosses += kv.Value.BossesKilled;
+            crits += kv.Value.CritsLanded;
+            rounds += kv.Value.RoundsCleared;
+            libras += kv.Value.LibrasEarned;
+            runs += kv.Value.RunsPlayed;
+            coins += kv.Value.CoinsEarned;
+            playTime += kv.Value.PlayTimeSeconds;
+        }
+        return new LifetimeStats(enemies, bosses, crits, rounds, libras, runs, coins, playTime);
+    }
+
+    private static string ThisMonthStartKey()
+    {
+        var today = DateTime.Today;
+        return new DateTime(today.Year, today.Month, 1).ToString("yyyy-MM-dd");
+    }
+
+    // Monday-start calendar week. DayOfWeek is Sunday=0..Saturday=6; (+6)%7 turns that into "days
+    // since Monday" (Sunday -> 6, Monday -> 0, ...).
+    private static string ThisWeekStartKey()
+    {
+        var today = DateTime.Today;
+        int daysSinceMonday = ((int)today.DayOfWeek + 6) % 7;
+        return today.AddDays(-daysSinceMonday).ToString("yyyy-MM-dd");
+    }
 
     // --- Settings and records (ConfigFile) ---
     //
@@ -841,6 +1200,8 @@ public partial class GameManager : Node
     {
         if (amount <= 0) return;
         Libras += amount;
+        RecordLibrasEarned(amount);
+        NotifyMissionProgress(MissionKind.LibrasEarned, amount);
         SaveMetaProgress();
     }
 
@@ -930,6 +1291,7 @@ public partial class GameManager : Node
 
         Libras -= cost;
         OwnedCosmetics.Add(CosmeticCatalog.ItemKey(category, id));
+        NotifyMissionProgress(MissionKind.CosmeticPurchase, 1);
         SaveMetaProgress();
         return true;
     }
@@ -1023,6 +1385,8 @@ public partial class GameManager : Node
     }
 
     private const string CharacterProgressSection = "character_progress";
+    private const string MissionsSection = "missions";
+    private const string StatsDailySection = "stats_daily";
 
     private void SaveMetaProgress()
     {
@@ -1037,6 +1401,41 @@ public partial class GameManager : Node
         config.SetValue(SettingsSection, "account_level", AccountLevel);
         config.SetValue(SettingsSection, "account_xp", AccountXp);
         config.SetValue(SettingsSection, "account_xp_to_next", AccountXpToNextLevel);
+
+        config.SetValue(SettingsSection, "total_enemies_killed", TotalEnemiesKilled);
+        config.SetValue(SettingsSection, "total_bosses_killed", TotalBossesKilled);
+        config.SetValue(SettingsSection, "total_crits_landed", TotalCritsLanded);
+        config.SetValue(SettingsSection, "total_rounds_cleared", TotalRoundsCleared);
+        config.SetValue(SettingsSection, "total_libras_earned", TotalLibrasEarned);
+        config.SetValue(SettingsSection, "total_runs_played", TotalRunsPlayed);
+        config.SetValue(SettingsSection, "best_round_reached", BestRoundReached);
+        config.SetValue(SettingsSection, "total_coins_earned_lifetime", TotalCoinsEarnedLifetime);
+        config.SetValue(SettingsSection, "total_play_time_seconds", TotalPlayTimeSeconds);
+        config.SetValue(SettingsSection, "total_missions_completed", TotalMissionsCompleted);
+
+        foreach (var kv in _dailyStats)
+        {
+            var d = kv.Value;
+            config.SetValue(StatsDailySection, kv.Key,
+                $"{d.EnemiesKilled}|{d.BossesKilled}|{d.CritsLanded}|{d.RoundsCleared}|{d.LibrasEarned}|{d.RunsPlayed}|{d.CoinsEarned}|{d.PlayTimeSeconds}");
+        }
+        var everCompletedBuilds = new List<string>();
+        foreach (var cls in EverCompletedBuilds) everCompletedBuilds.Add(cls.ToString());
+        config.SetValue(SettingsSection, "ever_completed_builds", everCompletedBuilds.ToArray());
+
+        var everGotLegendary = new List<string>();
+        foreach (var type in EverGotLegendary) everGotLegendary.Add(type.ToString());
+        config.SetValue(SettingsSection, "ever_got_legendary", everGotLegendary.ToArray());
+
+        config.SetValue(SettingsSection, "unlocked_achievements", new List<string>(_unlockedAchievements).ToArray());
+
+        config.SetValue(MissionsSection, "date", _missionsDate);
+        for (int i = 0; i < Missions.Length; i++)
+        {
+            var slot = Missions[i];
+            config.SetValue(MissionsSection, $"slot_{i}",
+                slot == null ? "" : $"{slot.TemplateId}|{slot.Target}|{slot.Reward}|{slot.Progress}|{slot.Completed}");
+        }
 
         // One key per slug ("level|xp|xpToNext") rather than three parallel arrays — a slug is never
         // dropped from the middle of an array (custom characters can be deleted, but that just leaves
@@ -1099,6 +1498,85 @@ public partial class GameManager : Node
         AccountLevel = (int)config.GetValue(SettingsSection, "account_level", 1);
         AccountXp = (int)config.GetValue(SettingsSection, "account_xp", 0);
         AccountXpToNextLevel = (int)config.GetValue(SettingsSection, "account_xp_to_next", 5);
+
+        TotalEnemiesKilled = (int)config.GetValue(SettingsSection, "total_enemies_killed", 0);
+        TotalBossesKilled = (int)config.GetValue(SettingsSection, "total_bosses_killed", 0);
+        TotalCritsLanded = (int)config.GetValue(SettingsSection, "total_crits_landed", 0);
+        TotalRoundsCleared = (int)config.GetValue(SettingsSection, "total_rounds_cleared", 0);
+        TotalLibrasEarned = (int)config.GetValue(SettingsSection, "total_libras_earned", 0);
+        TotalRunsPlayed = (int)config.GetValue(SettingsSection, "total_runs_played", 0);
+        BestRoundReached = (int)config.GetValue(SettingsSection, "best_round_reached", 0);
+        TotalCoinsEarnedLifetime = (int)config.GetValue(SettingsSection, "total_coins_earned_lifetime", 0);
+        TotalPlayTimeSeconds = (int)config.GetValue(SettingsSection, "total_play_time_seconds", 0);
+        TotalMissionsCompleted = (int)config.GetValue(SettingsSection, "total_missions_completed", 0);
+
+        _dailyStats.Clear();
+        foreach (string dateKey in config.GetSectionKeys(StatsDailySection))
+        {
+            string raw = (string)config.GetValue(StatsDailySection, dateKey, "");
+            string[] parts = raw.Split('|');
+            if (parts.Length != 8
+                || !int.TryParse(parts[0], out int enemies)
+                || !int.TryParse(parts[1], out int bosses)
+                || !int.TryParse(parts[2], out int crits)
+                || !int.TryParse(parts[3], out int rounds)
+                || !int.TryParse(parts[4], out int libras)
+                || !int.TryParse(parts[5], out int runs)
+                || !int.TryParse(parts[6], out int coinsEarned)
+                || !int.TryParse(parts[7], out int playTime))
+                continue;
+
+            _dailyStats[dateKey] = new DailyStats
+            {
+                EnemiesKilled = enemies,
+                BossesKilled = bosses,
+                CritsLanded = crits,
+                RoundsCleared = rounds,
+                LibrasEarned = libras,
+                RunsPlayed = runs,
+                CoinsEarned = coinsEarned,
+                PlayTimeSeconds = playTime,
+            };
+        }
+        PruneOldDailyStats();
+
+        EverCompletedBuilds.Clear();
+        var everCompletedBuilds = (string[])config.GetValue(SettingsSection, "ever_completed_builds", System.Array.Empty<string>());
+        foreach (string raw in everCompletedBuilds)
+            if (System.Enum.TryParse<Player.BuildClass>(raw, out var cls)) EverCompletedBuilds.Add(cls);
+
+        EverGotLegendary.Clear();
+        var everGotLegendary = (string[])config.GetValue(SettingsSection, "ever_got_legendary", System.Array.Empty<string>());
+        foreach (string raw in everGotLegendary)
+            if (System.Enum.TryParse<UpgradeType>(raw, out var type)) EverGotLegendary.Add(type);
+
+        var unlockedAchievements = (string[])config.GetValue(SettingsSection, "unlocked_achievements", System.Array.Empty<string>());
+        _unlockedAchievements = new HashSet<string>(unlockedAchievements);
+
+        _missionsDate = (string)config.GetValue(MissionsSection, "date", "");
+        for (int i = 0; i < Missions.Length; i++)
+        {
+            string raw = (string)config.GetValue(MissionsSection, $"slot_{i}", "");
+            string[] parts = raw.Split('|');
+            if (parts.Length != 5
+                || !int.TryParse(parts[1], out int target)
+                || !int.TryParse(parts[2], out int reward)
+                || !int.TryParse(parts[3], out int progress)
+                || !bool.TryParse(parts[4], out bool completed))
+            {
+                Missions[i] = null;
+                continue;
+            }
+
+            Missions[i] = new MissionSlot
+            {
+                TemplateId = parts[0],
+                Target = target,
+                Reward = reward,
+                Progress = progress,
+                Completed = completed,
+            };
+        }
 
         _characterLevel.Clear();
         _characterXp.Clear();
@@ -1296,6 +1774,7 @@ public partial class GameManager : Node
         XpToNextLevel = 10;
         EnemiesKilled = 0;
         SpecialEnemiesKilled = 0;
+        BossesKilled = 0;
         Coins = 0;
         TotalCoinsEarned = 0;
         Score = 0;

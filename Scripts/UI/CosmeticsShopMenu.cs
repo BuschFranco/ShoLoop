@@ -36,6 +36,11 @@ public partial class CosmeticsShopMenu : Control
     private Label _sectionLabel;
     private VBoxContainer _paletteBox;
 
+    // Personajes isn't a CosmeticCategory — a locked pilot has a portrait/name/cost, not a colour
+    // that gets equipped elsewhere, so it gets its own view mode instead of a swatch grid.
+    private Button _charactersTabButton;
+    private bool _charactersTabSelected;
+
     private const float SwatchSize = 44f;
 
     // 7 x 44px swatches plus 6 x 6px gaps is 344px, inside the ~382px the 420-wide panel leaves after
@@ -93,14 +98,45 @@ public partial class CosmeticsShopMenu : Control
             button.Pressed += () => SelectCategory(captured);
             _tabs[category] = button;
         }
+
+        // Not from the enum loop above — Personajes has no colour to equip, it's a separate view
+        // mode (see RebuildContent).
+        _charactersTabButton = new Button
+        {
+            Text = "Personajes",
+            CustomMinimumSize = new Vector2(0f, 38f),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        _charactersTabButton.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        grid.AddChild(_charactersTabButton);
+        Juice.WireButtonFeedback(_charactersTabButton);
+        _charactersTabButton.Pressed += SelectCharactersTab;
     }
 
     private void SelectCategory(CosmeticCategory category)
     {
-        if (_selected == category) return;
+        if (!_charactersTabSelected && _selected == category) return;
         _selected = category;
-        RebuildPalette();
+        _charactersTabSelected = false;
+        RebuildContent();
         RefreshTabs();
+    }
+
+    private void SelectCharactersTab()
+    {
+        if (_charactersTabSelected) return;
+        _charactersTabSelected = true;
+        RebuildContent();
+        RefreshTabs();
+    }
+
+    // Personajes rebuilds into rows (name/portrait/price) instead of a swatch grid — everything else
+    // downstream (Open, SelectCategory, SelectCharactersTab) goes through this instead of calling
+    // RebuildPalette directly, so neither has to know which mode is active.
+    private void RebuildContent()
+    {
+        if (_charactersTabSelected) RebuildCharacterRows();
+        else RebuildPalette();
     }
 
     // A tab's border is the colour that category currently renders with, so the row reads as a
@@ -109,7 +145,7 @@ public partial class CosmeticsShopMenu : Control
     {
         foreach (var (category, button) in _tabs)
         {
-            bool active = category == _selected;
+            bool active = !_charactersTabSelected && category == _selected;
             Color equipped = GameManager.Instance.CosmeticColor(category, CosmeticCatalog.BaseColor(category));
 
             // The Outline category's "Original" is fully transparent (no outline at all), which would
@@ -131,6 +167,21 @@ public partial class CosmeticsShopMenu : Control
             button.AddThemeStyleboxOverride("pressed", style);
             button.AddThemeColorOverride("font_color", active ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
         }
+
+        // Personajes has no equipped colour to summarize, so it just gets the plain active/inactive
+        // treatment every other tab already falls back to for a transparent equipped colour.
+        var charStyle = new StyleBoxFlat
+        {
+            BgColor = _charactersTabSelected ? new Color(Palette.Player, 0.28f) : new Color(0.043f, 0.024f, 0.078f, 0.7f),
+            BorderColor = Palette.Player,
+        };
+        charStyle.SetBorderWidthAll(_charactersTabSelected ? 3 : 1);
+        charStyle.SetContentMarginAll(4f);
+
+        _charactersTabButton.AddThemeStyleboxOverride("normal", charStyle);
+        _charactersTabButton.AddThemeStyleboxOverride("hover", charStyle);
+        _charactersTabButton.AddThemeStyleboxOverride("pressed", charStyle);
+        _charactersTabButton.AddThemeColorOverride("font_color", _charactersTabSelected ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
     }
 
     // --- Palette -------------------------------------------------------------------------------
@@ -145,7 +196,7 @@ public partial class CosmeticsShopMenu : Control
         _paletteBox.AddThemeConstantOverride("separation", 6);
         _content.AddChild(_paletteBox);
 
-        RebuildPalette();
+        RebuildContent();
         RefreshTabs();
     }
 
@@ -192,6 +243,109 @@ public partial class CosmeticsShopMenu : Control
         }
 
         RefreshSwatches();
+    }
+
+    // --- Personajes ------------------------------------------------------------------------------
+    //
+    // Same row shape AchievementsMenu/MissionsMenu already use (bordered panel, name + state on one
+    // line, a description underneath) — a locked pilot has a portrait, name and cost, not a colour,
+    // so the swatch grid above doesn't fit it.
+
+    private void RebuildCharacterRows()
+    {
+        foreach (var child in _paletteBox.GetChildren()) child.QueueFree();
+        _swatches.Clear();
+
+        _sectionLabel.Text = "Pilotos secretos";
+
+        foreach (var info in CharacterCatalog.All)
+        {
+            if (!info.RequiresUnlock) continue;
+            _paletteBox.AddChild(BuildCharacterRow(info));
+        }
+    }
+
+    private Control BuildCharacterRow(CharacterInfo info)
+    {
+        bool unlocked = CharacterCatalog.IsUnlocked(info);
+
+        var panel = new PanelContainer();
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.102f, 0.0588f, 0.1686f, 0.75f),
+            BorderColor = unlocked ? Palette.Player : new Color(0.4902f, 0.9922f, 0.9961f, 0.25f),
+        };
+        style.SetBorderWidthAll(2);
+        style.SetContentMarginAll(8f);
+        panel.AddThemeStyleboxOverride("panel", style);
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
+        panel.AddChild(row);
+
+        // Same texture/tint the carousel and HUD use, dimmed the same way a locked carousel preview
+        // already dims — seeing who you're saving up for is part of the motivation.
+        var portrait = new TextureRect
+        {
+            Texture = CharacterCatalog.Texture(info),
+            CustomMinimumSize = new Vector2(48f, 48f),
+            ExpandMode = TextureRect.ExpandModeEnum.FitWidth,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            Modulate = unlocked ? info.Color : new Color(info.Color.R, info.Color.G, info.Color.B, 0.55f),
+        };
+        row.AddChild(portrait);
+
+        var textBox = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        textBox.AddThemeConstantOverride("separation", 2);
+        row.AddChild(textBox);
+
+        var nameLabel = new Label { Text = info.Name };
+        nameLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
+        nameLabel.AddThemeColorOverride("font_color", unlocked ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
+        textBox.AddChild(nameLabel);
+
+        var descLabel = new Label
+        {
+            Text = info.Description ?? "",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        descLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        descLabel.AddThemeColorOverride("font_color", new Color(0.65f, 0.72f, 0.82f));
+        textBox.AddChild(descLabel);
+
+        if (unlocked)
+        {
+            var ownedLabel = new Label { Text = "✓ Desbloqueado" };
+            ownedLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
+            ownedLabel.AddThemeColorOverride("font_color", Palette.Player);
+            row.AddChild(ownedLabel);
+        }
+        else
+        {
+            var buyButton = new Button { Text = $"{info.UnlockCost} Libras" };
+            buyButton.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+            Juice.WireButtonFeedback(buyButton);
+            string slug = info.Slug;
+            int cost = info.UnlockCost;
+            buyButton.Pressed += () => OnCharacterRowPressed(slug, cost);
+            row.AddChild(buyButton);
+        }
+
+        return panel;
+    }
+
+    private void OnCharacterRowPressed(string slug, int cost)
+    {
+        if (!GameManager.Instance.TryUnlockCharacter(slug, cost))
+        {
+            AudioManager.Instance?.Play(AudioManager.Sfx.UiDenied);
+            Juice.Shake(_librasLabel, flashColor: Palette.Warning);
+            return;
+        }
+
+        AudioManager.Instance?.Play(AudioManager.Sfx.UiBuy);
+        PulseLibras(cost);
+        RebuildCharacterRows();
     }
 
     private static Label TierHeading(CosmeticTier tier)
@@ -315,7 +469,7 @@ public partial class CosmeticsShopMenu : Control
     public void Open()
     {
         _librasLabel.Text = $"Libras: {GameManager.Instance.Libras}";
-        RefreshSwatches();
+        RebuildContent();
         RefreshTabs();
         FitToOrientation();
 

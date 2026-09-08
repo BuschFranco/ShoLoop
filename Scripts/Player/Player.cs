@@ -1063,6 +1063,7 @@ public partial class Player : CharacterBody2D
             if (!req.IsMet(this)) return;
         _activeClasses.Add(cls);
         ApplyClassPassive(cls);
+        GameManager.Instance?.NotifyBuildCompleted(cls);
     }
 
     // One-shot setup when a class activates (rather than every frame).
@@ -1289,25 +1290,10 @@ public partial class Player : CharacterBody2D
     }
 
     // Shared by the gun and the missile so every auto-weapon respects FireRange identically.
-    private Node2D FindNearestEnemyInRange()
-    {
-        Node2D nearest = null;
-        float nearestDist = float.MaxValue;
-
-        foreach (var n in GetTree().GetNodesInGroup("enemies"))
-        {
-            if (n is not Node2D e2d || !IsInstanceValid(e2d)) continue;
-
-            float d = GlobalPosition.DistanceSquaredTo(e2d.GlobalPosition);
-            if (d < nearestDist)
-            {
-                nearestDist = d;
-                nearest = e2d;
-            }
-        }
-
-        return nearestDist <= EffectiveFireRange * EffectiveFireRange ? nearest : null;
-    }
+    // Same obstacle-aware pick FindNearestVisibleEnemy already does for the main gun — a missile
+    // shouldn't launch at the nearest enemy on the other side of a wall either.
+    private Node2D FindNearestEnemyInRange() =>
+        FindNearestVisibleEnemy(GetTree().GetNodesInGroup("enemies"), GlobalPosition, EffectiveFireRange);
 
     private void SpawnLaserBeam(Vector2 targetGlobalPos, bool isCrit = false)
     {
@@ -1653,27 +1639,36 @@ public partial class Player : CharacterBody2D
         BulletDamage = Mathf.RoundToInt(_baseBulletDamage + Mathf.Min(_stackTotals.GetValueOrDefault(UpgradeType.BulletDamage, 0f), MaxBulletDamageBonus));
     }
 
+    // Nearest enemy within range that isn't hidden behind an obstacle — a bullet already stops dead
+    // against one (Bullet.OnBodyEntered), so picking the geometrically-nearest target regardless of
+    // what's in the way used to waste the shot (and that fraction of the cooldown) on a wall. Sorted
+    // by distance rather than raycasting every candidate in the group: the common case (nothing
+    // blocking the nearest enemy) costs exactly one raycast, same as before this existed.
+    private Node2D FindNearestVisibleEnemy(Godot.Collections.Array<Node> enemies, Vector2 origin, float range)
+    {
+        float rangeSq = range * range;
+        var candidates = new List<Node2D>();
+        foreach (var n in enemies)
+            if (n is Node2D e2d && IsInstanceValid(e2d) && origin.DistanceSquaredTo(e2d.GlobalPosition) <= rangeSq)
+                candidates.Add(e2d);
+
+        candidates.Sort((a, b) => origin.DistanceSquaredTo(a.GlobalPosition)
+            .CompareTo(origin.DistanceSquaredTo(b.GlobalPosition)));
+
+        foreach (var candidate in candidates)
+            if (!Targeting.HasObstacleBetween(this, origin, candidate.GlobalPosition))
+                return candidate;
+
+        return null;
+    }
+
     private void OnFireCooldownTimeout()
     {
         var enemies = GetTree().GetNodesInGroup("enemies");
         if (enemies.Count == 0) return;
 
-        Node2D nearest = null;
-        float nearestDist = float.MaxValue;
-        foreach (var n in enemies)
-        {
-            if (n is Node2D e2d && IsInstanceValid(e2d))
-            {
-                float d = GlobalPosition.DistanceSquaredTo(e2d.GlobalPosition);
-                if (d < nearestDist)
-                {
-                    nearestDist = d;
-                    nearest = e2d;
-                }
-            }
-        }
+        Node2D nearest = FindNearestVisibleEnemy(enemies, GlobalPosition, EffectiveFireRange);
         if (nearest == null) return;
-        if (nearestDist > EffectiveFireRange * EffectiveFireRange) return;
 
         Vector2 baseDir = (nearest.GlobalPosition - GlobalPosition).Normalized();
         SpawnMuzzleFlash(baseDir);
@@ -1747,9 +1742,14 @@ public partial class Player : CharacterBody2D
     // Rolled per hit, not per volley/tick — same reasoning as burn being applied per hit rather
     // than per pickup. Shared by every weapon (bullets, laser, blades, missiles, the drone) so a
     // Crítico build feels like it crits everywhere, not just on the basic gun.
+    // Lifetime crit total (GameManager.TotalCritsLanded) is rolled up from this at end of run —
+    // Player is recreated fresh every run, so no reset needed here.
+    public int CritsLandedThisRun { get; private set; }
+
     public int ApplyCrit(int baseDamage, out bool isCrit)
     {
         isCrit = CritChance > 0f && _critRng.NextDouble() * 100.0 < CritChance;
+        if (isCrit) CritsLandedThisRun++;
         float classBonus = IsClassActive(BuildClass.Assassin) ? 1.25f : 1f;
         return isCrit ? Mathf.RoundToInt(baseDamage * CritMultiplier * classBonus) : Mathf.RoundToInt(baseDamage * classBonus);
     }
@@ -1847,7 +1847,11 @@ public partial class Player : CharacterBody2D
         // would silently "forget" the Legendary here even though the stat itself keeps accumulating
         // the Common's value on top. BuildCatalog's Loadout hint relies on this being accurate.
         if (!_ownedTiers.TryGetValue(upgrade.Type, out var existingTier) || upgrade.Tier > existingTier)
+        {
             _ownedTiers[upgrade.Type] = upgrade.Tier;
+            if (upgrade.Tier == RewardTier.Legendary)
+                GameManager.Instance?.NotifyLegendaryObtained(upgrade.Type);
+        }
         switch (upgrade.Type)
         {
             case UpgradeType.FireRange:

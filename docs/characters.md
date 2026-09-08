@@ -95,11 +95,20 @@ that combines the two — always go through it rather than checking `RequiresUnl
 existing call omits both, so nothing already in the cast becomes locked by accident — this is
 opt-in per entry, not a default that had to be overridden six times.
 
-**In the carousel** (`CharacterSelectMenu`), a locked character's portrait dims to 55% alpha (the same
-"disabled" convention `RewardCard` uses) but its name/description/perk still show in full — seeing
-what you're saving up for is the point. `ConfirmButton` and `UnlockButton` are mutually exclusive for
-whichever character is framed; pressing Unlock spends via `GameManager.TryUnlockCharacter` and
-refreshes in place, without closing the carousel or auto-selecting the newly-unlocked pilot.
+**Purchasing lives in the Tienda, not the carousel.** `CosmeticsShopMenu` has a "Personajes" tab —
+a view mode rather than a `CosmeticCategory` (a locked pilot has a portrait/name/cost, not a colour
+to equip elsewhere) — listing every `RequiresUnlock` entry as a row (portrait, name, description,
+and either "✓ Desbloqueado" or a "{cost} Libras" buy button), same row shape
+`AchievementsMenu`/`MissionsMenu` already use. Pressing the buy button spends via the same
+`GameManager.TryUnlockCharacter` the carousel used to call directly, with the same
+denied-purchase shake/flash and buy-sound/Libras-pulse feedback every other shop purchase already
+has.
+
+**In the carousel** (`CharacterSelectMenu`), a locked character's portrait still dims to 55% alpha
+(the same "disabled" convention `RewardCard` uses) and its name/description/perk still show in full
+— seeing what you're saving up for is the point — but `ConfirmButton` is simply hidden in favour of
+a static hint label ("Bloqueado — cómpralo en la Tienda"). The carousel still consults
+`CharacterCatalog.IsUnlocked`/`Confirm()`'s guard, it just no longer sells anything itself.
 
 **The three `secreto` slots are deliberately unfinished** — cosmetic-only placeholders with a "?"
 portrait, meant to be filled in exactly like the six amigos originally were: swap the PNG with

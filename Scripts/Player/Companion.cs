@@ -56,24 +56,26 @@ public partial class Companion : Node2D
         _fireCooldown.WaitTime = 1f / effectiveRate;
     }
 
+    // Nearest enemy with a clear line of sight — same reasoning as Player.FindNearestVisibleEnemy
+    // (own copy since the drone doesn't share Player's targeting loop): the drone's shot stops dead
+    // against an obstacle just like the player's does, so aiming at whatever's nearest regardless of
+    // what's in the way used to waste the shot. No range limit here, same as before this existed —
+    // only Player's own gun/missile are range-gated.
     private Node2D FindNearestEnemy()
     {
-        Node2D nearest = null;
-        float nearestDist = float.MaxValue;
-
+        var candidates = new List<Node2D>();
         foreach (var n in GetTree().GetNodesInGroup("enemies"))
-        {
-            if (n is not Node2D e2d || !IsInstanceValid(e2d)) continue;
+            if (n is Node2D e2d && IsInstanceValid(e2d))
+                candidates.Add(e2d);
 
-            float d = GlobalPosition.DistanceSquaredTo(e2d.GlobalPosition);
-            if (d < nearestDist)
-            {
-                nearestDist = d;
-                nearest = e2d;
-            }
-        }
+        candidates.Sort((a, b) => GlobalPosition.DistanceSquaredTo(a.GlobalPosition)
+            .CompareTo(GlobalPosition.DistanceSquaredTo(b.GlobalPosition)));
 
-        return nearest;
+        foreach (var candidate in candidates)
+            if (!Targeting.HasObstacleBetween(this, GlobalPosition, candidate.GlobalPosition))
+                return candidate;
+
+        return null;
     }
 
     private void OnFireCooldownTimeout()

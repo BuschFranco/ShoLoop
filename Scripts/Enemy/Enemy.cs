@@ -43,6 +43,10 @@ public partial class Enemy : CharacterBody2D
     [Export] public float SeparationRadius = 46f;
     private const float SeparationStrength = 170f;
 
+    // Cosmetic-only burst on death (CosmeticCategory.KillEffect) — sized to read clearly around a
+    // single enemy's death position without swallowing its neighbours in a crowd.
+    private const float KillEffectRadius = 26f;
+
     // Persistent per-enemy heading offset (degrees, randomised once in _Ready). Without it every
     // enemy computes the *identical* chase vector and the pack travels in one straight column;
     // a few degrees of variation makes them converge along slightly different arcs instead.
@@ -840,6 +844,11 @@ public partial class Enemy : CharacterBody2D
             int xpToGive = willSplit || !GrantsRewards ? 0 : XpReward;
             int coinsToGive = GrantsRewards ? CoinsReward : 0;
             int finalXp = GameManager.Instance?.RegisterKill(xpToGive, coinsToGive, Category) ?? xpToGive;
+
+            // GetParent(), never `this` — this node is QueueFree()'d a few lines down, and Juice.Blast
+            // parents the effect onto whatever it's given, so it would die with the enemy mid-fade.
+            var killEffectColor = GameManager.Instance?.CosmeticColor(CosmeticCategory.KillEffect, Palette.EnemyBullet) ?? Palette.EnemyBullet;
+            Juice.Blast(GetParent(), GlobalPosition, KillEffectRadius, killEffectColor, growTime: 0.12f, fadeTime: 0.25f);
 
             // Score is synced 1:1 with XP now, so a mid-chain Splitter kill (xpToGive == 0 until
             // the final generation) correctly shows no popup either — only the terminal kill does.

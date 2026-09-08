@@ -18,6 +18,14 @@ public enum CosmeticCategory
     Arena,
     Shield,
     Blades,
+    // These three colour a Control's StyleBoxFlat border rather than a CanvasItem property, so they
+    // go through Juice.ApplyCosmeticToStyleBox instead of Juice.ApplyCosmetic — see that method for
+    // why (no Epico Shimmer: a UI border isn't in the arena's glow pass either way).
+    Marco,
+    Hud,
+    // Unlike every other category, "Original" here has no pre-existing look to reproduce — there was
+    // no kill effect before this category existed. See BaseColor below.
+    KillEffect,
 }
 
 // Rarity, which drives price and the frame drawn around a swatch. This is not decoration: the tiers
@@ -162,6 +170,9 @@ public static class CosmeticCatalog
         CosmeticCategory.Arena => "Color del mapa",
         CosmeticCategory.Shield => "Color del escudo",
         CosmeticCategory.Blades => "Color de las cuchillas",
+        CosmeticCategory.Marco => "Color del marco del retrato",
+        CosmeticCategory.Hud => "Color del borde del HUD",
+        CosmeticCategory.KillEffect => "Color del efecto al matar",
         _ => category.ToString(),
     };
 
@@ -175,6 +186,9 @@ public static class CosmeticCatalog
         CosmeticCategory.Arena => "Mapa",
         CosmeticCategory.Shield => "Escudo",
         CosmeticCategory.Blades => "Cuchillas",
+        CosmeticCategory.Marco => "Marco",
+        CosmeticCategory.Hud => "HUD",
+        CosmeticCategory.KillEffect => "Muertes",
         _ => category.ToString(),
     };
 
@@ -191,6 +205,13 @@ public static class CosmeticCatalog
         CosmeticCategory.Arena => Palette.ArenaBounds,
         CosmeticCategory.Shield => ShieldAuraBase,
         CosmeticCategory.Blades => Palette.OrbitBlade,
+        // Reproduces the Swatch panel's current hardcoded border in CharacterSelectMenu.tscn/HUD.tscn.
+        CosmeticCategory.Marco => new Color(0.4902f, 0.9922f, 0.9961f, 0.3f),
+        // Palette.HudPanelBorder existed unused until this category — matches the TopBarPanel border
+        // already hardcoded in HUD.tscn.
+        CosmeticCategory.Hud => Palette.HudPanelBorder,
+        // No prior effect to reproduce (see the enum's doc comment) — just a sensible default.
+        CosmeticCategory.KillEffect => Palette.EnemyBullet,
         _ => Colors.White,
     };
 

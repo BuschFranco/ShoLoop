@@ -361,6 +361,17 @@ public static class Juice
         return Shimmer(target, property, from, to, option.Period);
     }
 
+    /// <summary>Same idea as ApplyCosmetic, for a panel border colour instead of a CanvasItem property
+    /// — StyleBoxFlat is a Resource, not a CanvasItem, so it can't go through target.Set() the same
+    /// way. Deliberately static (no Shimmer): a UI border isn't in the arena's WorldEnvironment glow
+    /// pass, so an Epico colour wouldn't bloom here regardless — it just reads as one bright, fixed
+    /// tone, which doesn't justify the extra tween.</summary>
+    public static void ApplyCosmeticToStyleBox(StyleBoxFlat box, CosmeticCategory category, Color baseColor)
+    {
+        if (box == null) return;
+        box.BorderColor = GameManager.Instance?.CosmeticColor(category, baseColor) ?? baseColor;
+    }
+
     /// <summary>An endless there-and-back tween between two colours. Null under reduced motion.</summary>
     // Reduced motion turns this off entirely rather than slowing it down, unlike the helpers above
     // that merely shorten. A colour that pulses forever is precisely what the setting's own

@@ -84,6 +84,11 @@ public partial class GameOverScreen : Control
                 lines.Add($"Build: {string.Join(" + ", builds)}");
         }
 
+        // Evaluated inside RegisterFinalScore, which already ran before Open() is called (see
+        // NotifyPlayerDied/AbandonRun) — this just reveals whatever it found.
+        foreach (var achievement in gm.LastRunNewAchievements)
+            lines.Add($"¡Logro desbloqueado: {achievement.Name}! (+{achievement.RewardLibras} Libras)");
+
         foreach (Node child in _summaryContainer.GetChildren())
             child.QueueFree();
 

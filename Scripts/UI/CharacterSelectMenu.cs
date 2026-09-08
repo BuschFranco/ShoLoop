@@ -46,13 +46,13 @@ public partial class CharacterSelectMenu : Control
     private RichTextLabel _recordsList;
     private Label _descLabel;
     private Button _confirmButton;
-    private Button _unlockButton;
+    private Label _lockedHintLabel;
     private Button _deleteButton;
-    private Label _librasLabel;
     private CharacterCreator _creator;
     private PanelContainer _panel;
     private Control _carouselPreview;
     private VBoxContainer _identity;
+    private StyleBoxFlat _swatchStyle;
 
     // Guards against a rapid-fire double-press queuing a second crossfade on top of one still in
     // flight — the two would fight over the same nodes' Position/Modulate.
@@ -80,10 +80,17 @@ public partial class CharacterSelectMenu : Control
         _perkPanel = GetNode<PanelContainer>("CenterContainer/Panel/Box/PerkPanel");
         _perkLabel = GetNode<Label>("CenterContainer/Panel/Box/PerkPanel/PerkLabel");
         _confirmButton = GetNode<Button>("CenterContainer/Panel/Box/ConfirmButton");
-        _unlockButton = GetNode<Button>("CenterContainer/Panel/Box/UnlockButton");
+        _lockedHintLabel = GetNode<Label>("CenterContainer/Panel/Box/LockedHintLabel");
         _deleteButton = GetNode<Button>("CenterContainer/Panel/Box/Actions/DeleteButton");
-        _librasLabel = GetNode<Label>("CenterContainer/Panel/Box/LibrasLabel");
         _creator = GetNode<CharacterCreator>("CharacterCreator");
+
+        // Built in code rather than left as the .tscn's shared sub_resource — same "own StyleBoxFlat
+        // per instance" convention CosmeticsShopMenu/AchievementsMenu already follow — so the Marco
+        // cosmetic can repaint just this border without touching anything else in the panel style.
+        var swatch = GetNode<Panel>("CenterContainer/Panel/Box/Carousel/Preview/Swatch");
+        _swatchStyle = new StyleBoxFlat { BgColor = new Color(0.043f, 0.024f, 0.078f, 0.85f) };
+        _swatchStyle.SetBorderWidthAll(2);
+        swatch.AddThemeStyleboxOverride("panel", _swatchStyle);
 
         var leftButton = GetNode<Button>("CenterContainer/Panel/Box/Carousel/LeftButton");
         var rightButton = GetNode<Button>("CenterContainer/Panel/Box/Carousel/RightButton");
@@ -95,10 +102,9 @@ public partial class CharacterSelectMenu : Control
         createButton.Pressed += () => _creator.Open();
         _deleteButton.Pressed += DeleteFramed;
         _confirmButton.Pressed += Confirm;
-        _unlockButton.Pressed += UnlockFramed;
         cancelButton.Pressed += () => Juice.ModalOut(_panel, () => Visible = false);
 
-        foreach (var b in new[] { leftButton, rightButton, createButton, _deleteButton, _confirmButton, _unlockButton, cancelButton })
+        foreach (var b in new[] { leftButton, rightButton, createButton, _deleteButton, _confirmButton, cancelButton })
             Juice.WireButtonFeedback(b);
 
         // Land on the character that was just created rather than making the player hunt for it at
@@ -204,6 +210,8 @@ public partial class CharacterSelectMenu : Control
         var tint = info.Color;
         _previewTexture.Modulate = locked ? new Color(tint.R, tint.G, tint.B, 0.55f) : tint;
 
+        Juice.ApplyCosmeticToStyleBox(_swatchStyle, CosmeticCategory.Marco, CosmeticCatalog.BaseColor(CosmeticCategory.Marco));
+
         // Marks the pilot the run would currently start with. The carousel silently *opened* on this
         // one, but nothing said so — step once and there was no way back to "which was I using"
         // except memory, and the confirm button read identically either way.
@@ -237,16 +245,11 @@ public partial class CharacterSelectMenu : Control
         // Only the player's own characters can be removed; the built-in cast is part of the game.
         _deleteButton.Visible = info.IsCustom;
 
-        // Confirm and Unlock are mutually exclusive states for the framed character, never both.
+        // Confirm and the locked hint are mutually exclusive states for the framed character, never
+        // both. Purchasing moved to the Tienda's "Personajes" tab (CosmeticsShopMenu) — this screen
+        // only shows lock state now, it doesn't sell anything.
         _confirmButton.Visible = !locked;
-        _unlockButton.Visible = locked;
-        if (locked)
-        {
-            _unlockButton.Text = $"Desbloquear ({info.UnlockCost} Libras)";
-            _unlockButton.Disabled = GameManager.Instance.Libras < info.UnlockCost;
-        }
-
-        _librasLabel.Text = $"Libras: {GameManager.Instance.Libras}";
+        _lockedHintLabel.Visible = locked;
 
         FitDescriptionHeight(info.Description ?? "");
     }
@@ -267,17 +270,6 @@ public partial class CharacterSelectMenu : Control
     {
         _recordsList.Text = RecordTable.Build(GameManager.LoadCharacterRecords(slug), MaxRecordsShown,
             CharBudget, "Sin récords todavía");
-    }
-
-    // Spends and unlocks in place — no auto-select, no closing the carousel — so the player can
-    // immediately see the character they just unlocked (Confirm swaps in for Unlock right here)
-    // instead of being dropped back into a run before they've even looked at what they bought.
-    private void UnlockFramed()
-    {
-        var info = CharacterCatalog.Get(_order[_index]);
-        if (!GameManager.Instance.TryUnlockCharacter(info.Slug, info.UnlockCost)) return;
-
-        RefreshPreview();
     }
 
     // Sizes the scroll area to exactly the text, capped so the panel can't outgrow the screen.
