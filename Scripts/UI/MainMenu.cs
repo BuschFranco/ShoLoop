@@ -14,7 +14,8 @@ public partial class MainMenu : Control
         var buildsButton = GetNode<Button>("VBoxContainer/ButtonsRow/BuildsButton");
         var tiendaButton = GetNode<Button>("VBoxContainer/ButtonsRow/TiendaButton");
         var characterSelect = GetNode<CharacterSelectMenu>("CharacterSelectMenu");
-        startButton.Pressed += characterSelect.Open;
+        var gameModeMenu = GetNode<GameModeMenu>("GameModeMenu");
+        startButton.Pressed += gameModeMenu.Open;
         startButton.GrabFocus();
 
         Juice.WireButtonFeedback(startButton);

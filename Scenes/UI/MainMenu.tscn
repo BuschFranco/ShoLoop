@@ -10,6 +10,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/UI/AchievementsMenu.tscn" id="8"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/StatsMenu.tscn" id="9"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/MissionsMenu.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/GameModeMenu.tscn" id="11"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]
 content_margin_left = 14.0
@@ -281,6 +282,10 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="CharacterSelectMenu" parent="." instance=ExtResource("4")]
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GameModeMenu" parent="." instance=ExtResource("11")]
 grow_horizontal = 2
 grow_vertical = 2
 

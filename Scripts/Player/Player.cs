@@ -413,6 +413,12 @@ public partial class Player : CharacterBody2D
         // leaving it alone. A real 0.9 still gets through.
         EnemyHpMultiplier = character.EnemyHpMultiplier > 0f ? character.EnemyHpMultiplier : 1f;
 
+        // Hardcore: always exactly 1 heart, no matter the scene default or any character perk. The
+        // Heart reward that would normally raise this never appears in the first place (see
+        // UpgradeData.BuildCatalog), so nothing downstream can push this back up mid-run.
+        if (GameManager.Instance?.CurrentGameMode == GameManager.GameMode.Hardcore)
+            MaxLives = 1;
+
         CurrentLives = MaxLives;
 
         _baseFireRate = FireRate;

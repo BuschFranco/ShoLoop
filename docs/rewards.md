@@ -52,7 +52,7 @@ Every catalog entry declares a `RewardSource`, a `[Flags]` enum:
 [Flags] public enum RewardSource { LevelUp = 1, Shop = 2, Both = LevelUp | Shop }
 ```
 
-`BuildCatalog(source)` filters the single full catalog by that flag, and the two callers each ask for their own pool:
+`BuildCatalog(source)` filters the single full catalog by that flag — and, when `GameManager.CurrentGameMode` is `Hardcore`, also drops every `Heart`/`HitShield`/`ShieldRegen` entry outright before either caller ever sees them. That has to happen inside `BuildCatalog` itself rather than via the `isUseless` predicate below: `PickFromTier` falls back to the *unfiltered* pool once a filtered one comes up empty (so the picker never has to skip a slot), and that fallback would occasionally hand back a Heart/Shield item if they were only excluded by `isUseless`. Removing them from the catalog is the only way "never appears" actually means never. See [characters.md](characters.md#game-mode) for where the mode itself gets picked. The two callers each ask for their own pool:
 
 | | Call | Pool |
 |---|---|---|

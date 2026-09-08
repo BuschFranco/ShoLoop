@@ -5,6 +5,26 @@ See [CharacterCatalog.cs](../Scripts/Player/CharacterCatalog.cs). Picked before 
 `Player._Ready` reads `GameManager.SelectedCharacter`, looks it up, and applies everything before any
 other field is snapshotted.
 
+## Game mode
+
+One step earlier than character select — pressing "Comenzar" on the main menu opens
+[GameModeMenu](../Scenes/UI/GameModeMenu.tscn) first, a plain two-option screen ("Clásico"/
+"Hardcore") that calls `GameManager.SetGameMode(mode)` and only then opens `CharacterSelectMenu`.
+`GameManager.CurrentGameMode` (`GameMode.Classic`/`GameMode.Hardcore`) persists the same way
+`SelectedCharacter` does — a plain `settings.cfg` key, unaffected by `ResetRun()` — so "Jugar de
+nuevo" on Game Over reloads the arena with whichever mode was last picked, no re-prompt.
+
+**Hardcore pins the player to exactly 1 heart, forever, with no shield rewards at all** — two
+changes, both gated on `GameManager.CurrentGameMode == GameMode.Hardcore`:
+- `Player._Ready` forces `MaxLives = 1` right after the character's own stat multipliers are
+  applied (no `CharacterInfo` field grants bonus lives today, so this is the only override needed).
+- `UpgradeData.BuildCatalog` drops every `Heart`/`HitShield`/`ShieldRegen` entry from the catalog
+  before level-up picks, the shop, or the boss Ultimate choice ever roll from it — see
+  [rewards.md](rewards.md#level-up-picks-vs-shop-items) for why that has to happen in the catalog
+  itself rather than via the usual `isUseless` filter. `HeartPickup`/`ShieldPickup` world drops still
+  exist but become no-ops on their own: `Player.AddLife`/shield refill only top up toward the
+  existing max, and that max can never move past 1/0 in Hardcore.
+
 **The current cast is a joke roster** — portraits of the author's coworkers with gag perks, expected
 to be swapped, renamed and retuned often. This document is written for that: the sections below are
 ordered by what you're most likely to be here to do.

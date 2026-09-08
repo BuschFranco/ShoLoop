@@ -214,9 +214,18 @@ public class UpgradeData
     public static Dictionary<RewardTier, List<UpgradeData>> BuildCatalog(RewardSource source)
     {
         var full = BuildFullCatalog();
+
+        // Hardcore pins MaxLives to 1 forever (Player._Ready) and never lets shield charges exist —
+        // filtered out here, at the source, rather than via the isUseless predicate PickFromTier
+        // already takes: that predicate falls back to the unfiltered pool once filtering leaves it
+        // empty, which would occasionally leak a Heart/Shield offer back in. Removing them from the
+        // catalog itself means there's nothing for that fallback to resurrect.
+        bool hardcore = GameManager.Instance?.CurrentGameMode == GameManager.GameMode.Hardcore;
+
         var filtered = new Dictionary<RewardTier, List<UpgradeData>>();
         foreach (var kv in full)
-            filtered[kv.Key] = kv.Value.FindAll(u => (u.Source & source) != 0);
+            filtered[kv.Key] = kv.Value.FindAll(u => (u.Source & source) != 0
+                && (!hardcore || (u.Type != UpgradeType.Heart && u.Type != UpgradeType.HitShield && u.Type != UpgradeType.ShieldRegen)));
         return filtered;
     }
 

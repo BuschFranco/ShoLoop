@@ -1124,6 +1124,25 @@ public partial class GameManager : Node
         config.Save(SettingsFilePath);
     }
 
+    // Clásico is the game as it's always been; Hardcore pins the player to exactly 1 heart forever
+    // (Player._Ready) and strips Heart/Shield rewards out of every pool before they're even rolled
+    // (UpgradeData.BuildCatalog) rather than filtering them out after the fact — see that method for
+    // why a post-hoc filter isn't enough (PickFromTier falls back to the unfiltered pool once a
+    // filtered one comes up empty).
+    public enum GameMode { Classic, Hardcore }
+
+    public GameMode CurrentGameMode { get; private set; } = GameMode.Classic;
+
+    public void SetGameMode(GameMode mode)
+    {
+        CurrentGameMode = mode;
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, "game_mode", (int)mode);
+        config.Save(SettingsFilePath);
+    }
+
     // Reduced motion. The actual flag lives on DangerLevel (which is where the consumers already read
     // it from and which knows nothing about the scene tree); this is the persisted, user-facing half.
     // It existed as a hardcoded `false` with a comment saying it was there so wiring a toggle later
@@ -1478,6 +1497,8 @@ public partial class GameManager : Node
             slug = CharacterCatalog.SlugForLegacyIndex((int)config.GetValue(SettingsSection, "selected_character", 0));
 
         SelectedCharacter = slug;
+
+        CurrentGameMode = (GameMode)(int)config.GetValue(SettingsSection, "game_mode", (int)GameMode.Classic);
 
         // Falls back to the old "meta_currency" key so a save from before the Núcleos → Libras rename
         // doesn't lose an existing balance.
