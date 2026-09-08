@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vqlx25n0ncgr"
-path="res://.godot/imported/shooter.svg-cfad23d46ceaf304a2f78560506ee75b.ctex"
+uid="uid://dwos5w8rvpj75"
+path="res://.godot/imported/splitter.png-24280ef1881b37d0c09b5bc5b0ae2b89.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/Enemies/shooter.svg"
-dest_files=["res://.godot/imported/shooter.svg-cfad23d46ceaf304a2f78560506ee75b.ctex"]
+source_file="res://Assets/Sprites/Enemies/splitter.png"
+dest_files=["res://.godot/imported/splitter.png-24280ef1881b37d0c09b5bc5b0ae2b89.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

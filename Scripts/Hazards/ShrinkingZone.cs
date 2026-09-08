@@ -76,8 +76,14 @@ public partial class ShrinkingZone : Node2D
 
         // The lethal region is painted as a thick annulus from the safe edge outward — showing where you
         // must not be reads better than outlining where you may.
+        //
+        // This one stays a DrawArc, for the same reason FogOverlay's does: Reach is 3600px, far wider
+        // than the 4px steps a pixel ring is built from, so stroking a stepped contour that thick would
+        // pile mitre joints on top of each other. It's a fill, not an edge — and it already passes
+        // antialiased: false. The *visible* boundary is the thin EdgeColor ring on the line below, and
+        // that one is stepped.
         const float Reach = 3600f;
         DrawArc(Vector2.Zero, radius + Reach * 0.5f, 0f, Mathf.Tau, 96, DangerColor, Reach, false);
-        DrawArc(Vector2.Zero, radius, 0f, Mathf.Tau, 96, EdgeColor, 4f, true);
+        Juice.DrawPixelRing(this, Vector2.Zero, radius, 4f, EdgeColor);
     }
 }

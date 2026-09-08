@@ -27,7 +27,7 @@ public partial class HeartIcon : Control
             var outline = new Vector2[points.Length + 1];
             points.CopyTo(outline, 0);
             outline[points.Length] = points[0];
-            DrawPolyline(outline, new Color(Palette.HeartPickup, 0.6f), 1.5f, true);
+            DrawPolyline(outline, new Color(Palette.HeartPickup, 0.6f), 1.5f, false);
         }
     }
 

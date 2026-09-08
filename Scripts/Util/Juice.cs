@@ -238,17 +238,128 @@ public static class Juice
     // These deliberately do NOT go through StartTween: it keys one tween per target, and every visual
     // here is a fresh throwaway node that must run its own tween to completion and free itself.
 
+    // The size of one block in the game's art grid, in world units. Every generated shape steps in
+    // multiples of this, which is what makes an explosion, a danger ring and a muzzle flash all look
+    // like they were drawn on the same canvas.
+    public const float PixelSize = 4f;
+
     // The polygon-points loop each of those eight sites rewrote. `stretch` elongates along local X,
     // which is what turns the same circle into a directional flash.
-    public static Vector2[] CirclePoints(float radius, int segments = 24, float stretch = 1f)
+    //
+    // This used to walk `segments` points around a trig circle, which gave a smooth disc. It now emits
+    // a **stepped** outline aligned to the PixelSize grid: one axis-aligned rectangle per row of
+    // blocks, merged into a single contour. The distinction matters — dropping a trig circle to 8
+    // segments gives an octagon, which reads as low-poly 3D, not as pixel-art. Only real right-angle
+    // steps read as pixels.
+    //
+    // Everything is computed in whole blocks and multiplied back to world units at the end, so the
+    // steps land on the grid rather than near it.
+    public static Vector2[] CirclePoints(float radius, float pixelSize = PixelSize, float stretch = 1f)
     {
-        var points = new Vector2[segments];
-        for (int i = 0; i < segments; i++)
+        if (pixelSize <= 0f) pixelSize = PixelSize;
+
+        float r = radius / pixelSize;
+        int rows = Mathf.Max(1, Mathf.CeilToInt(r));
+
+        // Half-width, in blocks, of each row. Row i spans y from (i - rows) to (i - rows + 1) blocks,
+        // so its centre is half a block in — sampling at the centre rather than an edge is what keeps
+        // the top and bottom rows from jutting out past the radius.
+        var widths = new int[rows * 2];
+        for (int i = 0; i < widths.Length; i++)
         {
-            float angle = i / (float)segments * Mathf.Tau;
-            points[i] = new Vector2(Mathf.Cos(angle) * stretch, Mathf.Sin(angle)) * radius;
+            float yc = i - rows + 0.5f;
+            float inner = r * r - yc * yc;
+            widths[i] = inner <= 0f ? 0 : Mathf.Max(1, Mathf.RoundToInt(Mathf.Sqrt(inner) * stretch));
         }
-        return points;
+
+        var points = new List<Vector2>(widths.Length * 4);
+        // Down the right edge, emitting each row's two corners...
+        for (int i = 0; i < widths.Length; i++)
+        {
+            if (widths[i] == 0) continue;
+            float top = (i - rows) * pixelSize;
+            float x = widths[i] * pixelSize;
+            AddStep(points, new Vector2(x, top));
+            AddStep(points, new Vector2(x, top + pixelSize));
+        }
+        // ...then back up the left, mirrored. The two walks meet at top and bottom to close the ring.
+        for (int i = widths.Length - 1; i >= 0; i--)
+        {
+            if (widths[i] == 0) continue;
+            float top = (i - rows) * pixelSize;
+            float x = -widths[i] * pixelSize;
+            AddStep(points, new Vector2(x, top + pixelSize));
+            AddStep(points, new Vector2(x, top));
+        }
+
+        // A radius smaller than half a block rounds away to nothing. Fall back to a single square so
+        // callers never get a degenerate polygon they'd have to check for.
+        if (points.Count < 3)
+        {
+            float h = Mathf.Max(pixelSize, radius) * 0.5f;
+            return new[]
+            {
+                new Vector2(-h * stretch, -h), new Vector2(h * stretch, -h),
+                new Vector2(h * stretch, h), new Vector2(-h * stretch, h),
+            };
+        }
+        return points.ToArray();
+    }
+
+    // Rows of equal width share an edge; skipping the repeat keeps the contour free of zero-length
+    // segments, which some triangulators dislike.
+    private static void AddStep(List<Vector2> points, Vector2 point)
+    {
+        if (points.Count == 0 || points[points.Count - 1] != point) points.Add(point);
+    }
+
+    // A pie slice on the same block grid, for the two cooldown sweeps. Starts at 12 o'clock and runs
+    // clockwise, which is what both icons already drew by hand.
+    //
+    // This leans on a property of CirclePoints: its walk goes down the right edge and back up the
+    // left, so the vertices come out ordered by increasing clockwise angle. That makes "the arc up to
+    // `fraction`" a prefix of the ring, and the slice needs only its two straight radial edges added.
+    public static Vector2[] WedgePoints(float radius, float fraction, float pixelSize = PixelSize)
+    {
+        fraction = Mathf.Clamp(fraction, 0f, 1f);
+        float sweep = Mathf.Tau * fraction;
+
+        var points = new List<Vector2> { Vector2.Zero, new Vector2(0f, -radius) };
+        foreach (var point in CirclePoints(radius, pixelSize))
+        {
+            if (Mathf.PosMod(point.Angle() + Mathf.Pi / 2f, Mathf.Tau) > sweep) break;
+            points.Add(point);
+        }
+        points.Add(new Vector2(Mathf.Sin(sweep), -Mathf.Cos(sweep)) * radius);
+        return points.ToArray();
+    }
+
+    // --- Block-grid drawing, for _Draw() overrides ---
+    //
+    // These replace DrawCircle/DrawArc at every site the player reads as a *shape*: ability icons,
+    // danger rings, mine blast radii. DrawArc in particular was the worst offender -- it takes an
+    // `antialiased` flag that most call sites had set to true, so those rims were being explicitly
+    // smoothed.
+
+    public static void DrawPixelCircle(CanvasItem canvas, Vector2 center, float radius, Color color,
+        float pixelSize = PixelSize)
+    {
+        var points = CirclePoints(radius, pixelSize);
+        for (int i = 0; i < points.Length; i++) points[i] += center;
+        canvas.DrawColoredPolygon(points, color);
+    }
+
+    // The stepped contour stroked as a closed polyline. Width stays in world units rather than snapping
+    // to the grid: a 2px rim on a 4px grid is a deliberate hairline, and rounding it up to a full block
+    // would swallow the icon underneath.
+    public static void DrawPixelRing(CanvasItem canvas, Vector2 center, float radius, float width,
+        Color color, float pixelSize = PixelSize)
+    {
+        var ring = CirclePoints(radius, pixelSize);
+        var line = new Vector2[ring.Length + 1];
+        for (int i = 0; i < ring.Length; i++) line[i] = ring[i] + center;
+        line[ring.Length] = line[0];
+        canvas.DrawPolyline(line, color, width, antialiased: false);
     }
 
     // An expanding, fading disc parented to `parent` rather than to whoever spawned it. That
@@ -259,13 +370,13 @@ public static class Juice
     // GlobalPosition is assigned AFTER AddChild — before it there is no parent transform to resolve
     // against, and the node silently lands somewhere else.
     public static Polygon2D Blast(Node parent, Vector2 globalPosition, float radius, Color color,
-        float growTime = 0.2f, float fadeTime = 0.35f, int segments = 24, int zIndex = 5)
+        float growTime = 0.2f, float fadeTime = 0.35f, float pixelSize = PixelSize, int zIndex = 5)
     {
         if (parent == null) return null;
 
         var visual = new Polygon2D
         {
-            Polygon = CirclePoints(radius, segments),
+            Polygon = CirclePoints(radius, pixelSize),
             Color = color,
             ZIndex = zIndex,
             // Reduced motion: it appears at full size and only fades. The flash still says "something
@@ -339,13 +450,13 @@ public static class Juice
     // Sits at zIndex 4, just under Blast's 5: when a missile detonates on the same enemy a bullet just
     // sparked, the bigger explosion should be the thing on top.
     public static void Spark(Node parent, Vector2 globalPosition, Vector2 direction, Color color,
-        float size = 10f, float stretch = 1.7f, float lifetime = 0.16f, int segments = 8, int zIndex = 4)
+        float size = 10f, float stretch = 1.7f, float lifetime = 0.16f, float pixelSize = PixelSize, int zIndex = 4)
     {
         if (parent == null) return;
 
         var visual = new Polygon2D
         {
-            Polygon = CirclePoints(size, segments, stretch),
+            Polygon = CirclePoints(size, pixelSize, stretch),
             Color = color,
             ZIndex = zIndex,
             Rotation = direction == Vector2.Zero ? 0f : direction.Angle(),

@@ -6,24 +6,98 @@ bars, the arena edge, the joystick and every HUD element are a `Polygon2D`, `Lin
 tweens.
 
 The one exception is the **entity bodies** — the player and the 11 enemies — which are `Sprite2D`
-nodes fed by the flat white SVG silhouettes in `Assets/Sprites/`. They were `Polygon2D` until commit
+nodes fed by the flat white silhouette PNGs in `Assets/Sprites/`. They were `Polygon2D` until commit
 `e0ee940`; the shapes are the same, only the mechanism changed. Three rules keep that mechanism
 honest, and breaking any one of them is what made `e0ee940` a visual regression:
 
-1. **The SVG is pure white.** The scene's `modulate` supplies the entity's colour by multiplying over
-   it, exactly as `Polygon2D.color` used to. A pre-tinted sprite would come out doubly tinted.
-2. **Size lives in the scene's `scale`, not in the SVG.** Each SVG is authored at 4× its world size
-   and every entity scene sets `scale = Vector2(0.25, 0.25)` — one number across all twelve, so a
-   wrong size is obvious on sight. (The 4× supersample is what keeps edges crisp through the 1.25–1.3×
-   punch and telegraph pulses.)
+1. **The sprite is pure white.** The scene's `modulate` supplies the entity's colour by multiplying
+   over it, exactly as `Polygon2D.color` used to. A pre-tinted sprite would come out doubly tinted.
+2. **Size lives in the scene's `scale`, not in the file.** Each silhouette is authored at **half**
+   its world size and every entity scene sets `scale = Vector2(2, 2)` — one number across all twelve,
+   so a wrong size is obvious on sight. One texel in the file is therefore one 2px block on screen:
+   the file's canvas *is* the sprite's pixel grid.
+
+   **This inverted in the pixel-art pass.** They used to be SVGs authored at 4× and drawn at
+   `scale = Vector2(0.25, 0.25)` — a supersample, for smooth edges under linear filtering. Under
+   nearest filtering that same 4:1 downscale becomes point sampling, which aliases hard; and an SVG
+   can't give a hard edge at small sizes anyway, because Godot rasterises it with the SVG renderer's
+   own antialiasing, baking the softness into texels where no filter setting can reach it. So they
+   are PNGs now, rasterised at final size with a hard polygon fill.
 3. **No animation may assume `Vector2.One` or `Colors.White` is the resting state.** Because `scale`
    and `modulate` are now load-bearing, every tween has to return to `Enemy.VisualBaseScale` /
    `Enemy.VisualBaseColor` (snapshotted in `_Ready` before the spawn animation runs) or to
    `Player._visualBaseScale`. Ignoring this is what inflated every entity to its texture's full
    resolution and left the boss permanently white after its first dash.
 
-Replacing a placeholder with real art is therefore overwriting one `.svg` — as long as it stays white
+Replacing a placeholder with real art is therefore overwriting one `.png` — as long as it stays white
 and the scene keeps `scale` as its size knob.
+
+## Pixel-art: the block grid
+
+Everything the player reads as a *shape* is built on one grid: `Juice.PixelSize = 4f` world units.
+Blasts, sparks, danger rings, mine radii, the fire-range ring, the shield aura, the joystick, coin
+pickups — all of them step in multiples of that constant, which is what makes them look drawn on the
+same canvas rather than merely "blocky".
+
+Four things make the look hold together, and all four are load-bearing:
+
+1. **`rendering/textures/canvas_textures/default_texture_filter=0`** (Nearest) in `project.godot`.
+   The key was *absent* before, so everything fell through to Linear — every sprite and every glyph
+   was being smoothed on its way to the screen.
+2. **`Juice.CirclePoints` emits real steps, not fewer segments.** Dropping a trig circle from 24
+   segments to 8 gives an octagon, which reads as low-poly 3D. Only axis-aligned right angles read as
+   pixels. `WedgePoints` (the cooldown sweeps) leans on a property of that walk: it goes down the
+   right edge and back up the left, so the vertices come out ordered by increasing clockwise angle,
+   which makes "the arc up to `fraction`" a prefix of the ring.
+3. **No corner radii anywhere.** `UIUtil.CreatePanelStyle` sets `SetCornerRadiusAll(0)` — one line
+   covering five panels — and all 156 `corner_radius_*` properties were dropped from the scenes. The
+   most visible casualty is the Ultimate button, which was a circle via `corner_radius = 60` on a
+   120×120 box and is now a square.
+4. **`antialiased: false` everywhere it's passed.** `DrawArc` in particular takes the flag and most
+   call sites had it set to `true`, so those rims were being explicitly smoothed.
+
+### Two grids, not one
+
+| Grid | Where | Why |
+|---|---|---|
+| **4px** (`Juice.PixelSize`) | Blasts, sparks, danger rings, mine radii, fire-range ring, shield aura, joystick, coin pickups, the Ultimate button | The default. Chunky enough to read as pixels on a phone. |
+| **2px** | Entity silhouettes (`scale = Vector2(2, 2)`), `CooldownIcon` (`IconPixel`) | Things too small to survive the 4px grid. |
+
+The 2px exceptions are not laziness, they're arithmetic. `hidden` is 22px across in the arena; on the
+4px grid that is five blocks, and a five-block eight-pointed star is a blob. The same goes for
+`CooldownIcon`, whose radius is ~16px — five blocks wide leaves nothing for the glyph inside. The
+shape language (triangle = basic, hexagon = tanky, star = demon, dart = fast) is the entire job those
+sprites do, and a grid that erases it is the wrong grid.
+
+**Three deliberate exceptions to the blocks themselves.** `FogOverlay` keeps its `DrawArc`: it's a
+full-screen blackout mask rather than a shape, and stepping it would cost the thick-arc trick that
+gives it a hole at all. `ShrinkingZone`'s outer danger band keeps its `DrawArc` for the same reason —
+`Reach` is 3600px, far wider than the 4px steps a pixel ring is built from, so stroking a stepped
+contour that thick would pile mitre joints on top of each other; its thin inner edge, the boundary the
+player actually reads, *is* stepped. And `DustField`'s motes draw as squares but at their *own* radius
+rather than snapped to the grid — they are 1–3px across, so snapping would flatten every mote to one
+size.
+
+**The character portraits stay photographs.** They're pictures of real people, which is the whole
+point of them; posterising them to a block grid would defeat it. They did get square frames (see
+[characters.md](characters.md)), so their *edges* match everything else.
+
+### What this costs
+
+Nearest filtering has a price the old linear filtering hid, and it shows in two places:
+
+- **The punch tweens.** A hit-flash scales an entity to 1.25–1.3×, so a 2px block briefly becomes
+  2.5–2.6px and the rasteriser has to round unevenly. That reads as pixel-art squash rather than as
+  blur, which is why it was accepted — but it is a visible wobble, not nothing.
+- **The player ship rotates.** `UpdateFacing` turns it to face travel, and a nearest-sampled sprite
+  crawls along its edges as it rotates. It's a 19-texel sprite so the crawl is small, but it is the
+  one place in the game where a pre-rendered per-angle sprite sheet would beat what we have.
+
+**A caveat that was accepted, not solved.** `[display] stretch/mode` is `canvas_items` with aspect
+`expand`, so window scaling is non-integer and a block will sometimes land on a half pixel. Fixing
+that properly means integer scaling or `viewport` mode, which changes how the entire game renders.
+The font sidesteps it (see [assets.md](assets.md#the-font-and-why-its-generated-rather-than-downloaded));
+the geometry lives with it.
 
 ## Where colour lives (two places, on purpose)
 
@@ -151,10 +225,10 @@ behind it. One `Juice.ShadowDirection` (down-and-right, i.e. a light up and to t
 every caller — the illusion only holds while every shadow in the arena agrees, so the direction lives
 in exactly one place and the obstacles reach for it through `Juice.ShadowOffsetFor` rather than
 re-deciding it. The offset scales with each sprite's own on-screen height, because the cast runs from a
-0.25-scaled grunt to the 0.7-scaled boss and a flat pixel offset that reads right on one is invisible
-on the other.
+14-texel grunt to the 144-texel boss portrait and a flat pixel offset that reads right on one is
+invisible on the other.
 
-It works on the boss's photo portrait as well as on the white SVG silhouettes: `Modulate` multiplies,
+It works on the boss's photo portrait as well as on the white silhouettes: `Modulate` multiplies,
 and black times anything is black. This is also why a burning enemy's shadow doesn't turn orange —
 `TickBurn` tints the enemy *root*, which multiplies down onto a shadow whose RGB is already 0.
 
@@ -206,6 +280,11 @@ bigger explosion is the thing on top.
 "build a circle `Polygon2D`, expand it, fade it, free it" block. That duplication was not harmless:
 one copy (the boss shockwave) had quietly lost its `Scale = Vector2.Zero` line, so it popped in at full
 size and its expand tween animated toward a value it was already at.
+
+Centralising it also meant the pixel-art pass had one place to change. `CirclePoints` no longer walks
+a trig circle; it emits a **stepped** outline on the block grid, one axis-aligned rectangle per row,
+merged into a single contour. Every blast, nova, shockwave and muzzle flash in the game inherited that
+from one edit.
 
 Both helpers take the **parent** rather than finding one, because the thing that triggers an effect
 usually `QueueFree`s on the same frame and a child of a freed node dies before its tween can run. For

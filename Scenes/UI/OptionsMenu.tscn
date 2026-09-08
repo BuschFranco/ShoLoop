@@ -11,10 +11,6 @@ border_width_top = 3
 border_width_right = 3
 border_width_bottom = 3
 border_color = Color(0.4902, 0.9922, 0.9961, 0.85)
-corner_radius_top_left = 12
-corner_radius_top_right = 12
-corner_radius_bottom_right = 12
-corner_radius_bottom_left = 12
 content_margin_left = 18.0
 content_margin_top = 16.0
 content_margin_right = 18.0
@@ -27,10 +23,6 @@ border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
 border_color = Color(0.4902, 0.9922, 0.9961, 0.4)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_selected"]
 bg_color = Color(1, 0.1843, 0.7255, 0.85)
@@ -39,10 +31,6 @@ border_width_top = 3
 border_width_right = 3
 border_width_bottom = 3
 border_color = Color(0.4902, 0.9922, 0.9961, 1)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
 
 [node name="OptionsMenu" type="Control"]
 layout_mode = 1
@@ -277,6 +265,44 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
 theme_override_font_sizes/font_size = 13
 text = "Quita destellos, sacudidas y animaciones que se repiten. No cambia la dificultad."
+autowrap_mode = 2
+
+[node name="SepCodes" type="Control" parent="CenterContainer/Panel/Scroll/Box"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+
+[node name="CodeLabel" type="Label" parent="CenterContainer/Panel/Scroll/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Códigos secretos"
+
+[node name="CodeRow" type="HBoxContainer" parent="CenterContainer/Panel/Scroll/Box"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CodeInput" type="LineEdit" parent="CenterContainer/Panel/Scroll/Box/CodeRow"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+placeholder_text = "Ingresá un código"
+max_length = 24
+
+[node name="CodeButton" type="Button" parent="CenterContainer/Panel/Scroll/Box/CodeRow"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_selected")
+text = "Canjear"
+
+[node name="CodeFeedback" type="Label" parent="CenterContainer/Panel/Scroll/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 13
+text = "Los códigos se canjean una sola vez."
 autowrap_mode = 2
 
 [node name="Sep3" type="Control" parent="CenterContainer/Panel/Scroll/Box"]

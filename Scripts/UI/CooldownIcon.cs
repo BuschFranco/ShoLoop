@@ -18,6 +18,10 @@ public partial class CooldownIcon : Control
 
     public Ability Kind = Ability.Laser;
 
+    // Half the project's art grid (Juice.PixelSize). These icons are the one place where the full
+    // grid is too coarse to carry a readable symbol -- see the note in _Draw.
+    private const float IconPixel = Juice.PixelSize * 0.5f;
+
     // 1 = just used (fully covered), 0 = ready (fully clear).
     public float CooldownFraction = 0f;
 
@@ -60,24 +64,17 @@ public partial class CooldownIcon : Control
         // Dark disc with a coloured rim, rather than the old solid-colour disc. A filled disc left
         // the glyph fighting the fill for contrast; an outlined one gives the symbol a dark field to
         // sit on and reads better at 36px over a bright arena.
-        DrawCircle(center, radius, new Color(0.102f, 0.0588f, 0.1686f, 0.88f));
-        DrawArc(center, radius, 0f, Mathf.Tau, 32, ready ? accent : accent.Darkened(0.5f), 2f, true);
+        // IconPixel, not Juice.PixelSize: at 36px this icon's radius is ~16, and the project's 4px
+        // grid would render it five blocks wide with no room left for the glyph inside.
+        Juice.DrawPixelCircle(this, center, radius, new Color(0.102f, 0.0588f, 0.1686f, 0.88f), IconPixel);
+        Juice.DrawPixelRing(this, center, radius, 2f, ready ? accent : accent.Darkened(0.5f), IconPixel);
 
         DrawAbility(center, radius * 0.62f, ready ? accent : accent.Darkened(0.45f));
 
         if (CooldownFraction > 0.002f)
         {
-            const int segments = 24;
-            float startAngle = -Mathf.Pi / 2f;
-            float endAngle = startAngle + Mathf.Tau * CooldownFraction;
-
-            var points = new Vector2[segments + 2];
-            points[0] = center;
-            for (int i = 0; i <= segments; i++)
-            {
-                float t = Mathf.Lerp(startAngle, endAngle, i / (float)segments);
-                points[i + 1] = center + new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * radius;
-            }
+            var points = Juice.WedgePoints(radius, CooldownFraction, IconPixel);
+            for (int i = 0; i < points.Length; i++) points[i] += center;
             DrawPolygon(points, new[] { new Color(0f, 0f, 0f, 0.72f) });
         }
     }
@@ -166,9 +163,9 @@ public partial class CooldownIcon : Control
     // the ability draws in the arena.
     private void DrawRings(Vector2 center, float r, Color color)
     {
-        DrawCircle(center, r * 0.22f, color);
-        DrawArc(center, r * 0.6f, 0f, Mathf.Tau, 20, color, 1.8f, true);
-        DrawArc(center, r, 0f, Mathf.Tau, 24, color, 1.8f, true);
+        Juice.DrawPixelCircle(this, center, r * 0.22f, color, IconPixel);
+        Juice.DrawPixelRing(this, center, r * 0.6f, 1.8f, color, IconPixel);
+        Juice.DrawPixelRing(this, center, r, 1.8f, color, IconPixel);
     }
 
     // Vendaval: a wide forward cone. Deliberately short and fat where the missile dart is long and
@@ -193,6 +190,6 @@ public partial class CooldownIcon : Control
             var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
             DrawLine(center + dir * r * 0.45f, center + dir * r, color, 2f);
         }
-        DrawCircle(center, r * 0.55f, color);
+        Juice.DrawPixelCircle(this, center, r * 0.55f, color, IconPixel);
     }
 }

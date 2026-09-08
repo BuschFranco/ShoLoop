@@ -45,22 +45,13 @@ public partial class UltimateButtonIcon : Control
         bool ready = CooldownFraction <= 0f;
         Color accent = ready ? Gold : Gold.Darkened(0.55f);
 
-        DrawCircle(center, radius, BaseBg);
-        DrawArc(center, radius, 0f, Mathf.Tau, 48, accent, 3f, true);
+        Juice.DrawPixelCircle(this, center, radius, BaseBg);
+        Juice.DrawPixelRing(this, center, radius, 3f, accent);
 
         if (CooldownFraction > 0.002f)
         {
-            const int segments = 24;
-            float startAngle = -Mathf.Pi / 2f;
-            float endAngle = startAngle + Mathf.Tau * CooldownFraction;
-
-            var points = new Vector2[segments + 2];
-            points[0] = center;
-            for (int i = 0; i <= segments; i++)
-            {
-                float t = Mathf.Lerp(startAngle, endAngle, i / (float)segments);
-                points[i + 1] = center + new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * radius;
-            }
+            var points = Juice.WedgePoints(radius, CooldownFraction);
+            for (int i = 0; i < points.Length; i++) points[i] += center;
             DrawPolygon(points, new[] { CooldownShade });
         }
 

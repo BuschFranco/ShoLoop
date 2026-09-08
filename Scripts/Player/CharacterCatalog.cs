@@ -57,7 +57,7 @@ public readonly struct CharacterInfo
     // tinting; there's no separate flag to keep in sync.
     public Color Color { get; init; }
 
-    // The three original characters share ship.svg and are told apart by Color alone, which is how
+    // The three original characters share ship.png and are told apart by Color alone, which is how
     // the ship looked before the character system existed; portrait characters each point at their
     // own PNG. Any resolution works — Player._Ready derives the on-screen scale from the texture's
     // own dimensions, so the whole cast renders at one size regardless of source size.
@@ -70,10 +70,14 @@ public readonly struct CharacterInfo
     // Player-created, therefore deletable and loaded from disk at runtime rather than compiled in.
     public bool IsCustom { get; init; }
 
-    // True for every portrait character (built-in Portrait() entries and custom ones alike) — both
-    // go through the same 144x144 circle mask (CustomCharacterStore, tools/prep_character_sprite.py),
-    // unlike the three ship.svg originals, which are a triangle. Player.UpdateFacing reads this to
-    // skip rotating a sprite that has no "facing" to read in the first place.
+    // True for every portrait character (built-in Portrait() entries and custom ones alike) — both go
+    // through the same 144x144 framing (CustomCharacterStore, tools/prep_character_sprite.py), unlike
+    // the three ship.png originals, which are a triangle. Player.UpdateFacing reads this to skip
+    // rotating a sprite that has no "facing" to read in the first place.
+    //
+    // The name outlived its shape: the frame became a square in the pixel-art pass. What the flag
+    // actually means is "this is a portrait, not a directional ship", which is the property
+    // UpdateFacing cares about either way.
     public bool IsCircular { get; init; }
 
     // Gated behind GameManager's persistent Libras currency (see docs/economy.md). Struct default is
@@ -99,7 +103,7 @@ public static class CharacterCatalog
 
     private static readonly CharacterInfo[] BuiltIns =
     {
-        // The three originals share ship.svg and are told apart by Color alone, which is how the ship
+        // The three originals share ship.png and are told apart by Color alone, which is how the ship
         // looked before the character system existed. Their whole identity is mechanical, so the stat
         // line lives in PerkText and they carry no flavour Description — Equilibrado is the mirror
         // image, all Description and no perk.
@@ -111,7 +115,7 @@ public static class CharacterCatalog
             MoveSpeedMultiplier = 1f,
             BulletDamageMultiplier = 1f,
             Color = new Color(0.49f, 0.99f, 1f, 1f), // cyan — the ship's original default color
-            SpritePath = "res://Assets/Sprites/Characters/ship.svg",
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
         },
         new()
         {
@@ -121,7 +125,7 @@ public static class CharacterCatalog
             MoveSpeedMultiplier = 1.15f,
             BulletDamageMultiplier = 0.9f,
             Color = new Color(0.75f, 1f, 0.3f, 1f), // yellow-green — reads as "fast"
-            SpritePath = "res://Assets/Sprites/Characters/ship.svg",
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
         },
         new()
         {
@@ -131,7 +135,7 @@ public static class CharacterCatalog
             MoveSpeedMultiplier = 0.9f,
             BulletDamageMultiplier = 1.2f,
             Color = new Color(1f, 0.45f, 0.2f, 1f), // orange — reads as "heavy hitter"
-            SpritePath = "res://Assets/Sprites/Characters/ship.svg",
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
         },
 
         // Portrait characters — the joke roster, expected to rotate. Cosmetic by default: every

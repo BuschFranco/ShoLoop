@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b7h08ugjw1o3c"
-path="res://.godot/imported/speedy.svg-c596b0138a9e01bcf8297be41277d34a.ctex"
+uid="uid://mchmdekcnknf"
+path="res://.godot/imported/rare.png-d8d453e64d0bc61d5933113fe3592bc0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/Enemies/speedy.svg"
-dest_files=["res://.godot/imported/speedy.svg-c596b0138a9e01bcf8297be41277d34a.ctex"]
+source_file="res://Assets/Sprites/Enemies/rare.png"
+dest_files=["res://.godot/imported/rare.png-d8d453e64d0bc61d5933113fe3592bc0.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

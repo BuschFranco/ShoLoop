@@ -34,7 +34,7 @@ project/assembly_name="ShooterLoop"
 
 [gui]
 
-theme/custom_font="res://Assets/Fonts/RetroFont.tres"
+theme/custom_font="res://Assets/Fonts/PixelFont.ttf"
 
 [input_devices]
 
@@ -46,6 +46,7 @@ pointing/emulate_touch_from_mouse=true
 
 [rendering]
 
+textures/canvas_textures/default_texture_filter=0
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true

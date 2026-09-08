@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://gfb5gcfa4rdt"
-path="res://.godot/imported/rare.svg-398a4c2123e8d6ddb12d33656b9c14a0.ctex"
+uid="uid://b7upei4yj6wng"
+path="res://.godot/imported/demon_brute.png-ecdc91daf74acc8a46343b534a5d7b31.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/Enemies/rare.svg"
-dest_files=["res://.godot/imported/rare.svg-398a4c2123e8d6ddb12d33656b9c14a0.ctex"]
+source_file="res://Assets/Sprites/Enemies/demon_brute.png"
+dest_files=["res://.godot/imported/demon_brute.png-ecdc91daf74acc8a46343b534a5d7b31.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

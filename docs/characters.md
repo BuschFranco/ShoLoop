@@ -54,9 +54,19 @@ Centella only a perk.
 python tools/prep_character_sprite.py foto.jpg Assets/Sprites/Characters/maxi.png --ring 7dfdfe
 ```
 
-That centre-crops to a square, resizes to 144×144, masks to a circle with a feathered rim, and draws
-a neon ring in `--ring`. Any input size or aspect works. Nothing else has to change — the filename is
-derived from the slug.
+That centre-crops to a square, resizes to 144×144 and stamps a hard neon frame in `--ring` around the
+edge. Any input size or aspect works. Nothing else has to change — the filename is derived from the
+slug.
+
+The frame used to be a circle. It became a square in the pixel-art pass: a circular mask has no way
+to end except in a soft antialiased rim, which is exactly the edge the pass removed everywhere else.
+The nine bundled portraits were migrated with `--from-round`, which recovers the largest square that
+fits inside the old disc — their source photographs were never committed, so there was nothing else
+to re-crop from.
+
+**`CustomCharacterStore.MakePortrait()` does the same thing in C#** for portraits players make in
+`CharacterCreator`. Change one, change the other, in the same commit — see
+[assets.md](assets.md#two-duplications-you-should-know-about).
 
 **Add a character:** add a `Portrait(...)` line, drop the PNG in with a matching filename, done. The
 select screen builds its list from `CharacterCatalog.All`, so it picks the new one up automatically

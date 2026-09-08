@@ -12,6 +12,11 @@ This script is the sound *design*: the recipes below and the VOLUME table are th
 .wav files are build output -- to change how something sounds, change the recipe here and re-run,
 don't hand-edit a binary. Same arrangement as prep_character_sprite.py and the character portraits.
 
+ADD NEW RECIPES AT THE END OF build(). noise() draws from a single seeded RNG, consumed in the order
+the recipes are evaluated -- which is the order they appear in the dict below. Inserting a recipe that
+uses noise() anywhere but the end shifts that stream for every noise-using sound after it, silently
+regenerating sounds you never touched. build_assets.py --check catches it, but only if you look.
+
 IMPORTANT -- there is a manual step after this one. Godot assigns each asset a uid:// in a .import
 sidecar, and only the editor can do that. So: run this, open Godot once (or `godot --headless
 --import`), then commit the .wav *and* the generated .wav.import together.
@@ -22,7 +27,7 @@ import os
 import random
 
 from assetlib.audio import (
-    SR, arp, gain, mix, noise, seq, shape, tone, write_wav,
+    SR, arp, gain, mix, noise, pad, seq, shape, tone, write_wav,
     C4, E4, G4, G3, C5, D5, E5, G5, A5, C6, E6, G6,
 )
 
@@ -46,6 +51,7 @@ VOLUME = {
     "level_up": 0.72,
     "countdown": 0.62,
     "round_start": 0.80,
+    "boss_alarm": 0.92,
     "round_complete": 0.80,
     "ui_click": 0.42,
     "ui_buy": 0.62,
@@ -135,6 +141,25 @@ def build():
         # Quiet enough to be felt more than heard; it plays on every menu transition.
         "modal": gain(shape(mix(noise(0.13), gain(tone(300, 900, 0.13, wave_kind="tri"), 0.4)),
                             attack=0.015, curve=2.5), 0.7),
+
+        # Boss-round klaxon: a two-tone alarm, three cycles of it, over a low rumble.
+        #
+        # The alternation is what makes it read as an *alarm* rather than as a long beep -- a single
+        # sustained tone at this length just sounds like a UI error. Duty 0.35 rather than a clean 0.5
+        # square adds the reedy buzz a klaxon has. The rumble underneath is padded to the full length
+        # of the two-tone pattern so it holds the whole thing together instead of ducking between
+        # beeps, and it's the one part that isn't pitched: it's felt more than heard.
+        "boss_alarm": mix(
+            seq(*[
+                part
+                for _ in range(3)
+                for part in (
+                    shape(tone(392, 392, 0.17, duty=0.35), attack=0.008, hold=0.10, curve=1.2),
+                    shape(tone(294, 294, 0.17, duty=0.35), attack=0.008, hold=0.10, curve=1.2),
+                )
+            ]),
+            gain(pad(shape(noise(1.02), attack=0.05, hold=0.8, curve=1.1), 1.02), 0.22),
+        ),
     }
 
 def main():

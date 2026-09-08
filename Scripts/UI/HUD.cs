@@ -373,7 +373,7 @@ public partial class HUD : Control
         _streakPanelStyle = new StyleBoxFlat();
         _streakPanelStyle.BgColor = new Color(0.043f, 0.024f, 0.078f, 0.82f);
         _streakPanelStyle.SetBorderWidthAll(2);
-        _streakPanelStyle.SetCornerRadiusAll(8);
+        _streakPanelStyle.SetCornerRadiusAll(0);
         _streakPanelStyle.SetContentMarginAll(6f);
         _streakPanelStyle.ContentMarginLeft = 10f;
         _streakPanelStyle.ContentMarginRight = 10f;
@@ -415,10 +415,10 @@ public partial class HUD : Control
         // stops growing. That's the one piece of the mechanic the player could never see before.
         var barBg = new StyleBoxFlat();
         barBg.BgColor = new Color(0.102f, 0.0588f, 0.1686f, 0.9f);
-        barBg.SetCornerRadiusAll(3);
+        barBg.SetCornerRadiusAll(0);
 
         _streakBarFillStyle = new StyleBoxFlat();
-        _streakBarFillStyle.SetCornerRadiusAll(3);
+        _streakBarFillStyle.SetCornerRadiusAll(0);
 
         _streakBar = new ProgressBar();
         _streakBar.CustomMinimumSize = new Vector2(0, 6);

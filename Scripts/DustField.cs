@@ -82,7 +82,10 @@ public partial class DustField : Node2D
         {
             var color = DustColor;
             color.A = _alphas[i];
-            DrawCircle(_positions[i], _radii[i], color);
+            // A square rather than a disc, and sized by its own radius rather than snapped to the
+            // block grid -- these are 1-3px across, so snapping would flatten every mote to one size.
+            float d = _radii[i] * 2f;
+            DrawRect(new Rect2(_positions[i] - Vector2.One * _radii[i], new Vector2(d, d)), color);
         }
     }
 }

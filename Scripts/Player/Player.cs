@@ -447,7 +447,7 @@ public partial class Player : CharacterBody2D
         {
             float longestSide = Mathf.Max(texture.GetWidth(), texture.GetHeight());
             if (longestSide > 0f)
-                _visual.Scale = Vector2.One * (CharacterSpriteWorldSize / longestSide);
+                _visual.Scale = Vector2.One * SnapToPixelGrid(CharacterSpriteWorldSize / longestSide);
         }
 
         // Snapshotted after the scale is settled — the breathe loop returns to this value, so
@@ -457,11 +457,11 @@ public partial class Player : CharacterBody2D
         // Hidden unless the player has actually equipped a border color — with Original equipped
         // (the default for everyone who's never opened the shop) the game looks exactly as it did
         // before this cosmetic existed. A flat-shape halo behind the same texture, not a real edge
-        // outline — same trick as icon.svg's glow layer, and it works on any portrait, not just ship.svg.
+        // outline — same trick as icon.svg's glow layer, and it works on any portrait, not just ship.png.
         _outline = GetNode<Sprite2D>("Outline");
         _outline.Texture = _visual.Texture;
         _outline.Scale = _visualBaseScale * OutlineScaleMultiplier;
-        string outlineCosmetic = GameManager.Instance.EquippedOutlineCosmetic;
+        string outlineCosmetic = GameManager.Instance.EquippedCosmetic(CosmeticCategory.Outline);
         _outline.Visible = outlineCosmetic != CosmeticCatalog.DefaultId;
         if (_outline.Visible)
         {
@@ -477,6 +477,10 @@ public partial class Player : CharacterBody2D
         _shadow = Juice.AttachShadow(this, _visual, _visualBaseScale);
 
         _shieldAura = GetNode<Polygon2D>("ShieldAura");
+        // CosmeticCatalog.ShieldAuraBase mirrors the colour Player.tscn sets on this node — see the
+        // note there. Resolving against it keeps the aura's 0.35 alpha whichever colour is equipped.
+        _shieldAura.Color = GameManager.Instance.CosmeticColor(
+            CosmeticCategory.Shield, CosmeticCatalog.ShieldAuraBase);
 
         // Skipped under reduced motion — the aura's mere presence already says "you have a shield
         // charge"; the pulse is ambience on top of that, and it sits directly under the player's
@@ -522,6 +526,25 @@ public partial class Player : CharacterBody2D
     // already keeps X pointed the way it's traveling; for a circular portrait it's just a punch
     // with no particular direction, which still reads fine since there's no "facing" to align to.
     //
+    // Rounds a sprite scale to something that keeps texels whole: a whole number when scaling up, and
+    // one-over-a-whole-number when scaling down.
+    //
+    // This matters because the ship is the one entity whose scale is computed rather than authored.
+    // A 19-texel ship asked to fill 36px wants 1.894x, and at a fraction like that the rasteriser
+    // rounds each block unevenly -- some 1px, some 2px -- which is the exact softness the pixel-art
+    // pass removed everywhere else. Snapping to 2x renders it at 38px instead of 36; the hurtbox is a
+    // separate CollisionShape2D, so that 2px is cosmetic.
+    //
+    // Photo portraits go the other way: 36/144 is already exactly 1/4, and the reciprocal branch keeps
+    // it there rather than rounding it up to 1x and blowing a 144px face up to four times the ship.
+    private static float SnapToPixelGrid(float scale)
+    {
+        if (scale <= 0f) return 1f;
+        return scale >= 1f
+            ? Mathf.Max(1f, Mathf.Round(scale))
+            : 1f / Mathf.Max(1f, Mathf.Round(1f / scale));
+    }
+
     // Pauses (not kills) _breatheTween for the duration rather than letting both drive Scale at
     // once — two tweens racing the same property every frame is exactly the jitter the bank-lean
     // fix earlier had to work around, and pausing is free since Godot's Tween supports it natively.
@@ -549,7 +572,11 @@ public partial class Player : CharacterBody2D
     {
         _fireRangeRing = new Line2D();
         _fireRangeRing.Width = 2f;
-        _fireRangeRing.DefaultColor = Palette.FireRangeRing;
+        // Bullet, not a slot of its own: the ring exists to show how far your shots reach, so it
+        // should always match them. Resolving against Palette.FireRangeRing keeps its 0.3 alpha, which
+        // is what stops it competing with the bullets themselves.
+        _fireRangeRing.DefaultColor =
+            GameManager.Instance.CosmeticColor(CosmeticCategory.Bullet, Palette.FireRangeRing);
         _fireRangeRing.ZIndex = -1;
         AddChild(_fireRangeRing);
         RebuildFireRangeIndicator();
@@ -557,13 +584,10 @@ public partial class Player : CharacterBody2D
 
     private void RebuildFireRangeIndicator()
     {
-        const int segments = 48;
         _fireRangeRing.ClearPoints();
-        for (int i = 0; i <= segments; i++)
-        {
-            float angle = i / (float)segments * Mathf.Tau;
-            _fireRangeRing.AddPoint(new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * EffectiveFireRange);
-        }
+        var ring = Juice.CirclePoints(EffectiveFireRange);
+        foreach (var point in ring) _fireRangeRing.AddPoint(point);
+        _fireRangeRing.AddPoint(ring[0]);   // close the loop
     }
 
     public override void _PhysicsProcess(double delta)
@@ -819,14 +843,11 @@ public partial class Player : CharacterBody2D
         // whichever ship color happens to be equipped. Used to copy _visual.Modulate (the ship's own
         // color) instead, which meant "Original" looked different per pilot and made the shop's
         // preview swatch depend on whoever was currently selected — confusing to compare against.
-        string trailCosmetic = GameManager.Instance.EquippedTrailCosmetic;
-        Color puffColor = trailCosmetic == CosmeticCatalog.DefaultId
-            ? Palette.PlayerBullet
-            : CosmeticCatalog.ColorFor(trailCosmetic);
+        Color puffColor = GameManager.Instance.CosmeticColor(CosmeticCategory.Trail, Palette.PlayerBullet);
 
         var puff = new Polygon2D
         {
-            Polygon = Juice.CirclePoints(size, segments: 8),
+            Polygon = Juice.CirclePoints(size),
             Color = puffColor,
             GlobalPosition = GlobalPosition + backward * ThrusterPuffOffset,
             ZIndex = -1,
@@ -1505,7 +1526,7 @@ public partial class Player : CharacterBody2D
         }
 
         Juice.Blast(this, GlobalPosition, UltimateNovaRadius, Palette.UltimateNova,
-            growTime: 0.35f, fadeTime: 0.5f, segments: 32, zIndex: 0);
+            growTime: 0.35f, fadeTime: 0.5f, zIndex: 0);
     }
 
     // Onda de Choque: the periodic small AoE reward. Same enemies-in-radius loop as
@@ -1802,12 +1823,9 @@ public partial class Player : CharacterBody2D
         // White for that id: Bullet.tscn's Visual/Halo are plain white (Modulate is the only thing
         // that ever colours a bullet), so an unresolved White here would paint bullets white instead
         // of leaving them the game's actual default green.
-        string bulletCosmetic = GameManager.Instance.EquippedBulletCosmetic;
         bullet.Modulate = isCrit
             ? Palette.CritBullet
-            : bulletCosmetic == CosmeticCatalog.DefaultId
-                ? Palette.PlayerBullet
-                : CosmeticCatalog.ColorFor(bulletCosmetic);
+            : GameManager.Instance.CosmeticColor(CosmeticCategory.Bullet, Palette.PlayerBullet);
 
         _bulletsContainer.AddChild(bullet);
     }

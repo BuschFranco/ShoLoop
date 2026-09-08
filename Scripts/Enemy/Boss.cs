@@ -472,7 +472,7 @@ public partial class Boss : ShooterEnemy
     // to read as one you should be running away from.
     private void SpawnShockwaveVisual() =>
         Juice.Blast(GetParent(), GlobalPosition, ShockwaveRadius, Palette.EnemyBullet,
-            growTime: 0.3f, fadeTime: 0.4f, segments: 28);
+            growTime: 0.3f, fadeTime: 0.4f);
 
     // Scattered around the player like MeteorRain, but with a minimum clearance — a mine dropped
     // directly underfoot would be undodgeable, the whole point of Mine.cs's pulse is to bait a step

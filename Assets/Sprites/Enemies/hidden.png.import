@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ctu1lpyh2yw53"
-path="res://.godot/imported/ship.svg-54c9fa00b6f7d61455507c87ad4cec0e.ctex"
+uid="uid://df15yp4dcso8o"
+path="res://.godot/imported/hidden.png-b7135b8ee4830a96787ded3d68660a8f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/Characters/ship.svg"
-dest_files=["res://.godot/imported/ship.svg-54c9fa00b6f7d61455507c87ad4cec0e.ctex"]
+source_file="res://Assets/Sprites/Enemies/hidden.png"
+dest_files=["res://.godot/imported/hidden.png-b7135b8ee4830a96787ded3d68660a8f.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

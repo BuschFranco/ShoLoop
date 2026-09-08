@@ -24,10 +24,6 @@ public static class CustomCharacterStore
     private const int PortraitSize = 144;
     private const float RingWidthRatio = 0.055f;
 
-    // Feathered over ~1.5px instead of a hard cutoff — a binary mask on a 144px circle leaves
-    // visible stair-stepping on the rim.
-    private const float EdgeFeather = 1.5f;
-
     public const int MaxNameLength = 18;
     public const int MaxDescriptionLength = 600;
 
@@ -162,8 +158,12 @@ public static class CustomCharacterStore
         }
     }
 
-    // Centre-crop to a square, resize, then mask to a circle with a neon ring — the same shape
+    // Centre-crop to a square, resize, then stamp a hard neon frame on the edge -- the same shape
     // tools/prep_character_sprite.py produces, so player portraits and bundled ones match.
+    //
+    // KEEP THESE TWO IN STEP. The algorithm lives in two places by necessity (one runs at build time
+    // in Python, one at runtime in C#) and they have drifted apart once already. If you change the
+    // frame here, change prep_character_sprite.make_portrait in the same commit.
     private static Image MakePortrait(Image source, Color ring)
     {
         int side = Mathf.Min(source.GetWidth(), source.GetHeight());
@@ -173,38 +173,19 @@ public static class CustomCharacterStore
         square.Resize(PortraitSize, PortraitSize, Image.Interpolation.Lanczos);
         square.Convert(Image.Format.Rgba8);
 
-        float centre = (PortraitSize - 1) / 2f;
-        float outer = PortraitSize / 2f;
-        float inner = outer - Mathf.Max(2f, PortraitSize * RingWidthRatio);
+        // No feather and no distance test any more. The old version masked to a circle, which has no
+        // way to end except in a soft antialiased rim -- exactly the edge the pixel-art pass removed
+        // everywhere else. A square frame is exact: a pixel is either in the border or it isn't.
+        int border = Mathf.Max(2, Mathf.RoundToInt(PortraitSize * RingWidthRatio));
 
         for (int y = 0; y < PortraitSize; y++)
         {
             for (int x = 0; x < PortraitSize; x++)
             {
-                float distance = new Vector2(x - centre, y - centre).Length();
-
-                // Outside the disc entirely, with a feathered rim.
-                if (distance >= outer)
-                {
-                    square.SetPixel(x, y, new Color(0, 0, 0, 0));
-                    continue;
-                }
-
-                float rimAlpha = Mathf.Clamp((outer - distance) / EdgeFeather, 0f, 1f);
-
-                if (distance >= inner)
-                {
-                    // Ring band: blend into the photo across the inner edge so the ring doesn't
-                    // read as a hard sticker pasted on top.
-                    float ringMix = Mathf.Clamp((distance - inner) / EdgeFeather, 0f, 1f);
-                    var blended = square.GetPixel(x, y).Lerp(ring, ringMix);
-                    square.SetPixel(x, y, new Color(blended.R, blended.G, blended.B, rimAlpha));
-                }
-                else if (rimAlpha < 1f)
-                {
-                    var pixel = square.GetPixel(x, y);
-                    square.SetPixel(x, y, new Color(pixel.R, pixel.G, pixel.B, rimAlpha));
-                }
+                int edge = Mathf.Min(
+                    Mathf.Min(x, y),
+                    Mathf.Min(PortraitSize - 1 - x, PortraitSize - 1 - y));
+                if (edge < border) square.SetPixel(x, y, ring);
             }
         }
 

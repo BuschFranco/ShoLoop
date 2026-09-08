@@ -24,6 +24,7 @@ obj/
 /ShooterLoop-linux-x86_64.tar.gz
 /data_ShooterLoop_windows_x86_64/
 /export_presets.cfg
+/export_presets.cfg.bak
 
 # Python bytecode from the tools/ scripts
 __pycache__/

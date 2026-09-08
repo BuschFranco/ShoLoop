@@ -93,30 +93,19 @@ public partial class MainMenu : Control
         accountLevelBar.Value = gm.AccountXp;
     }
 
+    // The full top-10 the save file keeps. This panel has the room for all of it, unlike character
+    // select's, which is squeezed in beside a portrait.
+    private const int MaxRecordsShown = 10;
+
+    // How many monospaced characters fit across RecordsPanel: 340px wide, less 14px content margin
+    // and a 2px border on each side, over a 12px character advance at font_size 16 (see
+    // tools/gen_font.py -- at 16 the font's block is exactly 2px, which is why that size was picked).
+    private const int CharBudget = 25;
+
     private void PopulateRecords()
     {
         var list = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/RecordsPanel/RecordsBox/RecordsList");
-        var records = GameManager.LoadRecords();
-
-        if (records.Count == 0)
-        {
-            list.Text = "Todavía no hay récords";
-            return;
-        }
-
-        var lines = new string[records.Count];
-        for (int i = 0; i < records.Count; i++)
-        {
-            string pos = $"{i + 1}.";
-            string score = records[i].Score.ToString("N0");
-            // Round 0 only ever comes from a save written before records tracked it (see
-            // GameManager.ScoreRecord) — shown as "R?" rather than a misleading "R0", since round
-            // numbering starts at 1 and a real round 0 never happens.
-            string round = records[i].Round > 0 ? $"R{records[i].Round}" : "R?";
-            string date = records[i].Date;
-            lines[i] = $"[color=#ffe066]{pos,-4}[/color][color=#7dfdfe]{score,10}[/color]  [color=#c9a6ff]{round,-4}[/color][color=#b8a040]{date}[/color]";
-        }
-
-        list.Text = string.Join("\n", lines);
+        list.Text = RecordTable.Build(GameManager.LoadRecords(), MaxRecordsShown, CharBudget,
+            "Todavía no hay récords");
     }
 }

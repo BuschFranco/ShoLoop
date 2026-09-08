@@ -63,8 +63,8 @@ public partial class PlayerMine : Node2D
         if (_detonated) return;
 
         Color color = _armed ? Palette.MineBlast : new Color(Palette.MineBlast, Palette.MineBlast.A * 0.5f);
-        DrawCircle(Vector2.Zero, 9f, color);
-        DrawArc(Vector2.Zero, Radius, 0f, Mathf.Tau, 28, color, 2f, true);
+        Juice.DrawPixelCircle(this, Vector2.Zero, 9f, color);
+        Juice.DrawPixelRing(this, Vector2.Zero, Radius, 2f, color);
     }
 
     private void Detonate()

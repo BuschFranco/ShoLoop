@@ -43,6 +43,13 @@ public partial class OptionsMenu : Control
     // leaves ~56px of screen edge in landscape (where notches are on the sides) and ~120px in
     // portrait (where they're on top). Portrait barely scrolls at these numbers, which is the point —
     // the cap is there to stop overflow, not to make a short list scroll for no reason.
+    private LineEdit _codeInput;
+    private Button _codeButton;
+    private Label _codeFeedback;
+
+    // The hint the feedback line falls back to when nothing has been submitted yet.
+    private const string CodeIdleHint = "Los códigos se canjean una sola vez.";
+
     private const float ScrollHeightLandscape = 560f;
     private const float ScrollHeightPortrait = 1000f;
 
@@ -69,6 +76,14 @@ public partial class OptionsMenu : Control
         _portraitButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/OrientationRow/PortraitButton");
         _closeButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/CloseButton");
         _reducedMotionButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/ReducedMotionButton");
+        _codeInput = GetNode<LineEdit>("CenterContainer/Panel/Scroll/Box/CodeRow/CodeInput");
+        _codeButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/CodeRow/CodeButton");
+        _codeFeedback = GetNode<Label>("CenterContainer/Panel/Scroll/Box/CodeFeedback");
+
+        _codeButton.Pressed += SubmitCode;
+        // Enter submits too — on a phone keyboard the "go" key is closer than the button is.
+        _codeInput.TextSubmitted += _ => SubmitCode();
+        Juice.WireButtonFeedback(_codeButton);
 
         _joystickSlider.ValueChanged += OnJoystickOpacityChanged;
         _ultimateButtonSlider.ValueChanged += OnUltimateButtonOpacityChanged;
@@ -107,6 +122,41 @@ public partial class OptionsMenu : Control
     // Caps the scrollable area so the panel fits on screen, and drops the cap when the content is
     // short enough not to need it — otherwise a short options list would sit in a tall box with dead
     // space under it.
+    private void SubmitCode()
+    {
+        var result = GameManager.Instance.RedeemCode(_codeInput.Text);
+
+        switch (result)
+        {
+            case CodeRedeemResult.Ok:
+                // Re-read the code that was actually matched rather than echoing what was typed, so
+                // the confirmation names the reward.
+                SecretCodeCatalog.TryGet(SecretCodeCatalog.Normalise(_codeInput.Text), out var code);
+                SetCodeFeedback($"¡Canjeado! {code.Reward}", Palette.Player);
+                AudioManager.Instance?.Play(AudioManager.Sfx.UiBuy);
+                _codeInput.Clear();
+                break;
+
+            case CodeRedeemResult.AlreadyUsed:
+                SetCodeFeedback("Ese código ya lo usaste.", Palette.Warning);
+                AudioManager.Instance?.Play(AudioManager.Sfx.UiDenied);
+                Juice.Shake(_codeInput);
+                break;
+
+            default:
+                SetCodeFeedback("Código inválido.", Palette.Warning);
+                AudioManager.Instance?.Play(AudioManager.Sfx.UiDenied);
+                Juice.Shake(_codeInput);
+                break;
+        }
+    }
+
+    private void SetCodeFeedback(string text, Color color)
+    {
+        _codeFeedback.Text = text;
+        _codeFeedback.AddThemeColorOverride("font_color", color);
+    }
+
     private void FitToOrientation()
     {
         bool landscape = GameManager.Instance?.CurrentOrientation == GameManager.ScreenOrientation.Landscape;
@@ -115,6 +165,11 @@ public partial class OptionsMenu : Control
 
     public void Open()
     {
+        // Cleared per visit: the result of a code redeemed minutes ago, still sitting there in green
+        // the next time Options opens, reads as if something just happened.
+        _codeInput.Clear();
+        SetCodeFeedback(CodeIdleHint, new Color(0.6f, 0.64f, 0.72f));
+
         float opacity = GameManager.Instance?.JoystickOpacity ?? 1f;
         _joystickSlider.SetValueNoSignal(Mathf.Round(opacity * 100f));
         UpdateJoystickLabel(_joystickSlider.Value);

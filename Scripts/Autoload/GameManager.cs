@@ -847,6 +847,42 @@ public partial class GameManager : Node
     // Returns false (spending nothing) if the character is already unlocked, doesn't require
     // unlocking at all, or the player can't afford it — callers can treat any false as "nothing to
     // do" without needing to distinguish why.
+    // Granting without spending, for secret codes. Deliberately separate from TryUnlockCharacter and
+    // TryBuyCosmetic rather than a "free" flag on them: those two are the *purchase* path and their
+    // affordability check is the whole point, so a caller that skips it should have to say so by
+    // name. Both are idempotent, since a code that grants something already owned is a no-op, not an
+    // error the caller has to handle.
+    public void GrantCharacter(string slug)
+    {
+        if (!UnlockedCharacters.Add(slug)) return;
+        SaveMetaProgress();
+    }
+
+    public void GrantCosmetic(CosmeticCategory category, string id)
+    {
+        if (!OwnedCosmetics.Add(CosmeticCatalog.ItemKey(category, id))) return;
+        SaveMetaProgress();
+    }
+
+    // Codes already redeemed, so each one pays out once. Stored normalised (see
+    // SecretCodeCatalog.Normalise) so casing and stray spaces can't buy a second payout.
+    public HashSet<string> RedeemedCodes { get; private set; } = new();
+
+    public CodeRedeemResult RedeemCode(string input)
+    {
+        string normalised = SecretCodeCatalog.Normalise(input);
+        if (!SecretCodeCatalog.TryGet(normalised, out var code)) return CodeRedeemResult.Unknown;
+        if (RedeemedCodes.Contains(normalised)) return CodeRedeemResult.AlreadyUsed;
+
+        // Recorded before the grant runs: every grant below ends in SaveMetaProgress(), and if the
+        // code weren't already in the set that save would persist the reward without the record of
+        // it — leaving it redeemable again on the next launch.
+        RedeemedCodes.Add(normalised);
+        code.Grant(this);
+        SaveMetaProgress();
+        return CodeRedeemResult.Ok;
+    }
+
     public bool TryUnlockCharacter(string slug, int cost)
     {
         if (UnlockedCharacters.Contains(slug) || Libras < cost) return false;
@@ -861,10 +897,27 @@ public partial class GameManager : Node
     // purchases, no signal, UI re-reads on its own). Keyed by CosmeticCatalog.ItemKey(category, id)
     // rather than by id alone, since owning a color for Bullet says nothing about owning it for Trail.
     public HashSet<string> OwnedCosmetics { get; private set; } = new();
-    public string EquippedBulletCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
-    public string EquippedTrailCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
-    public string EquippedOutlineCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
-    public string EquippedArenaCosmetic { get; private set; } = CosmeticCatalog.DefaultId;
+
+    // One entry per category rather than a property each. With four categories the properties were
+    // merely repetitive; the moment there were eight, every new one cost a property, a switch case, a
+    // save line and a load line — four chances to add seven and forget the eighth. Now a category is
+    // just an enum member.
+    private readonly Dictionary<CosmeticCategory, string> _equippedCosmetics = new();
+
+    /// <summary>The cosmetic id equipped for a category, or "original" if none is.</summary>
+    public string EquippedCosmetic(CosmeticCategory category) =>
+        _equippedCosmetics.TryGetValue(category, out string id) ? id : CosmeticCatalog.DefaultId;
+
+    /// <summary>The colour a render site should paint, falling back to its own default.</summary>
+    // The shorthand nearly every consumer wants, so they don't each repeat the Resolve call.
+    public Color CosmeticColor(CosmeticCategory category, Color baseColor) =>
+        CosmeticCatalog.Resolve(EquippedCosmetic(category), baseColor);
+
+    // The ConfigFile key for a category. Derived rather than listed so a new category persists with no
+    // extra code — and it reproduces the four keys that already exist in players' settings.cfg
+    // ("equipped_bullet_cosmetic" and friends), so nothing anyone has equipped is lost.
+    private static string CosmeticKey(CosmeticCategory category) =>
+        $"equipped_{category.ToString().ToLowerInvariant()}_cosmetic";
 
     // "Original" is always owned without an OwnedCosmetics entry — it's the free, no-purchase-needed
     // way back to how the game looked before this feature existed, not something anyone had to buy.
@@ -888,13 +941,7 @@ public partial class GameManager : Node
     {
         if (!IsCosmeticOwned(category, id)) return;
 
-        switch (category)
-        {
-            case CosmeticCategory.Bullet: EquippedBulletCosmetic = id; break;
-            case CosmeticCategory.Trail: EquippedTrailCosmetic = id; break;
-            case CosmeticCategory.Outline: EquippedOutlineCosmetic = id; break;
-            case CosmeticCategory.Arena: EquippedArenaCosmetic = id; break;
-        }
+        _equippedCosmetics[category] = id;
         SaveMetaProgress();
     }
 
@@ -984,10 +1031,9 @@ public partial class GameManager : Node
         config.SetValue(SettingsSection, "libras", Libras);
         config.SetValue(SettingsSection, "unlocked_characters", new List<string>(UnlockedCharacters).ToArray());
         config.SetValue(SettingsSection, "owned_cosmetics", new List<string>(OwnedCosmetics).ToArray());
-        config.SetValue(SettingsSection, "equipped_bullet_cosmetic", EquippedBulletCosmetic);
-        config.SetValue(SettingsSection, "equipped_trail_cosmetic", EquippedTrailCosmetic);
-        config.SetValue(SettingsSection, "equipped_outline_cosmetic", EquippedOutlineCosmetic);
-        config.SetValue(SettingsSection, "equipped_arena_cosmetic", EquippedArenaCosmetic);
+        config.SetValue(SettingsSection, "redeemed_codes", new List<string>(RedeemedCodes).ToArray());
+        foreach (CosmeticCategory category in System.Enum.GetValues<CosmeticCategory>())
+            config.SetValue(SettingsSection, CosmeticKey(category), EquippedCosmetic(category));
         config.SetValue(SettingsSection, "account_level", AccountLevel);
         config.SetValue(SettingsSection, "account_xp", AccountXp);
         config.SetValue(SettingsSection, "account_xp_to_next", AccountXpToNextLevel);
@@ -1043,10 +1089,12 @@ public partial class GameManager : Node
 
         var ownedCosmetics = (string[])config.GetValue(SettingsSection, "owned_cosmetics", System.Array.Empty<string>());
         OwnedCosmetics = new HashSet<string>(ownedCosmetics);
-        EquippedBulletCosmetic = (string)config.GetValue(SettingsSection, "equipped_bullet_cosmetic", CosmeticCatalog.DefaultId);
-        EquippedTrailCosmetic = (string)config.GetValue(SettingsSection, "equipped_trail_cosmetic", CosmeticCatalog.DefaultId);
-        EquippedOutlineCosmetic = (string)config.GetValue(SettingsSection, "equipped_outline_cosmetic", CosmeticCatalog.DefaultId);
-        EquippedArenaCosmetic = (string)config.GetValue(SettingsSection, "equipped_arena_cosmetic", CosmeticCatalog.DefaultId);
+        var redeemed = (string[])config.GetValue(SettingsSection, "redeemed_codes", System.Array.Empty<string>());
+        RedeemedCodes = new HashSet<string>(redeemed);
+        _equippedCosmetics.Clear();
+        foreach (CosmeticCategory category in System.Enum.GetValues<CosmeticCategory>())
+            _equippedCosmetics[category] =
+                (string)config.GetValue(SettingsSection, CosmeticKey(category), CosmeticCatalog.DefaultId);
 
         AccountLevel = (int)config.GetValue(SettingsSection, "account_level", 1);
         AccountXp = (int)config.GetValue(SettingsSection, "account_xp", 0);
@@ -1085,8 +1133,32 @@ public partial class GameManager : Node
     public static List<ScoreRecord> LoadRecords()
     {
         var records = LoadRecordSection("records");
+        DropSupersededLegacyEntries(records);
         BackfillLegacyHighScore(records);
         return records;
+    }
+
+    // Removes a backfilled "unknown round" entry once the run it stood in for is also present as a
+    // real record.
+    //
+    // BackfillLegacyHighScore refuses to add one when an equal-or-better record already exists, so it
+    // can't create a duplicate itself. These are older damage: AppendRecord used to save without
+    // loading first and wiped the whole file, after which the next load saw an empty table, decided
+    // the legacy high score was missing, and re-added it -- while the real record for that same run
+    // came back later. The result on disk is pairs like "88531|0|—" sitting directly above
+    // "88531|19|7/9/26": the same run listed twice, once with no round and no date.
+    //
+    // Matching on score alone is safe here precisely because a stand-in has no other identity. Two
+    // genuinely different runs that scored exactly the same still both survive -- they both carry a
+    // real round, and only the Round == 0 copy is ever dropped.
+    private static void DropSupersededLegacyEntries(List<ScoreRecord> records)
+    {
+        var realScores = new HashSet<int>();
+        foreach (var r in records)
+            if (r.Round > 0) realScores.Add(r.Score);
+
+        int removed = records.RemoveAll(r => r.Round <= 0 && realScores.Contains(r.Score));
+        if (removed > 0) SaveRecordSection("records", records);
     }
 
     // highscore.save predates the records leaderboard by however long AppendRecord took to get added

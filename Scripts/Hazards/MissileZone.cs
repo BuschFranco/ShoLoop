@@ -40,8 +40,8 @@ public partial class MissileZone : Node2D
         float fill = Mathf.Clamp(_age / WarningTime, 0f, 1f);
 
         // The growing inner disc is the countdown: when it reaches the ring, it goes off.
-        DrawCircle(Vector2.Zero, Radius * fill, WarnColor);
-        DrawArc(Vector2.Zero, Radius, 0f, Mathf.Tau, 40, RingColor, 3f, true);
+        Juice.DrawPixelCircle(this, Vector2.Zero, Radius * fill, WarnColor);
+        Juice.DrawPixelRing(this, Vector2.Zero, Radius, 3f, RingColor);
     }
 
     private void Detonate()
@@ -72,7 +72,7 @@ public partial class MissileZone : Node2D
     private void SpawnBlast()
     {
         AudioManager.Instance?.Play(AudioManager.Sfx.Explosion);
-        Juice.Blast(GetParent(), GlobalPosition, Radius, Palette.MissileBlast, growTime: 0.22f, segments: 28);
+        Juice.Blast(GetParent(), GlobalPosition, Radius, Palette.MissileBlast, growTime: 0.22f);
         QueueFree();
     }
 }

@@ -15,7 +15,7 @@ public partial class AudioManager : Node
     {
         Shoot, EnemyShoot, Hit, EnemyDie, Explosion, BossDie,
         PlayerHurt, Shield, Dodge, PlayerDie,
-        Pickup, LevelUp, Countdown, RoundStart, RoundComplete,
+        Pickup, LevelUp, Countdown, RoundStart, RoundComplete, BossAlarm,
         UiClick, UiBuy, UiDenied, Modal,
     }
 
@@ -53,6 +53,7 @@ public partial class AudioManager : Node
         (Sfx.LevelUp,       "level_up",       0f,     0f),
         (Sfx.Countdown,     "countdown",      0f,     0f),
         (Sfx.RoundStart,    "round_start",    0f,     0f),
+        (Sfx.BossAlarm,     "boss_alarm",     0f,     0f),
         (Sfx.RoundComplete, "round_complete", 0f,     0f),
         (Sfx.UiClick,       "ui_click",       0.030f, 0.05f),
         (Sfx.UiBuy,         "ui_buy",         0f,     0f),

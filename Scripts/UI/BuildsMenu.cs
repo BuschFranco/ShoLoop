@@ -48,9 +48,9 @@ public partial class BuildsMenu : Control
             string bonus = BuildCatalog.Bonus(cls);
 
             if (allMet)
-                lines.Add($"[color=#7fff7f][b]{BuildCatalog.Name(cls)}[/b]  ✓ ACTIVA[/color]");
+                lines.Add($"[color=#7fff7f]{BuildCatalog.Name(cls)}  ✓ ACTIVA[/color]");
             else
-                lines.Add($"[color=#b0bec5][b]{BuildCatalog.Name(cls)}[/b][/color]");
+                lines.Add($"[color=#b0bec5]{BuildCatalog.Name(cls)}[/color]");
 
             lines.Add($"  [color=#90a4ae]{bonus}[/color]");
 

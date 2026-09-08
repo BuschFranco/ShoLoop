@@ -369,7 +369,7 @@ public partial class RewardCard : PanelContainer
         style.BgColor = new Color(color, 0.07f);
         style.BorderColor = new Color(color, 0.85f);
         style.SetBorderWidthAll(2);
-        style.SetCornerRadiusAll(8);
+        style.SetCornerRadiusAll(0);
         style.SetContentMarginAll(10);
         TierStyles[tier] = style;
         return style;

@@ -58,56 +58,12 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 14)
 layout_mode = 2
 
-[node name="BulletLabel" type="Label" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Color de los disparos"
-
-[node name="BulletRow" type="HBoxContainer" parent="CenterContainer/Panel/Scroll/Box"]
+[node name="Content" type="VBoxContainer" parent="CenterContainer/Panel/Scroll/Box"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="SepBullet" type="Control" parent="CenterContainer/Panel/Scroll/Box"]
-custom_minimum_size = Vector2(0, 18)
-layout_mode = 2
-
-[node name="TrailLabel" type="Label" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Color de la estela"
-
-[node name="TrailRow" type="HBoxContainer" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="SepTrail" type="Control" parent="CenterContainer/Panel/Scroll/Box"]
-custom_minimum_size = Vector2(0, 18)
-layout_mode = 2
-
-[node name="OutlineLabel" type="Label" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Color del borde del personaje"
-
-[node name="OutlineRow" type="HBoxContainer" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="SepOutline" type="Control" parent="CenterContainer/Panel/Scroll/Box"]
-custom_minimum_size = Vector2(0, 18)
-layout_mode = 2
-
-[node name="ArenaLabel" type="Label" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "Color del mapa"
-
-[node name="ArenaRow" type="HBoxContainer" parent="CenterContainer/Panel/Scroll/Box"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="SepArena" type="Control" parent="CenterContainer/Panel/Scroll/Box"]
-custom_minimum_size = Vector2(0, 22)
+[node name="SepContent" type="Control" parent="CenterContainer/Panel/Scroll/Box"]
+custom_minimum_size = Vector2(0, 16)
 layout_mode = 2
 
 [node name="CloseButton" type="Button" parent="CenterContainer/Panel/Scroll/Box"]

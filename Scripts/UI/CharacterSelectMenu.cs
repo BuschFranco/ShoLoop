@@ -258,26 +258,15 @@ public partial class CharacterSelectMenu : Control
     // this just doesn't have room to show all of it.
     private const int MaxRecordsShown = 3;
 
+    // Deliberately conservative: this list shares its row with the portrait, so its true width isn't
+    // a constant anyone can read off the scene. Underestimating only tightens the column gap by a
+    // space; overestimating would let a row wrap, which is the thing worth avoiding.
+    private const int CharBudget = 34;
+
     private void RefreshRecords(string slug)
     {
-        var records = GameManager.LoadCharacterRecords(slug);
-        if (records.Count == 0)
-        {
-            _recordsList.Text = "Sin récords todavía";
-            return;
-        }
-
-        var lines = new string[Mathf.Min(records.Count, MaxRecordsShown)];
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string score = records[i].Score.ToString("N0");
-            // Round 0 only ever comes from a save written before records tracked it — shown as "R?"
-            // rather than a misleading "R0" (round numbering starts at 1).
-            string round = records[i].Round > 0 ? $"R{records[i].Round}" : "R?";
-            lines[i] = $"[color=#ffe066]{i + 1}.[/color] [color=#7dfdfe]{score}[/color] [color=#c9a6ff]{round}[/color]  [color=#b8a040]{records[i].Date}[/color]";
-        }
-
-        _recordsList.Text = string.Join("\n", lines);
+        _recordsList.Text = RecordTable.Build(GameManager.LoadCharacterRecords(slug), MaxRecordsShown,
+            CharBudget, "Sin récords todavía");
     }
 
     // Spends and unlocks in place — no auto-select, no closing the carousel — so the player can

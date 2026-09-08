@@ -6,6 +6,11 @@ namespace ShooterLoop;
 // Drawn as a single very thick arc rather than a polygon with a hole. Godot's Polygon2D has no hole
 // support and a hand-built "keyhole" polygon triangulates unpredictably; a thick DrawArc traces an
 // annulus exactly, in one draw call, with the clear centre falling out for free.
+//
+// The one DrawArc the pixel pass deliberately left alone. Every other ring in the game went through
+// Juice.DrawPixelRing, but this is a full-screen blackout mask, not a shape the player reads as an
+// object -- its only visible edge is the soft cutout around the player, and stepping that would cost
+// the keyhole trick above for no art gain. It already passes antialiased: false.
 public partial class FogOverlay : Node2D
 {
     // Has to out-reach the arena diagonal from any corner, or the player can see past the fog's outer

@@ -51,7 +51,23 @@ GENERATORS = [
         "script": "gen_sprites.py",
         "label": "entity silhouettes",
         "outputs": ["Assets/Sprites/Enemies", "Assets/Sprites/Characters"],
-        "pattern": ".svg",
+        "pattern": ".png",
+        # An explicit list, not just the extension. The silhouettes became PNGs in the pixel-art pass
+        # (see assetlib/raster.py), and ship.png shares Assets/Sprites/Characters with the nine
+        # portraits -- which are also .png but belong to prep_character_sprite.py. Without this the
+        # check would report every portrait as an asset gen_sprites.py failed to produce.
+        "names": [
+            "boss.png", "demon.png", "demon_brute.png", "demon_stalker.png", "grunt.png",
+            "hidden.png", "rare.png", "shooter.png", "ship.png", "speedy.png", "splitter.png",
+            "tank.png",
+        ],
+        "out_flag": "--out",
+    },
+    {
+        "script": "gen_font.py",
+        "label": "pixel font",
+        "outputs": ["Assets/Fonts"],
+        "pattern": ".ttf",
         "out_flag": "--out",
     },
 ]
@@ -74,6 +90,8 @@ def file_hashes(spec):
             if "include_prefix" in spec and not name.startswith(spec["include_prefix"]):
                 continue
             if "exclude_prefix" in spec and name.startswith(spec["exclude_prefix"]):
+                continue
+            if "names" in spec and name not in spec["names"]:
                 continue
             path = os.path.join(abs_folder, name)
             with open(path, "rb") as f:

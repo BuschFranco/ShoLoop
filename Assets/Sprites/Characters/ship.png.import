@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b6h5vpjq5v5l6"
-path="res://.godot/imported/tank.svg-b0747a78f0ee1fcb697ded9591c48b8c.ctex"
+uid="uid://6uja4djgv5at"
+path="res://.godot/imported/ship.png-06b82153bfd3de77dbf9306212adebf6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/Enemies/tank.svg"
-dest_files=["res://.godot/imported/tank.svg-b0747a78f0ee1fcb697ded9591c48b8c.ctex"]
+source_file="res://Assets/Sprites/Characters/ship.png"
+dest_files=["res://.godot/imported/ship.png-06b82153bfd3de77dbf9306212adebf6.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

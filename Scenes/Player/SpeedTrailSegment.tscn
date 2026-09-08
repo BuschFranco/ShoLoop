@@ -12,7 +12,7 @@ script = ExtResource("1")
 
 [node name="Visual" type="Polygon2D" parent="."]
 color = Color(0.73, 1, 1, 0.55)
-polygon = PackedVector2Array(18, 0, 12.73, 12.73, 0, 18, -12.73, 12.73, -18, 0, -12.73, -12.73, 0, -18, 12.73, -12.73)
+polygon = PackedVector2Array(12, -16, 12, -12, 16, -12, 16, -8, 16, -4, 16, 0, 16, 4, 16, 8, 16, 12, 12, 12, 12, 16, -12, 16, -12, 12, -16, 12, -16, 8, -16, 4, -16, 0, -16, -4, -16, -8, -16, -12, -12, -12, -12, -16)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_speedtrail")

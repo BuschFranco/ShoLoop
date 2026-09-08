@@ -1,34 +1,56 @@
 namespace ShooterLoop;
 
 using System.Collections.Generic;
+using Godot;
 
-// Where Libras' second sink lives: swap purely cosmetic colors (bullets, ship trail, character
-// outline, map accent) for a currency whose only prior use was the three "secreto" pilot slots.
+// Where Libras' second sink lives: swap purely cosmetic colours for a currency whose only other use
+// is the three "secreto" pilot slots.
 //
-// Every category shares the same CosmeticCatalog.Options list — a color is a color, only where it's
-// applied differs — so the swatch rows are built identically for all four, just pointed at a
-// different CosmeticCategory and a different GameManager Equipped* property.
+// WHY THIS IS A TAB PICKER AND NOT EIGHT ROWS
+// -------------------------------------------
+// Every category offers the same colour list, so the obvious layout -- one row of swatches per
+// category -- means printing the identical palette eight times over. At four categories and six
+// colours that was merely repetitive; at eight and sixteen it's 128 squares in a scroll view, and
+// finding the one you want means counting rows.
+//
+// So the category is chosen first, on a compact grid of tabs, and only that category's palette is
+// built. The tabs double as a summary of the whole loadout: each carries a chip of the colour
+// currently equipped for it, so one glance says what your ship looks like without opening anything.
+//
+// The palette itself is grouped by tier with a heading per group, because the tiers are a real
+// rendering difference (see CosmeticCatalog.Options) and pricing that isn't explained just looks
+// arbitrary.
 public partial class CosmeticsShopMenu : Control
 {
     private PanelContainer _panel;
     private ScrollContainer _scroll;
     private Label _librasLabel;
     private Button _closeButton;
+    private VBoxContainer _content;
     private Tween _librasTween;
 
-    private readonly Dictionary<CosmeticCategory, HBoxContainer> _rows = new();
-    private readonly List<(Button Button, CosmeticCategory Category, string Id)> _swatches = new();
+    private CosmeticCategory _selected = CosmeticCategory.Bullet;
+
+    private readonly Dictionary<CosmeticCategory, Button> _tabs = new();
+    private readonly List<(Button Button, string Id)> _swatches = new();
+    private Label _sectionLabel;
+    private VBoxContainer _paletteBox;
 
     // Same bound-the-ScrollContainer fix OptionsMenu/PauseMenu already use for the same reason: a
     // CenterContainer never bounds a ScrollContainer's height on its own, so without this the panel
-    // would grow past the screen in landscape once all four rows are on screen at once.
+    // would grow past the screen.
     private const float ScrollHeightLandscape = 560f;
     private const float ScrollHeightPortrait = 1000f;
 
     private const float SwatchSize = 44f;
 
+    // 7 x 44px swatches plus 6 x 6px gaps is 344px, inside the ~382px the 420-wide panel leaves after
+    // UIUtil.CreatePanelStyle's 16px content margin and 3px border on each side.
+    private const int PaletteColumns = 7;
+    private const int TabColumns = 4;
+
     // Locked (not-yet-bought) swatches dim to this — same "disabled" convention RewardCard and
-    // CharacterSelectMenu already use, so a locked color reads the same way a locked pilot does.
+    // CharacterSelectMenu already use, so a locked colour reads the same way a locked pilot does.
     private const float LockedAlpha = 0.55f;
 
     public override void _Ready()
@@ -39,16 +61,12 @@ public partial class CosmeticsShopMenu : Control
         _scroll = GetNode<ScrollContainer>("CenterContainer/Panel/Scroll");
         _librasLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/LibrasLabel");
         _closeButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/CloseButton");
+        _content = GetNode<VBoxContainer>("CenterContainer/Panel/Scroll/Box/Content");
 
         _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.Player));
 
-        _rows[CosmeticCategory.Bullet] = GetNode<HBoxContainer>("CenterContainer/Panel/Scroll/Box/BulletRow");
-        _rows[CosmeticCategory.Trail] = GetNode<HBoxContainer>("CenterContainer/Panel/Scroll/Box/TrailRow");
-        _rows[CosmeticCategory.Outline] = GetNode<HBoxContainer>("CenterContainer/Panel/Scroll/Box/OutlineRow");
-        _rows[CosmeticCategory.Arena] = GetNode<HBoxContainer>("CenterContainer/Panel/Scroll/Box/ArenaRow");
-
-        foreach (var (category, row) in _rows)
-            BuildSwatchRow(category, row);
+        BuildTabs();
+        BuildPaletteArea();
 
         _closeButton.Pressed += Close;
         Juice.WireButtonFeedback(_closeButton);
@@ -56,34 +74,146 @@ public partial class CosmeticsShopMenu : Control
         FitToOrientation();
     }
 
-    // Built once, in this fixed order — the catalog is static, so there's nothing to rebuild on
-    // reopen, only swatch *state* (owned/equipped/affordable), refreshed by RefreshSwatches().
-    private void BuildSwatchRow(CosmeticCategory category, HBoxContainer row)
+    // --- Category tabs -------------------------------------------------------------------------
+
+    private void BuildTabs()
     {
-        foreach (var option in CosmeticCatalog.Options)
+        var grid = new GridContainer { Columns = TabColumns };
+        grid.AddThemeConstantOverride("h_separation", 6);
+        grid.AddThemeConstantOverride("v_separation", 6);
+        _content.AddChild(grid);
+
+        foreach (CosmeticCategory category in System.Enum.GetValues<CosmeticCategory>())
         {
             var button = new Button
             {
-                CustomMinimumSize = new Vector2(SwatchSize, SwatchSize),
-                ToggleMode = false,
-                TooltipText = option.Cost > 0 ? $"{option.Name} ({option.Cost} Libras)" : option.Name,
+                Text = CosmeticCatalog.ShortLabel(category),
+                CustomMinimumSize = new Vector2(0f, 38f),
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
             };
-            row.AddChild(button);
+            button.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+            grid.AddChild(button);
             Juice.WireButtonFeedback(button);
 
-            string id = option.Id; // local copy for the closure — option is a foreach loop variable
-            button.Pressed += () => OnSwatchPressed(category, id, option.Cost);
-
-            _swatches.Add((button, category, id));
+            var captured = category;
+            button.Pressed += () => SelectCategory(captured);
+            _tabs[category] = button;
         }
     }
 
-    private void OnSwatchPressed(CosmeticCategory category, string id, int cost)
+    private void SelectCategory(CosmeticCategory category)
+    {
+        if (_selected == category) return;
+        _selected = category;
+        RebuildPalette();
+        RefreshTabs();
+    }
+
+    // A tab's border is the colour that category currently renders with, so the row reads as a
+    // summary of the equipped loadout rather than eight identical buttons.
+    private void RefreshTabs()
+    {
+        foreach (var (category, button) in _tabs)
+        {
+            bool active = category == _selected;
+            Color equipped = GameManager.Instance.CosmeticColor(category, CosmeticCatalog.BaseColor(category));
+
+            // The Outline category's "Original" is fully transparent (no outline at all), which would
+            // render as an invisible border. Fall back to the panel's own accent so the tab still has
+            // an edge.
+            if (equipped.A <= 0.01f) equipped = new Color(Palette.Player, 0.35f);
+            equipped.A = 1f;
+
+            var style = new StyleBoxFlat
+            {
+                BgColor = active ? new Color(equipped, 0.28f) : new Color(0.043f, 0.024f, 0.078f, 0.7f),
+                BorderColor = equipped,
+            };
+            style.SetBorderWidthAll(active ? 3 : 1);
+            style.SetContentMarginAll(4f);
+
+            button.AddThemeStyleboxOverride("normal", style);
+            button.AddThemeStyleboxOverride("hover", style);
+            button.AddThemeStyleboxOverride("pressed", style);
+            button.AddThemeColorOverride("font_color", active ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
+        }
+    }
+
+    // --- Palette -------------------------------------------------------------------------------
+
+    private void BuildPaletteArea()
+    {
+        _sectionLabel = new Label { HorizontalAlignment = HorizontalAlignment.Center };
+        _sectionLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
+        _content.AddChild(_sectionLabel);
+
+        _paletteBox = new VBoxContainer();
+        _paletteBox.AddThemeConstantOverride("separation", 6);
+        _content.AddChild(_paletteBox);
+
+        RebuildPalette();
+        RefreshTabs();
+    }
+
+    // Rebuilt per category rather than built once and re-styled: the swatches differ per category
+    // only in their owned/equipped state, but the *closures* that buy and equip them carry the
+    // category, and rebuilding is far simpler than rebinding sixteen handlers.
+    private void RebuildPalette()
+    {
+        foreach (var child in _paletteBox.GetChildren()) child.QueueFree();
+        _swatches.Clear();
+
+        _sectionLabel.Text = CosmeticCatalog.Label(_selected);
+
+        CosmeticTier? currentTier = null;
+        GridContainer grid = null;
+
+        foreach (var option in CosmeticCatalog.Options)
+        {
+            if (currentTier != option.Tier)
+            {
+                currentTier = option.Tier;
+                _paletteBox.AddChild(TierHeading(option.Tier));
+
+                grid = new GridContainer { Columns = PaletteColumns };
+                grid.AddThemeConstantOverride("h_separation", 6);
+                grid.AddThemeConstantOverride("v_separation", 6);
+                _paletteBox.AddChild(grid);
+            }
+
+            var button = new Button
+            {
+                CustomMinimumSize = new Vector2(SwatchSize, SwatchSize),
+                TooltipText = option.Cost > 0 ? $"{option.Name} ({option.Cost} Libras)" : option.Name,
+            };
+            button.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+            grid.AddChild(button);
+            Juice.WireButtonFeedback(button);
+
+            string id = option.Id;
+            int cost = option.Cost;
+            button.Pressed += () => OnSwatchPressed(id, cost);
+
+            _swatches.Add((button, id));
+        }
+
+        RefreshSwatches();
+    }
+
+    private static Label TierHeading(CosmeticTier tier)
+    {
+        var label = new Label { Text = CosmeticCatalog.TierName(tier) };
+        label.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        label.AddThemeColorOverride("font_color", CosmeticCatalog.TierColor(tier));
+        return label;
+    }
+
+    private void OnSwatchPressed(string id, int cost)
     {
         var gm = GameManager.Instance;
-        if (!gm.IsCosmeticOwned(category, id))
+        if (!gm.IsCosmeticOwned(_selected, id))
         {
-            if (!gm.TryBuyCosmetic(category, id, cost))
+            if (!gm.TryBuyCosmetic(_selected, id, cost))
             {
                 // The one branch a tap on an unlocked-looking swatch can still fail on: not enough
                 // Libras. Owned-already and already-equipped never reach TryBuyCosmetic at all.
@@ -98,8 +228,9 @@ public partial class CosmeticsShopMenu : Control
             PulseLibras(cost);
         }
 
-        gm.EquipCosmetic(category, id);
+        gm.EquipCosmetic(_selected, id);
         RefreshSwatches();
+        RefreshTabs();   // the tab's chip is the equipped colour, so it changes with the selection
     }
 
     // Same pattern Shop.cs uses for its own coin balance: a scale-pop on the number itself plus a
@@ -123,57 +254,60 @@ public partial class CosmeticsShopMenu : Control
     private void RefreshSwatches()
     {
         var gm = GameManager.Instance;
-        foreach (var (button, category, id) in _swatches)
+        string equippedId = gm.EquippedCosmetic(_selected);
+
+        foreach (var (button, id) in _swatches)
         {
             var option = CosmeticCatalog.Get(id);
-            bool owned = gm.IsCosmeticOwned(category, id);
-            bool equipped = id == EquippedFor(category);
+            bool owned = gm.IsCosmeticOwned(_selected, id);
+            bool equipped = id == equippedId;
+            bool affordable = owned || gm.Libras >= option.Cost;
 
-            // The catalog's own Color for "Original" is just White (identity — apply no tint), not
-            // what the game actually looks like today. Show the real per-category default instead,
-            // so the swatch reads as a preview of the look you'd get, not a literal Modulate value.
-            Color previewColor = id == CosmeticCatalog.DefaultId ? OriginalPreviewColor(category) : option.Color;
+            // The catalog's own Colour for "Original" is just White (identity — apply no tint), not
+            // what the game actually looks like. Show the real per-category default instead, so the
+            // swatch reads as a preview of the look you'd get, not a literal Modulate value.
+            Color preview = id == CosmeticCatalog.DefaultId
+                ? CosmeticCatalog.BaseColor(_selected)
+                : option.Color;
+
+            // Outline's default is "no outline at all" — there is no colour to preview, so it gets a
+            // dark well and a dash rather than an invisible square.
+            bool hollow = preview.A <= 0.01f;
+            if (hollow) preview = new Color(0.10f, 0.07f, 0.16f, 1f);
+            preview.A = 1f;
 
             var style = new StyleBoxFlat
             {
-                BgColor = owned ? previewColor : new Color(previewColor, LockedAlpha),
-                CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6,
-                CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6,
+                BgColor = owned ? preview : new Color(preview, LockedAlpha),
+                // The frame carries rarity, which is the only cue that separates an Epico colour from
+                // a Raro one in this menu: the main menu has no WorldEnvironment, so the HDR channels
+                // that make Epico bloom in the arena are clamped away in this preview.
+                BorderColor = equipped ? Colors.White : CosmeticCatalog.TierColor(option.Tier),
             };
-            style.SetBorderWidthAll(equipped ? 3 : owned ? 1 : 0);
-            style.BorderColor = equipped ? Palette.Player : new Color(0f, 0f, 0f, 0.5f);
+            style.SetBorderWidthAll(equipped ? 4 : 2);
 
             button.AddThemeStyleboxOverride("normal", style);
             button.AddThemeStyleboxOverride("hover", style);
             button.AddThemeStyleboxOverride("pressed", style);
-            button.Text = owned ? "" : option.Cost.ToString();
+
+            // Tooltips don't exist on a touchscreen, so the price has to be on the swatch itself.
+            button.Text = hollow ? "—" : equipped ? "✓" : owned ? "" : option.Cost.ToString();
+            button.AddThemeColorOverride("font_color", ReadableOn(preview));
+            button.AddThemeColorOverride("font_outline_color", Colors.Black);
+            button.AddThemeConstantOverride("outline_size", 3);
+
+            // Dimmed rather than disabled: a tap still reaches OnSwatchPressed, which shakes the
+            // balance to say *why* it failed. A disabled button would swallow the tap silently.
+            button.Modulate = affordable ? Colors.White : new Color(1f, 1f, 1f, 0.7f);
         }
     }
 
-    // What "Original" actually looks like in each category today — a fixed color per category,
-    // independent of whichever pilot is selected (see Player.SpawnThrusterPuff for Trail). Outline's
-    // default is "no outline at all", shown hollow (fully transparent) rather than any solid color,
-    // since there's no color to preview.
-    private static Color OriginalPreviewColor(CosmeticCategory category) => category switch
+    // Black on a light swatch, white on a dark one. Rec. 601 luma, which is close enough for a
+    // one-or-two-character label and needs no colour-space conversion.
+    private static Color ReadableOn(Color background)
     {
-        CosmeticCategory.Bullet => Palette.PlayerBullet,
-        CosmeticCategory.Trail => Palette.PlayerBullet,
-        CosmeticCategory.Outline => new Color(0f, 0f, 0f, 0f),
-        CosmeticCategory.Arena => Palette.ArenaBounds,
-        _ => Colors.White,
-    };
-
-    private static string EquippedFor(CosmeticCategory category)
-    {
-        var gm = GameManager.Instance;
-        return category switch
-        {
-            CosmeticCategory.Bullet => gm.EquippedBulletCosmetic,
-            CosmeticCategory.Trail => gm.EquippedTrailCosmetic,
-            CosmeticCategory.Outline => gm.EquippedOutlineCosmetic,
-            CosmeticCategory.Arena => gm.EquippedArenaCosmetic,
-            _ => CosmeticCatalog.DefaultId,
-        };
+        float luma = 0.299f * background.R + 0.587f * background.G + 0.114f * background.B;
+        return luma > 0.6f ? Colors.Black : Colors.White;
     }
 
     private void FitToOrientation()
@@ -186,6 +320,7 @@ public partial class CosmeticsShopMenu : Control
     {
         _librasLabel.Text = $"Libras: {GameManager.Instance.Libras}";
         RefreshSwatches();
+        RefreshTabs();
         FitToOrientation();
 
         // Always reopen at the top — see OptionsMenu for why (a mid-scroll reopen reads as broken).

@@ -361,7 +361,18 @@ public partial class Enemy : CharacterBody2D
     private Vector2 _visualBaseScale = Vector2.One;
     private Tween _hitTween;
     private const float HitFlashDuration = 0.14f;
-    private const float HitPunchScale = 1.3f;
+    private const float HitPunchScale = 1.34f;
+
+    // The hit punch used to snap straight to HitPunchScale on the frame of the hit and then decay.
+    // With a zero-length growth phase there was nothing to *see* growing: the eye caught the shrink
+    // and read the whole thing as the enemy flinching smaller, which is the opposite of the intent.
+    //
+    // So the growth now takes real time. It still starts instantly -- Scale jumps to HitPunchOnset on
+    // the hit frame, because feedback three frames late feels unresponsive no matter how it looks --
+    // and then continues out to the full peak over HitInflateTime. Snap for the response, tween for
+    // the read.
+    private const float HitPunchOnset = 1.12f;
+    private const float HitInflateTime = 0.06f;
 
     public override void _Ready()
     {
@@ -884,15 +895,22 @@ public partial class Enemy : CharacterBody2D
         if (_hitTween != null && _hitTween.IsValid()) _hitTween.Kill();
 
         _visual.Modulate = Colors.White;
-        _visual.Scale = _visualBaseScale * HitPunchScale;
+        _visual.Scale = _visualBaseScale * HitPunchOnset;
 
         // Tweens the Visual child, not the enemy itself — the enemy's own Scale carries the
         // Splitter's per-generation shrink and must not be clobbered.
         _hitTween = CreateTween();
         _hitTween.SetParallel(true);
-        _hitTween.TweenProperty(_visual, "modulate", _visualBaseColor, HitFlashDuration);
+        _hitTween.TweenProperty(_visual, "modulate", _visualBaseColor, HitInflateTime + HitFlashDuration);
+
+        // Two tweeners on the same property, the second delayed past the first. Chain() can't be used
+        // here: after a parallel group it waits for *every* running tweener, so the shrink would sit
+        // idle until the colour flash finished as well.
+        _hitTween.TweenProperty(_visual, "scale", _visualBaseScale * HitPunchScale, HitInflateTime)
+            .SetTrans(Tween.TransitionType.Quad).SetEase(Tween.EaseType.Out);
         _hitTween.TweenProperty(_visual, "scale", _visualBaseScale, HitFlashDuration)
-            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+            .SetDelay(HitInflateTime)
+            .SetTrans(Tween.TransitionType.Quad).SetEase(Tween.EaseType.Out);
     }
 
     private void SpawnScorePopup(int amount)

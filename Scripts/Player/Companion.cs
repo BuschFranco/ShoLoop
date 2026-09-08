@@ -104,12 +104,9 @@ public partial class Companion : Node2D
         // scaled-down version of it, and Bullet.tscn's Visual/Halo are plain white now (Modulate is
         // the only thing that ever colours one), so this has to be set explicitly rather than left
         // to whatever the scene's own base color used to be.
-        string bulletCosmetic = GameManager.Instance.EquippedBulletCosmetic;
         bullet.Modulate = isCrit
             ? Palette.CritBullet
-            : bulletCosmetic == CosmeticCatalog.DefaultId
-                ? Palette.PlayerBullet
-                : CosmeticCatalog.ColorFor(bulletCosmetic);
+            : GameManager.Instance.CosmeticColor(CosmeticCategory.Bullet, Palette.PlayerBullet);
 
         // Incendiario reward: the drone's shots burn too, at full DPS/duration — Incendiario is a
         // status the target catches, not a magnitude stat, so there's no "35% of the burn" to scale

@@ -46,18 +46,33 @@ Núcleos; renamed with no change to the underlying mechanism beyond the earn for
 - **Spent on characters** — see [characters.md](characters.md#locked-characters--libras) for
   `CharacterInfo.RequiresUnlock`/`UnlockCost` and `GameManager.TryUnlockCharacter`.
 - **Spent on cosmetics** — [CosmeticCatalog.cs](../Scripts/Player/CosmeticCatalog.cs) lists a shared
-  set of colors purchasable independently across 4 categories (bullets, ship trail, character
-  outline, arena/grid accent), bought and equipped from the "Tienda" screen
-  ([CosmeticsShopMenu.cs](../Scripts/UI/CosmeticsShopMenu.cs)). Purely visual — no category affects
-  gameplay. `GameManager.TryBuyCosmetic`/`EquipCosmetic` are the mutators, same no-signal shape as
-  `TryUnlockCharacter`; ownership lives in `GameManager.OwnedCosmetics`, keyed by
-  `CosmeticCatalog.ItemKey(category, id)` since owning a color for one category says nothing about
-  owning it for another. Each category also has a free, always-owned "Original" option that reverts
-  to how that system looked before this feature existed — the whole thing is opt-in.
+  set of 15 colours purchasable independently across 6 categories (bullets — which also colour the
+  fire-range ring, since it marks where those bullets reach — ship trail, character outline,
+  arena/grid accent, shield aura and orbit blades), bought and equipped from the "Tienda" screen
+  ([CosmeticsShopMenu.cs](../Scripts/UI/CosmeticsShopMenu.cs)). 90 unlockables in total. Purely
+  visual — no category affects gameplay. `GameManager.TryBuyCosmetic`/`EquipCosmetic` are the
+  mutators, same no-signal shape as `TryUnlockCharacter`; ownership lives in
+  `GameManager.OwnedCosmetics`, keyed by `CosmeticCatalog.ItemKey(category, id)` since owning a
+  colour for one category says nothing about owning it for another. Each category also has a free,
+  always-owned "Original" option that reverts to how that system looked before this feature existed —
+  the whole thing is opt-in.
+- **Cosmetic tiers are a rendering difference, not a price label.** Arena.tscn's `WorldEnvironment`
+  has `glow_hdr_threshold = 0.85`, so a colour's brightest channel decides what it does to the bloom:
+  **Común** stays under the threshold and never blooms (matte), **Raro** peaks at 1.0 and blooms, and
+  **Épico** carries channels *above* 1.0 — Godot's `Color` doesn't clamp — so it blows out in a way
+  no ordinary colour reaches. The catch: the main menu has no `WorldEnvironment`, so an Épico swatch
+  previews like a Raro one and only separates in the arena. That's what the tier frame is for.
+- **Secret codes** ([SecretCodeCatalog.cs](../Scripts/Player/SecretCodeCatalog.cs)) are the one way
+  meta progression is granted without being paid for. Redeemed from Options, once each
+  (`GameManager.RedeemedCodes`), and every code goes through `GrantCharacter`/`GrantCosmetic`/
+  `AddLibras` rather than writing save state directly — so a code can't produce a save file the
+  game couldn't have reached on its own.
 - `GameManager.UnlockedCharacters`/`OwnedCosmetics` (both `HashSet<string>`) are the other half of the
   save — persisted as `PackedStringArray`s under the same `settings.cfg` keys `unlocked_characters`/
   `owned_cosmetics`, no separate file needed (mirrors how `records.cfg` already stores its top-10 list
-  the same way). The 4 `Equipped*Cosmetic` properties are plain string keys alongside them.
+  the same way), plus `redeemed_codes` for secret codes. What's equipped is one string key per
+  category, derived from the enum member's name (`equipped_bullet_cosmetic` and friends) so adding a
+  category needs no persistence code at all.
 
 ## Account level (`GameManager.AccountLevel`)
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d14e1k126ffnh"
-path="res://.godot/imported/grunt.svg-ad48757d652faa67567937ec9009d9d9.ctex"
+uid="uid://dodvo1bitqpot"
+path="res://.godot/imported/boss.png-bf2526ddf9aa009bc2945d36e2b864ec.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Sprites/Enemies/grunt.svg"
-dest_files=["res://.godot/imported/grunt.svg-ad48757d652faa67567937ec9009d9d9.ctex"]
+source_file="res://Assets/Sprites/Enemies/boss.png"
+dest_files=["res://.godot/imported/boss.png-bf2526ddf9aa009bc2945d36e2b864ec.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
