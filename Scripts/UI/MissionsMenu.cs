@@ -76,7 +76,7 @@ public partial class MissionsMenu : Control
         nameLabel.AddThemeColorOverride("font_color", slot.Completed ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
         nameRow.AddChild(nameLabel);
 
-        var rewardLabel = new Label { Text = slot.Completed ? "✓" : $"+{slot.Reward}" };
+        var rewardLabel = new Label { Text = slot.Completed ? $"✓ +{slot.Reward}" : $"+{slot.Reward}" };
         rewardLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
         rewardLabel.AddThemeColorOverride("font_color", slot.Completed ? Palette.Player : new Color(0.75f, 0.55f, 1f));
         nameRow.AddChild(rewardLabel);

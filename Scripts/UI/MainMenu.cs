@@ -137,8 +137,17 @@ public partial class MainMenu : Control
     // setting exists to turn off.
     private void AnimateTitle()
     {
-        var title = GetNode<TextureRect>("VBoxContainer/Title");
-        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
+        // Title lives inside TitleSlot, a plain (non-Container) Control, rather than directly under
+        // VBoxContainer -- otherwise every VBoxContainer re-layout (triggered by something as
+        // unrelated as an overlay tab opening/closing, or coming back to the menu after a run) resets
+        // Title's container-assigned Position out from under the bob tween below. AsRelative legs
+        // sum to zero only if nothing else ever touches Position in between; a direct Container child
+        // doesn't get that guarantee, and the title used to end up stuck wherever it happened to be
+        // mid-bob when the reset hit. TitleSlot still reserves the row's height in the VBox; only the
+        // slot's own Position gets reflowed now, never Title's.
+        var titleSlot = GetNode<Control>("VBoxContainer/TitleSlot");
+        var title = GetNode<TextureRect>("VBoxContainer/TitleSlot/Title");
+        UIUtil.AddSpeedLines(GetNode<Control>("VBoxContainer"), titleSlot.GetIndex());
 
         if (DangerLevel.Reduced)
         {
