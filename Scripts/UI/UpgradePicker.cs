@@ -22,6 +22,12 @@ public partial class UpgradePicker : Control
     private List<UpgradeData> _currentChoices;
     private bool _resolving;
 
+    // Killed and recreated on every Open() rather than left running -- the accent colour (and so the
+    // shimmer's from/to pair) changes between a level-up pick and the gold Ultimate choice, and this
+    // node is reused across many opens in one run, so a fresh Shimmer call each time would otherwise
+    // stack a second competing tween on the same property instead of replacing the first.
+    private Tween _titleShimmer;
+
     public override void _Ready()
     {
         AddToGroup("upgrade_picker");
@@ -32,6 +38,7 @@ public partial class UpgradePicker : Control
         _title = GetNode<Label>("CenterContainer/Panel/VBoxContainer/Title");
         _freeHint = GetNode<Label>("CenterContainer/Panel/VBoxContainer/FreeHint");
         _cardsContainer = GetNode<GridContainer>("CenterContainer/Panel/VBoxContainer/CardsContainer");
+        UIUtil.AddSpeedLines(_title.GetParent<Control>(), _title.GetIndex());
 
         ApplyOrientationLayout();
     }
@@ -78,6 +85,10 @@ public partial class UpgradePicker : Control
         // Both used to get the identical colour, so a 20px heading and a 13px sub-line were separated
         // by size alone — and at that distance they read as one block of equally-important text.
         _freeHint.AddThemeColorOverride("font_color", new Color(accent, 0.7f));
+
+        _titleShimmer?.Kill();
+        _titleShimmer = Juice.Shimmer(_title, "theme_override_colors/font_color",
+            accent, accent.Lightened(0.55f), 1.8f);
 
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
 

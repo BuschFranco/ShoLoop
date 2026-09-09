@@ -57,6 +57,8 @@ public partial class OptionsMenu : Control
 
         _panel = GetNode<PanelContainer>("CenterContainer/Panel");
         _scroll = GetNode<ScrollContainer>("CenterContainer/Panel/Scroll");
+        var title = GetNode<Label>("CenterContainer/Panel/Scroll/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
         _joystickLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/JoystickLabel");
         _joystickSlider = GetNode<HSlider>("CenterContainer/Panel/Scroll/Box/JoystickSlider");
         _ultimateButtonLabel = GetNode<Label>("CenterContainer/Panel/Scroll/Box/UltimateButtonLabel");

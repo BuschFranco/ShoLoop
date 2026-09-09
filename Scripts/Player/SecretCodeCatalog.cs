@@ -54,6 +54,12 @@ public static class SecretCodeCatalog
             Reward = "Piloto secreto desbloqueado",
             Grant = gm => gm.GrantCharacter("secreto1"),
         },
+        new()
+        {
+            Code = "MDG",
+            Reward = "Pilotos del equipo de trabajo desbloqueados",
+            Grant = gm => gm.UnlockCoworkerRoster(),
+        },
     };
 
     /// <summary>Upper-cased with all whitespace stripped — the form both lookup and the redeemed-set

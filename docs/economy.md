@@ -97,8 +97,12 @@ Núcleos; renamed with no change to the underlying mechanism beyond the earn for
 - **Secret codes** ([SecretCodeCatalog.cs](../Scripts/Player/SecretCodeCatalog.cs)) are the one way
   meta progression is granted without being paid for. Redeemed from Options, once each
   (`GameManager.RedeemedCodes`), and every code goes through `GrantCharacter`/`GrantCosmetic`/
-  `AddLibras` rather than writing save state directly — so a code can't produce a save file the
-  game couldn't have reached on its own.
+  `AddLibras`/`UnlockCoworkerRoster` rather than writing save state directly — so a code can't
+  produce a save file the game couldn't have reached on its own. `UnlockCoworkerRoster` (the `MDG`
+  code) is the odd one out: the other three grant something a player could also reach by playing or
+  buying, while this one reveals a whole category of characters
+  ([characters.md#hidden-characters--secret-codes](characters.md#hidden-characters--secret-codes))
+  that has no other way to become visible at all.
 - `GameManager.UnlockedCharacters`/`OwnedCosmetics` (both `HashSet<string>`) are the other half of the
   save — persisted as `PackedStringArray`s under the same `settings.cfg` keys `unlocked_characters`/
   `owned_cosmetics`, no separate file needed (mirrors how `records.cfg` already stores its top-10 list
@@ -176,6 +180,21 @@ precisión (`TotalCritsLanded`/`TotalEnemiesKilled`), logros desbloqueados
 (`TotalMissionsCompleted`, bumped alongside every mission payout), personajes desbloqueados,
 cosméticos comprados, builds completadas (`EverCompletedBuilds.Count`/`BuildCatalog.ClassOrder.Length`),
 and Legendarias distintas (`EverGotLegendary.Count`/27, one per `UpgradeType`).
+
+**Presentation**: this used to be a single stacked list of identically-styled rows. It's now three
+visually distinct pieces built from the same underlying data above, none of it a new data source
+except the trend chart:
+- A 7-day trend chart (`ActivityBarChart`, `Scripts/UI/ActivityBarChart.cs`) of enemies killed per
+  day, fed by `GameManager.GetRecentActivity(int days)` — a new public method that reads the same
+  `_dailyStats` map "Mes"/"Semana" already sum, but returns the day-by-day series itself (zero-filled
+  for days with no run, so the x-axis stays evenly spaced) instead of one aggregate.
+- Actividad and the plain-number half of Resumen general render as colour-coded cards (`AddCard`) in
+  a 2-column grid — one accent colour per stat, reused from `Palette` rather than inventing new ones,
+  so the screen reads by colour before it reads by number.
+- The ratio-shaped stats (precisión, logros, builds, Legendarias) render as `StatProgressRing`
+  (`Scripts/UI/StatProgressRing.cs`) pie readouts instead of `N/M` text — same `Juice.WedgePoints`
+  primitive `CooldownIcon` already uses for its cooldown sweep, filled forward as progress instead of
+  shaded backward as time remaining.
 
 ## Account level (`GameManager.AccountLevel`)
 

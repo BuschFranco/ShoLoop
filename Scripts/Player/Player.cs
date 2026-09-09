@@ -112,14 +112,28 @@ public partial class Player : CharacterBody2D
     private int _killStreak;
     private float _killStreakTimer;
     private const float KillStreakWindow = 2.0f;   // seconds between kills to maintain streak
-    private const float KillStreakBonus = 0.1f;    // +10% per streak level
     // Public so the HUD's streak badge can show progress toward the cap rather than an open-ended
     // number — the multiplier stops growing here, and a bar that fills to exactly this point is what
     // makes that legible without spelling it out.
-    public const int KillStreakMax = 15;            // cap at ×2.5 bonus
+    public const int KillStreakMax = 60;             // cap at ×5.5 bonus
+    private const float KillStreakMaxBonus = 4.5f;   // +450% at the cap
+    // Concave curve (exponent < 1): the early game feels the same as a flat +10%/kill (or a hair
+    // better) all the way through the streak counts a casual run can reach, then keeps extending far
+    // past that only for the long streaks that are realistically only sustainable in late rounds.
+    // Anchored so streak=10 lands on exactly the same +100% the old flat formula gave, and streak=60
+    // lands on exactly the new +450% cap.
+    private const float KillStreakCurveExponent = 0.84f;
 
     public int KillStreak => _killStreak;
-    public float KillStreakMultiplier => 1f + Mathf.Min(_killStreak, KillStreakMax) * KillStreakBonus;
+
+    public float KillStreakMultiplier
+    {
+        get
+        {
+            float t = Mathf.Min(_killStreak, KillStreakMax) / (float)KillStreakMax;
+            return 1f + KillStreakMaxBonus * Mathf.Pow(t, KillStreakCurveExponent);
+        }
+    }
 
     public bool HasExtraProjectile => _hasExtraProjectile;
     public bool HasOrbitShield => OrbitCount > 0;
@@ -240,7 +254,12 @@ public partial class Player : CharacterBody2D
     // GameOverStatsMenu (which shows this alone — the round already ended, GameOverScreen's own
     // summary already covers what round/score/kills were reached). One source so the two screens'
     // wording can't drift apart.
-    public List<string> BuildCombatStatsLines()
+    // runEnded: true from GameOverStatsMenu, false (the default) from PauseMenu. The DEFENSAS line
+    // otherwise reads CurrentLives/CurrentShieldCharges — meaningful mid-run, but by the time a death
+    // screen shows this, both have already hit 0 (that's what death means), so a Game Over recap
+    // always reads "0 corazones" regardless of how well-defended the run actually was. runEnded shows
+    // the build totals instead, the same values LoadoutMenu.cs already reads for its own recap.
+    public List<string> BuildCombatStatsLines(bool runEnded = false)
     {
         var lines = new List<string>
         {
@@ -252,7 +271,9 @@ public partial class Player : CharacterBody2D
             $"Cuchillas Orbitales: {OrbitCount}   Escudo Voltáico: {(ThornsDamage > 0 ? $"{ThornsDamage:0} daño" : "No")}",
             "",
             "── DEFENSAS ──",
-            $"Vidas: {CurrentLives}/{MaxLives}   Escudos: {CurrentShieldCharges}/{MaxShieldCharges}",
+            runEnded
+                ? $"Vidas (máx): {MaxLives}   Escudos (máx): {MaxShieldCharges}"
+                : $"Vidas: {CurrentLives}/{MaxLives}   Escudos: {CurrentShieldCharges}/{MaxShieldCharges}",
             $"Regeneración: {(ShieldRegenPerMinute > 0 ? $"{ShieldRegenPerMinute:0.#}/min" : "No")}",
             "",
             "── PODERES ──",
@@ -1187,6 +1208,15 @@ public partial class Player : CharacterBody2D
         Juice.Blast(this, GlobalPosition, LevelUpBurstRadius, Palette.LevelUpNova,
             growTime: 0.3f, fadeTime: 0.35f, zIndex: 0);
 
+    // Called by GameManager once every reward from a level-up streak has been picked, rather than at
+    // the moment the level-up itself happens — the picker is still open then, and competing with it
+    // for attention was the opposite of what a celebration text is for. World-space, not a HUD popup,
+    // so it reads as coming off the ship and keeps tracking it through the drift/fade instead of
+    // freezing at wherever the player was standing when they made their pick.
+    public void ShowLevelUpText() =>
+        Juice.FloatingLabel(this, "¡SUBE DE NIVEL!", GlobalPosition + new Vector2(0f, -46f),
+            Palette.LevelPopup, Palette.FontSize.Title, driftY: -46f, holdBeforeFade: 0.55f, lifetime: 1.1f);
+
     // From the Epic tier up (LaserLevel 3+), the Laser couples to the player's current attack
     // stats instead of using its own fixed numbers — its damage scales with BulletDamage and its
     // fire interval scales with FireRate (both relative to their base values), so buying more
@@ -1421,6 +1451,10 @@ public partial class Player : CharacterBody2D
                 // uses doesn't read Sobrecarga as contributing nothing.
                 UltimateKind.Frenzy => gunDps * uptimeFraction,
 
+                // Same "permanent safety" modelling as TimeSlow, just literal rather than approximate
+                // -- nothing can land at all while it's up, so it's worth at least as much.
+                UltimateKind.Invulnerability => baselineDps * uptimeFraction,
+
                 _ => 0f,
             };
         }
@@ -1488,6 +1522,9 @@ public partial class Player : CharacterBody2D
             case UltimateKind.Frenzy:
                 TriggerUltimateFrenzy();
                 break;
+            case UltimateKind.Invulnerability:
+                TriggerUltimateInvulnerability();
+                break;
         }
 
         // The cooldown starts counting only once the effect has finished, rather than running
@@ -1497,16 +1534,27 @@ public partial class Player : CharacterBody2D
         UltimateCooldownRemaining = GetUltimateActiveDuration(EquippedUltimate.Value) + UltimateCooldownDuration;
     }
 
-    // Nova detonates on the frame it's triggered; the other two run for a while. Only the timed ones
-    // push their cooldown back.
-    private float GetUltimateActiveDuration(UltimateKind kind) =>
-        kind == UltimateKind.Nova ? 0f : GetUltimateEffectDuration();
+    // Nova detonates on the frame it's triggered; the rest run for a while. Only the timed ones push
+    // their cooldown back.
+    private float GetUltimateActiveDuration(UltimateKind kind) => kind switch
+    {
+        UltimateKind.Nova => 0f,
+        UltimateKind.Invulnerability => UltimateInvulnDuration,
+        _ => GetUltimateEffectDuration(),
+    };
 
     private const float UltimateNovaRadius = 500f;
-    private const int UltimateNovaDamage = 500;
+
+    // Mirrors EnemySpawner.HpMultCurve (kept in sync manually, same "kept in sync" spirit as
+    // OrbitBladeDamage above) -- a flat 500 stopped meaningfully denting anything once enemy HP had
+    // climbed to 8x baseline, so Nova's damage scales by the same curve enemy HP does, keeping it
+    // worth roughly the same fraction of a target's health at round 40 that it was at round 1.
+    private static readonly RoundCurve UltimateNovaDamageCurve = new(500f, 90f, 500f, 4000f);
+    private int UltimateNovaDamage => Mathf.RoundToInt(UltimateNovaDamageCurve.Evaluate(GameManager.Instance?.RoundNumber ?? 1));
 
     private void TriggerUltimateNova()
     {
+        int damage = UltimateNovaDamage;
         var enemies = GetTree().GetNodesInGroup("enemies");
         foreach (var n in enemies)
         {
@@ -1514,12 +1562,28 @@ public partial class Player : CharacterBody2D
             {
                 float dist = GlobalPosition.DistanceTo(enemy.GlobalPosition);
                 if (dist <= UltimateNovaRadius)
-                    enemy.TakeDamage(UltimateNovaDamage);
+                    enemy.TakeDamage(damage);
             }
         }
 
         Juice.Blast(this, GlobalPosition, UltimateNovaRadius, Palette.UltimateNova,
             growTime: 0.35f, fadeTime: 0.5f, zIndex: 0);
+    }
+
+    // Escudo Absoluto: total damage immunity for the effect's duration. Reuses the exact i-frame
+    // window a normal hit already opens (_invulnTimer + the blink loop in _PhysicsProcess and the
+    // early-out at the top of TakeHit) rather than a second parallel immunity flag — the ultimate
+    // is "a much longer i-frame", not a different mechanic, so there's nothing else to keep in sync.
+    // This is the most absolute Ultimate: not a damage reduction or a chance to shrug a hit like
+    // Dodge/Tank, a hit simply cannot land at all while the timer is running. Its own fixed 3s
+    // (rather than the other timed Ultimates' shared GetUltimateEffectDuration) is deliberate — total
+    // immunity is worth more per second than a slow or a damage buff, so it gets a shorter window.
+    private const float UltimateInvulnDuration = 3f;
+
+    private void TriggerUltimateInvulnerability()
+    {
+        _invulnTimer = UltimateInvulnDuration;
+        _blinkTimer = 0f;
     }
 
     // Onda de Choque: the periodic small AoE reward. Same enemies-in-radius loop as

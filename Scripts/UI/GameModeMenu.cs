@@ -27,6 +27,8 @@ public partial class GameModeMenu : Control
         _characterSelect = GetNode<CharacterSelectMenu>("../CharacterSelectMenu");
 
         _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.Player));
+        var title = GetNode<Label>("CenterContainer/Panel/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
 
         _classicButton.Pressed += () => SelectMode(GameManager.GameMode.Classic);
         _hardcoreButton.Pressed += () => SelectMode(GameManager.GameMode.Hardcore);
@@ -39,11 +41,16 @@ public partial class GameModeMenu : Control
     private void SelectMode(GameManager.GameMode mode)
     {
         GameManager.Instance.SetGameMode(mode);
+
+        // sound: false -- this isn't a cancel/close, it's a straight handoff into CharacterSelectMenu,
+        // which plays its own modal-in sound a moment later. Without this, picking a mode fires three
+        // sounds back to back (the button's own click, this modal-out, then the other menu's
+        // modal-in) close enough together to sound like a double click.
         Juice.ModalOut(_panel, () =>
         {
             Visible = false;
             _characterSelect.Open();
-        });
+        }, sound: false);
     }
 
     // The last-picked mode gets a brighter border so returning players see at a glance what they're

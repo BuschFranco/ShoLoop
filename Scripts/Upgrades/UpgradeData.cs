@@ -39,12 +39,13 @@ public enum RewardTier
     Legendary
 }
 
-// The 3 Ultimates a player can find in the shop. See Player.TriggerUltimate for what each does.
+// The 4 Ultimates a player can find in the shop. See Player.TriggerUltimate for what each does.
 public enum UltimateKind
 {
     Nova,
     TimeSlow,
-    Frenzy
+    Frenzy,
+    Invulnerability
 }
 
 public static class UltimateKindNames
@@ -57,6 +58,7 @@ public static class UltimateKindNames
         UltimateKind.Nova => "Pulso Nova",
         UltimateKind.TimeSlow => "Zona Lenta",
         UltimateKind.Frenzy => "Sobrecarga",
+        UltimateKind.Invulnerability => "Escudo Absoluto",
         _ => kind.ToString(),
     };
 }
@@ -177,6 +179,7 @@ public class UpgradeData
             new("Ultimate: Pulso Nova", "Daño masivo a todos los cercanos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Nova),
             new("Ultimate: Zona Lenta", "Ralentiza a todos los enemigos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.TimeSlow),
             new("Ultimate: Sobrecarga", "Duplica cadencia y daño", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Frenzy),
+            new("Ultimate: Escudo Absoluto", "Invulnerabilidad total por unos segundos", UpgradeType.Ultimate, RewardTier.Epic, cost: 80, source: RewardSource.Shop, ultimate: UltimateKind.Invulnerability),
             new("Regeneración", "+1 escudo cada 12s", UpgradeType.ShieldRegen, RewardTier.Epic, 5f, cost: 55, source: RewardSource.Shop),
             new("Vendaval I", "Ráfaga frontal cada 4.5s (90 daño, alcance 260)", UpgradeType.Vendaval, RewardTier.Epic, 1f, cost: 75, source: RewardSource.Shop),
             new("Escudo Voltáico", "Refleja 20 daño al ser golpeado (8s cd)", UpgradeType.Thorns, RewardTier.Epic, 15f, cost: 60, source: RewardSource.Shop),
@@ -272,6 +275,25 @@ public class UpgradeData
         }
 
         return pool.GetRange(0, Mathf.Min(count, pool.Count));
+    }
+
+    // The round-10 shop: forces every offer to Legendary tier, no roll. Reuses PickFromTier's
+    // existing dedup/isUseless-fallback behaviour instead of duplicating it, same as
+    // PickUltimateChoices reuses BuildCatalog rather than inventing its own filtering.
+    public static List<UpgradeData> PickLegendaryOnly(int count, Func<UpgradeData, bool> isUseless = null)
+    {
+        var catalog = BuildCatalog(RewardSource.Shop);
+        var usedNames = new HashSet<string>();
+        var result = new List<UpgradeData>();
+
+        for (int i = 0; i < count; i++)
+        {
+            var pick = PickFromTier(catalog, RewardTier.Legendary, usedNames, isUseless);
+            if (pick == null) break;
+            usedNames.Add(pick.Name);
+            result.Add(pick);
+        }
+        return result;
     }
 
     private static UpgradeData PickFromTier(Dictionary<RewardTier, List<UpgradeData>> catalog, RewardTier tier, HashSet<string> usedNames, Func<UpgradeData, bool> isUseless)

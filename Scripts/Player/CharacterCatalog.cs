@@ -88,6 +88,13 @@ public readonly struct CharacterInfo
     // ever NEEDS to be.
     public bool RequiresUnlock { get; init; }
     public int UnlockCost { get; init; }
+
+    // Independent of RequiresUnlock/UnlockCost above -- that pair means "always visible, needs
+    // Libras to select" (secreto1/2/3). This means the opposite: invisible in both the carousel and
+    // the Tienda until GameManager.CoworkerRosterUnlocked flips true (redeeming the MDG code), then
+    // free to select like anything else. Two different axes, so a character could in principle use
+    // both, even though nothing currently does.
+    public bool HiddenUntilCodeRedeemed { get; init; }
 }
 
 // The playable cast: a fixed built-in list plus whatever the player has created, picked at the
@@ -105,13 +112,15 @@ public static class CharacterCatalog
     {
         // The three originals share ship.png and are told apart by Color alone, which is how the ship
         // looked before the character system existed. Their whole identity is mechanical, so the stat
-        // line lives in PerkText and they carry no flavour Description — Equilibrado is the mirror
-        // image, all Description and no perk.
+        // line lives in PerkText and they carry no flavour Description — Vector is the mirror image,
+        // all Description and no perk. Slug stays "equilibrado" (it's an internal identifier, never
+        // shown to the player, and DefaultSlug/save data key off it) — only the display Name changed.
         new()
         {
             Slug = "equilibrado",
-            Name = "Equilibrado",
-            Description = "Estadísticas base, sin ventajas ni desventajas.",
+            Name = "Vector",
+            Description = "Estadísticas de fábrica, cero personalidad, cero upgrades en el ADN. "
+            + "Pilotarla o dejarla en el hangar da exactamente lo mismo.",
             MoveSpeedMultiplier = 1f,
             BulletDamageMultiplier = 1f,
             Color = new Color(0.49f, 0.99f, 1f, 1f), // cyan — the ship's original default color
@@ -121,6 +130,8 @@ public static class CharacterCatalog
         {
             Slug = "centella",
             Name = "Centella",
+            Description = "Va tan rápido que no le da el tiempo de pensar en sus decisiones, ni en "
+            + "apuntar bien.",
             PerkText = "+15% de velocidad, -10% de daño de bala.",
             MoveSpeedMultiplier = 1.15f,
             BulletDamageMultiplier = 0.9f,
@@ -131,6 +142,8 @@ public static class CharacterCatalog
         {
             Slug = "coloso",
             Name = "Coloso",
+            Description = "Pesada, lenta y directa, como esa deuda que nunca termina de pagarse. "
+            + "Pero cuando pega, pega con todo.",
             PerkText = "-10% de velocidad, +20% de daño de bala.",
             MoveSpeedMultiplier = 0.9f,
             BulletDamageMultiplier = 1.2f,
@@ -138,10 +151,97 @@ public static class CharacterCatalog
             SpritePath = "res://Assets/Sprites/Characters/ship.png",
         },
 
-        // Portrait characters — the joke roster, expected to rotate. Cosmetic by default: every
-        // multiplier defaults to 1.0, so a portrait with no perk arguments is mechanically identical
-        // to Equilibrado. Color is White on all of them because their sprites carry their own colours
-        // and must not be modulated. See docs/characters.md for how to add, edit or remove one.
+        // Six more ship.png originals, the same "identity is Color alone" shape as the three above
+        // — this is the default-visible roster now. Each perk value is a straight copy of one of the
+        // joke roster's below (already playtested/balanced under those names), just carried over to
+        // a new name/colour/flavour with nobody real behind it.
+        new()
+        {
+            Slug = "intrusa",
+            Name = "Intrusa",
+            Description = "Entra a tu red antes de que termines de leer los términos y condiciones. "
+            + "A los enemigos les hackea la nave; a vos, probablemente ya te vació la cuenta.",
+            PerkText = "Nunca pidió permiso para nada en su vida: 2% de probabilidad de hackear la "
+            + "nave de un enemigo dentro de su rango y dejarlo inoperante por 1 segundo.",
+            MoveSpeedMultiplier = 1f,
+            BulletDamageMultiplier = 1f,
+            EnemyHackChance = 0.02f,
+            Color = new Color(0.35f, 0.4f, 1f, 1f), // electric indigo — reads as "hacker"
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
+        },
+        new()
+        {
+            Slug = "titan",
+            Name = "Titán",
+            Description = "Tiene tanto blindaje encima que se mueve como trámite estatal: lento, "
+            + "pesado, e imposible de destruir por las buenas.",
+            PerkText = "Podrías ganarle una carrera caminando: -50% de velocidad.",
+            MoveSpeedMultiplier = 0.5f,
+            BulletDamageMultiplier = 1f,
+            Color = new Color(0.6f, 0.62f, 0.68f, 1f), // steel grey — reads as "heavy armor"
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
+        },
+        new()
+        {
+            Slug = "codicia",
+            Name = "Codicia",
+            Description = "Le sacaría hasta las monedas de los ojos a un muerto. De hecho lo hace.",
+            PerkText = "Hasta en la muerte ajena encuentra un rédito: sus víctimas tienen +15% de "
+            + "probabilidad de soltar monedas.",
+            MoveSpeedMultiplier = 1f,
+            BulletDamageMultiplier = 1f,
+            CoinDropBonus = 0.15f,
+            Color = new Color(1f, 0.85f, 0.15f, 1f), // gold — reads as "wealth"
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
+        },
+        new()
+        {
+            Slug = "errante",
+            Name = "Errante",
+            Description = "Nave sin rumbo ni propósito, exactamente como vos los domingos a la tarde. "
+            + "No sube ni baja nada, solo está ahí, cumpliendo.",
+            MoveSpeedMultiplier = 1f,
+            BulletDamageMultiplier = 1f,
+            Color = new Color(0.85f, 0.88f, 0.92f, 1f), // silver-white — reads as "unremarkable"
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
+        },
+        new()
+        {
+            Slug = "pavor",
+            Name = "Pavor",
+            Description = "Tan aterradora que algunos enemigos prefieren dejar de existir antes que "
+            + "enfrentarla cara a cara. No es que dé miedo: rompe directamente las ganas de vivir.",
+            PerkText = "Con solo verla de cerca, algunos enemigos deciden que no vale la pena seguir "
+            + "existiendo: 1% de probabilidad de autodestruirse al entrar en su rango.",
+            MoveSpeedMultiplier = 1f,
+            BulletDamageMultiplier = 1f,
+            EnemySuicideChance = 0.01f,
+            Color = new Color(0.45f, 0.15f, 0.55f, 1f), // dark violet — reads as "dread"
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
+        },
+        new()
+        {
+            Slug = "verdor",
+            Name = "Verdor",
+            Description = "Irradia una toxina invisible que los enemigos ni notan hasta que ya "
+            + "perdieron el 10% de su salud y todo el interés por seguir peleando.",
+            PerkText = "Los enemigos cercanos empiezan a sentirse raros, débiles, verdosos: -10% de "
+            + "salud.",
+            MoveSpeedMultiplier = 1f,
+            BulletDamageMultiplier = 1f,
+            EnemyHpMultiplier = 0.9f,
+            EnemyTint = new Color("9bff4d"),
+            Color = new Color(0.4f, 1f, 0.4f, 1f), // green — reads as "toxin/nature"
+            SpritePath = "res://Assets/Sprites/Characters/ship.png",
+        },
+
+        // Portrait characters — the joke roster. Hidden from the carousel/Tienda (HiddenUntilCodeRedeemed)
+        // until the MDG code is redeemed in Options (see SecretCodeCatalog) — GameManager.CoworkerRosterUnlocked
+        // gates CharacterCatalog.IsVisible, checked by CharacterSelectMenu.RebuildOrder. Cosmetic by
+        // default: every multiplier defaults to 1.0, so a portrait with no perk arguments is
+        // mechanically identical to Equilibrado. Color is White on all of them because their sprites
+        // carry their own colours and must not be modulated. See docs/characters.md for how to add,
+        // edit or remove one.
         Portrait("maxi", "Maxi",
             "Antes del primer destello de luz, solo existía el vacío y Él: el Coloso primordial, el "
             + "Señor de la Lógica, el Mente Maestra que osó enseñarle a pensar al caos. Con las manos "
@@ -149,13 +249,13 @@ public static class CharacterCatalog
             + "eternos y tallando la realidad línea por línea. Programó la realidad que hoy vivimos.",
             perkText: "Tiene 2% de probabilidad de hackear la nave de los enemigos dentro de su rango "
             + "y dejarlos inoperantes por 1 segundo.",
-            enemyHackChance: 0.02f),
+            enemyHackChance: 0.02f, hiddenUntilCodeRedeemed: true),
 
         Portrait("conrado", "Conrado",
             "El abuelo de la oficina (Jubilado). Utilizarlo te hace más lento y te mea el mapa pero "
             + "como te bancamos conra jaja.",
             perkText: "-50% de velocidad.",
-            moveSpeed: 0.5f),
+            moveSpeed: 0.5f, hiddenUntilCodeRedeemed: true),
 
         Portrait("manu", "Manu",
             "Nacido del barro y la soberbia, desafió los cielos, desgarró la garganta del Creador con "
@@ -167,10 +267,11 @@ public static class CharacterCatalog
             + "destronado.",
             perkText: "Es medio turro, asi que seguro es mano larga: sus víctimas tienen +15% de "
             + "dropear monedas.",
-            coinDropBonus: 0.15f),
+            coinDropBonus: 0.15f, hiddenUntilCodeRedeemed: true),
 
         Portrait("juan", "Juan",
-            "Juan con pelo jaja, que capo, carrea solo."),
+            "Juan con pelo jaja, que capo, carrea solo.",
+            hiddenUntilCodeRedeemed: true),
 
         Portrait("nico_l", "Nico L",
             "Nadie sabe cuándo ni cómo acecha. A veces se desvanece en el vacío, ocultando su "
@@ -180,13 +281,13 @@ public static class CharacterCatalog
             + "cual hasta los dioses bajan la mirada.",
             perkText: "Los enemigos tienen 1% de probabilidad de suicidarse al entrar en su rango por "
             + "quedar humillados ante semejante aura.",
-            enemySuicideChance: 0.01f),
+            enemySuicideChance: 0.01f, hiddenUntilCodeRedeemed: true),
 
         Portrait("juli", "Juli",
             "No hace nada. Si no la pongo seguro se enoja",
             perkText: "Su presencia convierte a los enemigos en vegetarianos: se tornan verdes y "
             + "-10% de salud.",
-            enemyHp: 0.9f, enemyTint: new Color("9bff4d")),
+            enemyHp: 0.9f, enemyTint: new Color("9bff4d"), hiddenUntilCodeRedeemed: true),
 
         // Locked behind Libras (see GameManager.Libras/TryUnlockCharacter). Placeholder "?"
         // portraits and cosmetic-only for now, same as Juan — the slot is meant to be filled in later
@@ -214,7 +315,8 @@ public static class CharacterCatalog
         float moveSpeed = 1f, float bulletDamage = 1f, float coinDropBonus = 0f,
         float enemyHp = 1f, Color? enemyTint = null,
         float enemyHackChance = 0f, float enemySuicideChance = 0f,
-        bool requiresUnlock = false, int unlockCost = 0) => new()
+        bool requiresUnlock = false, int unlockCost = 0,
+        bool hiddenUntilCodeRedeemed = false) => new()
     {
         Slug = slug,
         Name = name,
@@ -229,6 +331,7 @@ public static class CharacterCatalog
         EnemySuicideChance = enemySuicideChance,
         RequiresUnlock = requiresUnlock,
         UnlockCost = unlockCost,
+        HiddenUntilCodeRedeemed = hiddenUntilCodeRedeemed,
         Color = Colors.White,
         SpritePath = $"res://Assets/Sprites/Characters/{slug}.png",
         IsCircular = true,
@@ -263,6 +366,13 @@ public static class CharacterCatalog
     // remember to check both.
     public static bool IsUnlocked(CharacterInfo info) =>
         !info.RequiresUnlock || GameManager.Instance.UnlockedCharacters.Contains(info.Slug);
+
+    // Whether a character should even be offered for picking right now -- separate from IsUnlocked,
+    // which answers "shown but locked behind Libras" (secreto1/2/3). This answers "shown at all":
+    // the joke roster (HiddenUntilCodeRedeemed) doesn't exist in the carousel/Tienda until the MDG
+    // code is redeemed, rather than sitting there dimmed with a price tag.
+    public static bool IsVisible(CharacterInfo info) =>
+        !info.HiddenUntilCodeRedeemed || GameManager.Instance.CoworkerRosterUnlocked;
 
     public static CharacterInfo Get(string slug)
     {

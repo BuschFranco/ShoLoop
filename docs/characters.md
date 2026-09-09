@@ -25,36 +25,47 @@ changes, both gated on `GameManager.CurrentGameMode == GameMode.Hardcore`:
   exist but become no-ops on their own: `Player.AddLife`/shield refill only top up toward the
   existing max, and that max can never move past 1/0 in Hardcore.
 
-**The current cast is a joke roster** — portraits of the author's coworkers with gag perks, expected
-to be swapped, renamed and retuned often. This document is written for that: the sections below are
-ordered by what you're most likely to be here to do.
+**The default-visible cast is six ship.png originals** (same shape as Vector/Centella/Coloso —
+identity is `Color` alone, no photo). **A second cast — portraits of the author's coworkers with gag
+perks — still exists but is hidden** until the `MDG` secret code is redeemed in Options; see
+[Hidden characters & secret codes](#hidden-characters--secret-codes) below. This document is written
+expecting both casts to be swapped, renamed and retuned often — the sections below are ordered by
+what you're most likely to be here to do.
 
-**Consent on file**: every real person depicted (Maxi, Conrado, Manu, Juan, Nico L, Juli) has given
-explicit consent for their name and likeness to be used this way ahead of any public release. Noted
-here so the question doesn't get reopened by a future audit — if a new joke character is added later
-using a real coworker's photo, get the same sign-off before it ships.
+**Consent on file**: every real person depicted in the hidden cast (Maxi, Conrado, Manu, Juan, Nico L,
+Juli) has given explicit consent for their name and likeness to be used this way ahead of any public
+release. Noted here so the question doesn't get reopened by a future audit — if a new joke character
+is added later using a real coworker's photo, get the same sign-off before it ships.
 
 ---
 
 ## The cast
 
-| Slug | Name | Perk | Field |
-|---|---|---|---|
-| `equilibrado` | Equilibrado | — | (the baseline) |
-| `centella` | Centella | +15% speed, −10% bullet damage | `MoveSpeedMultiplier` / `BulletDamageMultiplier` |
-| `coloso` | Coloso | −10% speed, +20% bullet damage | `MoveSpeedMultiplier` / `BulletDamageMultiplier` |
-| `maxi` | Maxi | 2% to hack an enemy for 1s | `EnemyHackChance` |
-| `conrado` | Conrado | −50% speed | `MoveSpeedMultiplier` |
-| `manu` | Manu | +15% coin drop chance | `CoinDropBonus` |
-| `juan` | Juan | — | — |
-| `nico_l` | Nico L | 1% for an enemy to die on approach | `EnemySuicideChance` |
-| `juli` | Juli | Enemies turn green, −10% HP | `EnemyTint` / `EnemyHpMultiplier` |
-| `secreto1`/`2`/`3` | Piloto Secreto I/II/III | — (cosmetic, real perk TBD) | locked — see below |
+| Slug | Name | Perk | Field | Visible by default? |
+|---|---|---|---|---|
+| `equilibrado` | Vector | — | (the baseline) | yes |
+| `centella` | Centella | +15% speed, −10% bullet damage | `MoveSpeedMultiplier` / `BulletDamageMultiplier` | yes |
+| `coloso` | Coloso | −10% speed, +20% bullet damage | `MoveSpeedMultiplier` / `BulletDamageMultiplier` | yes |
+| `intrusa` | Intrusa | 2% to hack an enemy for 1s | `EnemyHackChance` | yes |
+| `titan` | Titán | −50% speed | `MoveSpeedMultiplier` | yes |
+| `codicia` | Codicia | +15% coin drop chance | `CoinDropBonus` | yes |
+| `errante` | Errante | — | — | yes |
+| `pavor` | Pavor | 1% for an enemy to die on approach | `EnemySuicideChance` | yes |
+| `verdor` | Verdor | Enemies turn green, −10% HP | `EnemyTint` / `EnemyHpMultiplier` | yes |
+| `secreto1`/`2`/`3` | Piloto Secreto I/II/III | — (cosmetic, real perk TBD) | locked — see [Locked characters & Libras](#locked-characters--libras) | yes (dimmed) |
+| `maxi` | Maxi | 2% to hack an enemy for 1s | `EnemyHackChance` | **no — MDG code**, see below |
+| `conrado` | Conrado | −50% speed | `MoveSpeedMultiplier` | **no — MDG code**, see below |
+| `manu` | Manu | +15% coin drop chance | `CoinDropBonus` | **no — MDG code**, see below |
+| `juan` | Juan | — | — | **no — MDG code**, see below |
+| `nico_l` | Nico L | 1% for an enemy to die on approach | `EnemySuicideChance` | **no — MDG code**, see below |
+| `juli` | Juli | Enemies turn green, −10% HP | `EnemyTint` / `EnemyHpMultiplier` | **no — MDG code**, see below |
 
 Plus however many the player has created — see [Custom characters](#custom-characters).
 
-Only the first three vary the ship's own stats. The portrait characters default to 1.0 on everything,
-so a portrait with no perk arguments is mechanically identical to Equilibrado.
+The nine default-visible entries vary only the ship's own stats/`EnemyTint`-family fields — none of
+them carry a photo, `Color` is what tells them apart (`ship.png`, tinted). The hidden six are
+portraits and default to 1.0 on everything except their one perk, so a portrait with no perk
+arguments (Juan) is mechanically identical to Vector.
 
 ## Editing a character
 
@@ -65,7 +76,7 @@ to get typo'd into being non-cosmetic.
 
 **Rename, or change the text:** edit the strings in that entry. `Description` is the flavour
 paragraph; `PerkText` is the one-sentence mechanical claim. They render in two separate boxes, and
-each box hides itself when its string is empty — that's how Equilibrado shows only a description and
+each box hides itself when its string is empty — that's how Vector shows only a description and
 Centella only a perk.
 
 **Swap the photo:**
@@ -134,6 +145,37 @@ a static hint label ("Bloqueado — cómpralo en la Tienda"). The carousel still
 portrait, meant to be filled in exactly like the six amigos originally were: swap the PNG with
 `tools/prep_character_sprite.py`, then add a real `Description`/`PerkText` to the catalog entry.
 Nothing about the unlock plumbing needs to change when that happens.
+
+## Hidden characters & secret codes
+
+A second, independent gate from Libras above — this one hides an entry entirely instead of showing
+it locked. One field on `CharacterInfo`:
+
+```csharp
+public bool HiddenUntilCodeRedeemed { get; init; }   // false by default, same "opt-in" shape as RequiresUnlock
+```
+
+`CharacterCatalog.IsVisible(info)` combines it with `GameManager.CoworkerRosterUnlocked`
+(`!info.HiddenUntilCodeRedeemed || GameManager.Instance.CoworkerRosterUnlocked`) — the one place that
+answers "should this even be offered right now," the way `IsUnlocked` answers "is this bought yet."
+`CharacterSelectMenu.RebuildOrder` filters the carousel through it before building `_order`, so a
+hidden entry doesn't appear at all — not dimmed, not in the list. `CosmeticsShopMenu`'s "Personajes"
+tab needed no equivalent change: it already only lists `RequiresUnlock` rows, and the six amigos
+never set that field, so they were never listed there regardless of this gate.
+
+The six amigos (`maxi`/`conrado`/`manu`/`juan`/`nico_l`/`juli`) currently set
+`hiddenUntilCodeRedeemed: true`. Redeeming the `MDG` code (`SecretCodeCatalog.Codes`) calls
+`GameManager.UnlockCoworkerRoster()`, which flips `CoworkerRosterUnlocked` to `true` and persists it
+to `settings.cfg` immediately (same set-and-save shape as `SetReducedMotion` — one flag, nothing else
+to batch, so it doesn't go through `SaveMetaProgress`). Once unlocked, the six are visible **and
+freely selectable** — this gate has no currency step of its own; if a hidden character should also
+cost Libras once revealed, that's `RequiresUnlock`/`UnlockCost` on the same entry, the two fields
+are independent.
+
+**Adding another hidden character:** pass `hiddenUntilCodeRedeemed: true` to `Portrait(...)`
+(or set it directly on a `ship.png`-style entry). It stays invisible until *some* code sets
+`CoworkerRosterUnlocked` — there's no per-character code today, only the one category-wide flag, so a
+second hidden group would need its own bool + its own code rather than reusing this one.
 
 ## Per-pilot leaderboard & level
 

@@ -62,7 +62,12 @@ public partial class CosmeticsShopMenu : Control
         _closeButton = GetNode<Button>("CenterContainer/Panel/Scroll/Box/CloseButton");
         _content = GetNode<VBoxContainer>("CenterContainer/Panel/Scroll/Box/Content");
 
-        _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.Player));
+        // Magenta, not the generic Player cyan every other screen defaults to -- this is the shop,
+        // same "spending" colour the in-run Shop already uses, and it ties straight back to the
+        // logo's own magenta half.
+        _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.ShopPanelBorder));
+        var title = GetNode<Label>("CenterContainer/Panel/Scroll/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
 
         BuildTabs();
         BuildPaletteArea();

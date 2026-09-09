@@ -9,6 +9,13 @@ public partial class Shop : Control
     // Palette constant was dead code that could silently drift from what shipped.
     private static readonly StyleBoxFlat PanelStyle = UIUtil.CreatePanelStyle(Palette.ShopPanelBorder);
 
+    // Every 10th round's shop (10, 20, 30…) is forced to 3 Legendary offers, gold instead of the
+    // usual magenta. Reuses Palette.UltimatePanelBorder rather than a new near-identical gold — that
+    // constant already means "the rare, special pick" in this game (UpgradePicker's post-boss
+    // Ultimate choice), which is exactly what this shop visit is too.
+    private static readonly StyleBoxFlat LegendaryPanelStyle = UIUtil.CreatePanelStyle(Palette.UltimatePanelBorder);
+    private const int LegendaryShopInterval = 10;
+
     private Label _coinsLabel;
     private GridContainer _cardsContainer;
     private Button _continueButton;
@@ -30,6 +37,12 @@ public partial class Shop : Control
     // render as "Comprada", telling the player they'd bought something they never bought.
     private bool[] _purchased;
     private Tween _coinsTween;
+
+    // Killed and recreated in ShowRoundRecap() rather than left running -- the accent flips between
+    // magenta and gold on a Legendary round, and this node is reused for every shop visit in a run,
+    // so a fresh Shimmer call each open would otherwise stack a second competing tween on the same
+    // property instead of replacing the first.
+    private Tween _titleShimmer;
 
     // 20% of the coin balance at the moment the shop opened — fixed for the whole visit, so buying
     // something (which lowers the balance) never changes what a reroll costs mid-visit.
@@ -64,6 +77,7 @@ public partial class Shop : Control
         _emptyHint = GetNode<Label>("CenterContainer/Panel/VBoxContainer/EmptyHint");
         _title = GetNode<Label>("CenterContainer/Panel/VBoxContainer/Title");
         _recapLabel = GetNode<Label>("CenterContainer/Panel/VBoxContainer/RecapLabel");
+        UIUtil.AddSpeedLines(_title.GetParent<Control>(), _title.GetIndex());
 
         _continueButton.Pressed += OnContinuePressed;
         _reloadButton.Pressed += OnReloadPressed;
@@ -139,7 +153,21 @@ public partial class Shop : Control
     private void ShowRoundRecap()
     {
         var recap = GameManager.Instance.LastRoundRecap;
-        _title.Text = $"RONDA {recap.Round} COMPLETADA";
+        bool legendary = recap.Round > 0 && recap.Round % LegendaryShopInterval == 0;
+
+        // Re-applied per open (like UpgradePicker.Open() already does for its own isUltimate variant)
+        // rather than fixed once in _Ready() — this shop needs to look different only on Legendary
+        // rounds, every other round.
+        _panel.AddThemeStyleboxOverride("panel", legendary ? LegendaryPanelStyle : PanelStyle);
+        var accent = legendary ? Palette.UltimatePanelBorder : Palette.ShopPanelBorder;
+        _title.AddThemeColorOverride("font_color", accent);
+        _recapLabel.AddThemeColorOverride("font_color", new Color(accent, 0.7f));
+
+        _title.Text = legendary ? "★ TIENDA LEGENDARIA ★" : $"RONDA {recap.Round} COMPLETADA";
+
+        _titleShimmer?.Kill();
+        _titleShimmer = Juice.Shimmer(_title, "theme_override_colors/font_color",
+            accent, accent.Lightened(0.55f), 1.8f);
 
         // Built as parts so a round with no level-ups doesn't print "+0 niveles", which reads as a
         // thing that failed to happen rather than a thing that didn't apply.
@@ -161,7 +189,10 @@ public partial class Shop : Control
     private void RollItems()
     {
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
-        _items = UpgradeData.PickRandomTiered(3, GameManager.Instance.RoundNumber, RewardSource.Shop, isUseless: player != null ? player.IsRewardUseless : null, fortuneBonus: player?.FortuneBonus ?? 0f);
+        int round = GameManager.Instance.RoundNumber;
+        _items = round > 0 && round % LegendaryShopInterval == 0
+            ? UpgradeData.PickLegendaryOnly(3, isUseless: player != null ? player.IsRewardUseless : null)
+            : UpgradeData.PickRandomTiered(3, round, RewardSource.Shop, isUseless: player != null ? player.IsRewardUseless : null, fortuneBonus: player?.FortuneBonus ?? 0f);
         _resolved = new bool[_items.Count];
         _purchased = new bool[_items.Count];
         for (int i = 0; i < _items.Count; i++)

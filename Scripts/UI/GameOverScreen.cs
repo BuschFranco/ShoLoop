@@ -11,6 +11,12 @@ public partial class GameOverScreen : Control
     private VBoxContainer _summaryContainer;
     private GameOverStatsMenu _statsMenu;
 
+    // The bare default theme panel before this pass -- the only run-time modal with zero accent
+    // colour at all. Red/pink to match the "FIN DEL JUEGO" title right inside it, rather than
+    // reusing another screen's cyan/magenta/gold: this is the one modal that isn't a reward, a
+    // purchase, or a pause, and shouldn't read as any of those at a glance.
+    private static readonly StyleBoxFlat PanelStyle = UIUtil.CreatePanelStyle(new Color(1f, 0.35f, 0.45f));
+
     public override void _Ready()
     {
         AddToGroup("game_over_screen");
@@ -18,6 +24,9 @@ public partial class GameOverScreen : Control
         ProcessMode = ProcessModeEnum.Always;
 
         _panel = GetNode<PanelContainer>("Panel");
+        _panel.AddThemeStyleboxOverride("panel", PanelStyle);
+        var title = GetNode<Label>("Panel/VBoxContainer/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
         _scoreLabel = GetNode<Label>("Panel/VBoxContainer/ScoreLabel");
         _summaryContainer = GetNode<VBoxContainer>("Panel/VBoxContainer/SummaryContainer");
         _restartButton = GetNode<Button>("Panel/VBoxContainer/RestartButton");
@@ -107,6 +116,12 @@ public partial class GameOverScreen : Control
 
         Visible = true;
         Juice.ModalIn(_panel);
+
+        // A small rattle once the modal has settled into place -- nothing else on this screen says
+        // "you just died" specifically; every other beat here (the fade-in, the score pop, the line
+        // reveal) is the same choreography any modal could use.
+        var shakeTimer = GetTree().CreateTimer(0.22f);
+        shakeTimer.Timeout += () => Juice.Shake(_panel, strength: 5f, duration: 0.3f);
 
         var scorePop = GetTree().CreateTimer(0.18f);
         scorePop.Timeout += () => Juice.ValuePop(_scoreLabel, 1.6f, 0.35f);

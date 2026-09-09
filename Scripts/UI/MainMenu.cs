@@ -86,35 +86,80 @@ public partial class MainMenu : Control
         AnimateTitle();
         PopulateRecords();
         PlayEntranceAnimation(highScoreLabel);
+        AnimateAccents();
     }
 
-    // The title bobs letter by letter and breathes between cyan and white, which is the attract-mode
-    // look the screen was missing.
-    //
-    // Godot's built-in RichTextLabel effects do the per-letter part -- [wave] offsets each glyph on
-    // its own phase, which a Label can't do at all without being split into one node per character.
-    // That's the whole reason Title is a RichTextLabel now. The colour breath stays a Tween, because
-    // [rainbow] is the only built-in colour effect and it would throw away the game's palette.
+    // Neon "breathing" glow on the menu's own accents. The WorldEnvironment this scene carries now
+    // (see MainMenu.tscn) only blooms a colour whose brightest channel clears glow_hdr_threshold
+    // (0.85) -- a plain border colour here tops out at 1.0, so each one pulses from its resting,
+    // non-HDR colour up past that threshold and back, rather than sitting at one fixed brightness
+    // the way a normal UI colour would. Several buttons share one StyleBoxFlat resource (see
+    // MainMenu.tscn's sub_resources), so animating one instance is enough to shimmer all of them
+    // together -- that's the point, not an oversight: a row of same-coloured buttons breathing in
+    // sync reads as one theme, not as three separate effects that happen to match.
+    private const float BorderGlowBoost = 1.8f;
+
+    private void AnimateAccents()
+    {
+        ShimmerBorder(GetNode<PanelContainer>("VBoxContainer/RecordsRow/CasualPanel"), 2.4f);
+        ShimmerBorder(GetNode<PanelContainer>("VBoxContainer/RecordsRow/HardcorePanel"), 2.1f);
+
+        ShimmerButtonBorder(GetNode<Button>("VBoxContainer/ButtonsRow/StartButton"), 2.3f);   // shared: Start/Builds/Misiones
+        ShimmerButtonBorder(GetNode<Button>("VBoxContainer/ButtonsRow/TiendaButton"), 2.0f);
+        ShimmerButtonBorder(GetNode<Button>("VBoxContainer/ButtonsRow/OptionsButton"), 2.6f); // shared: Opciones/Estadísticas
+        ShimmerButtonBorder(GetNode<Button>("AchievementsButton"), 2.5f); // StatsButton shares OptionsButton's violet style, already shimmering above
+    }
+
+    private void ShimmerBorder(PanelContainer panel, float period)
+    {
+        if (panel.GetThemeStylebox("panel") is not StyleBoxFlat style) return;
+        Color from = style.BorderColor;
+        var to = new Color(from.R * BorderGlowBoost, from.G * BorderGlowBoost, from.B * BorderGlowBoost, from.A);
+        Juice.Shimmer(this, style, "border_color", from, to, period);
+    }
+
+    private void ShimmerButtonBorder(Button button, float period)
+    {
+        if (button.GetThemeStylebox("normal") is not StyleBoxFlat style) return;
+        Color from = style.BorderColor;
+        var to = new Color(from.R * BorderGlowBoost, from.G * BorderGlowBoost, from.B * BorderGlowBoost, from.A);
+        Juice.Shimmer(this, style, "border_color", from, to, period);
+    }
+
+    // The title used to be per-letter animated BBCode text ([wave] offsets each glyph on its own
+    // phase, which only a RichTextLabel can do); it's a pixelated logo image now, so a whole raster
+    // texture has no per-glyph nodes to offset individually. This keeps the same attract-mode
+    // *feeling* -- a gentle sway plus a colour breath -- adapted to something a single TextureRect
+    // actually has: Position for the sway, Modulate for the breath (a TextureRect has no
+    // theme_override_colors/default_color the way a Label does; Modulate tints the whole texture).
     //
     // Both are skipped under reduced motion: a title that never stops moving is exactly what that
     // setting exists to turn off.
     private void AnimateTitle()
     {
-        var title = GetNode<RichTextLabel>("VBoxContainer/Title");
+        var title = GetNode<TextureRect>("VBoxContainer/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
 
         if (DangerLevel.Reduced)
         {
-            title.Text = "[center]INFINITIX[/center]";
+            title.Modulate = Colors.White;
             return;
         }
 
-        // Godot divides amp by 10 internally (offset = sin(...) * amp/10), so 90 is a +/-9px bob on
-        // a 40px title -- enough to read as movement across the room. The default 5.0 freq reads as a
-        // glitch at this size; 2.6 reads as a sign swaying.
-        title.Text = "[center][wave amp=90.0 freq=2.6]INFINITIX[/wave][/center]";
+        // AsRelative() so this never has to read the container-assigned Position (still 0,0 this
+        // early in the layout pass) -- each leg moves the title by a delta instead of tweening to an
+        // absolute Y, and the two legs sum to zero so looping forever never drifts.
+        var bobTween = title.CreateTween();
+        bobTween.SetLoops();
+        bobTween.TweenProperty(title, "position:y", -6f, 1.3f).AsRelative()
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+        bobTween.TweenProperty(title, "position:y", 6f, 1.3f).AsRelative()
+            .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
 
-        Juice.Shimmer(title, "theme_override_colors/default_color",
-            new Color(0.3f, 1f, 1f), new Color(0.85f, 1f, 1f), 2.2f);
+        // Pushed past 1.0 so the logo's brightest pixels clear the new WorldEnvironment's
+        // glow_hdr_threshold (0.85) and actually bloom, instead of just pulsing between two
+        // ordinary, non-glowing tones.
+        Juice.Shimmer(title, "modulate", new Color(1.3f, 1.4f, 1.5f), new Color(1.7f, 1.8f, 1.9f), 2.2f);
     }
 
     // The title screen's own "arrival" — the first thing a player sees, so it fades+scales up as a
@@ -123,10 +168,10 @@ public partial class MainMenu : Control
     private void PlayEntranceAnimation(Label highScoreLabel)
     {
         var vbox = GetNode<Control>("VBoxContainer");
-        var recordsPanel = GetNode<Control>("VBoxContainer/RecordsRow/RecordsPanel");
+        var recordsRow = GetNode<Control>("VBoxContainer/RecordsRow");
 
         highScoreLabel.Modulate = new Color(1f, 1f, 1f, 0f);
-        recordsPanel.Modulate = new Color(1f, 1f, 1f, 0f);
+        recordsRow.Modulate = new Color(1f, 1f, 1f, 0f);
 
         Juice.ModalIn(vbox, 0.35f, 0.92f);
 
@@ -139,7 +184,7 @@ public partial class MainMenu : Control
         var timer2 = GetTree().CreateTimer(0.32f);
         timer2.Timeout += () =>
         {
-            recordsPanel.CreateTween().TweenProperty(recordsPanel, "modulate:a", 1f, 0.25f);
+            recordsRow.CreateTween().TweenProperty(recordsRow, "modulate:a", 1f, 0.25f);
         };
     }
 
@@ -149,24 +194,62 @@ public partial class MainMenu : Control
         librasLabel.Text = $"Libras: {gm.Libras}";
         accountLevelLabel.Text = $"Nivel de cuenta: {gm.AccountLevel}";
         accountLevelBar.MaxValue = gm.AccountXpToNextLevel;
-        accountLevelBar.Value = gm.AccountXp;
+        Juice.BarFill(accountLevelBar, gm.AccountXp);
     }
 
     // The full top-10 the save file keeps. This panel has the room for all of it, unlike character
     // select's, which is squeezed in beside a portrait.
     private const int MaxRecordsShown = 10;
 
-    // How many monospaced characters fit across RecordsPanel: 340px wide, less 14px content margin
-    // and a 2px border on each side, leaves 308px. PixelFont's advance is 0.6 em (6 blocks of 10 to
-    // the em, see tools/gen_font.py), so at font_size 16 that's 9.6px per character and about 32 fit.
-    // Held at 25 deliberately -- the budget only decides whether the column gap is one space or two,
-    // and leaving headroom means a longer date format or a wider score can't start wrapping rows.
-    private const int CharBudget = 25;
+    // The stylebox both records panels share (StyleBoxFlat_records_panel / _hardcore) has a 14px
+    // content margin on each side.
+    private const float RecordsPanelContentMargins = 28f;
 
     private void PopulateRecords()
     {
-        var list = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/RecordsPanel/RecordsBox/RecordsList");
-        list.Text = RecordTable.Build(GameManager.LoadRecords(), MaxRecordsShown, CharBudget,
-            "Todavía no hay récords", animateFirst: true);
+        var row = GetNode<HBoxContainer>("VBoxContainer/RecordsRow");
+        var casualPanel = GetNode<Control>("VBoxContainer/RecordsRow/CasualPanel");
+        var hardcorePanel = GetNode<Control>("VBoxContainer/RecordsRow/HardcorePanel");
+        var casualList = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/CasualPanel/CasualBox/CasualList");
+        var hardcoreList = GetNode<RichTextLabel>("VBoxContainer/RecordsRow/HardcorePanel/HardcoreBox/HardcoreList");
+
+        // Two tables side by side get roughly half the width one used to have on its own, so that
+        // width has to be measured against the real screen rather than assumed -- guessing a fixed
+        // px value is exactly what made a single panel run off screen once already (see
+        // UIUtil.AvailableScrollHeight for the same lesson applied to height instead of width).
+        //
+        // Capped, though: on a wide/landscape viewport half the screen is far more than a 10-row
+        // table needs, and letting the panel grow to fill it just stretches an empty gap to the right
+        // of every row instead of anything readable. 260px comfortably fits the widest realistic row
+        // (2-digit rank, 7-digit score, "R" + 2 digits, an 8-char date) with the normal 2-space gap,
+        // same margin RecordTable already had when this was one 340px table.
+        const float MaxPanelWidth = 260f;
+        float viewportWidth = GetViewportRect().Size.X;
+        float rowSeparation = row.GetThemeConstant("separation");
+        const float SideMargin = 24f; // breathing room so neither panel touches the screen edge
+        float panelWidth = Mathf.Clamp((viewportWidth - rowSeparation - SideMargin) / 2f, 140f, MaxPanelWidth);
+
+        casualPanel.CustomMinimumSize = new Vector2(panelWidth, 0);
+        hardcorePanel.CustomMinimumSize = new Vector2(panelWidth, 0);
+
+        int charBudget = EstimateCharBudget(casualList, panelWidth);
+
+        casualList.Text = RecordTable.Build(GameManager.LoadRecords(GameManager.GameMode.Classic),
+            MaxRecordsShown, charBudget, "Todavía no hay récords", animateFirst: true);
+        hardcoreList.Text = RecordTable.Build(GameManager.LoadRecords(GameManager.GameMode.Hardcore),
+            MaxRecordsShown, charBudget, "Todavía no hay récords", animateFirst: true);
+    }
+
+    // How many monospaced characters actually fit in a panel of this width, measured against
+    // PixelFont's real advance rather than an assumed em/px ratio -- the two tables can end up
+    // narrower than the original single one ever was, so an assumed ratio could be wrong in exactly
+    // the direction that overflows the panel. RecordTable only uses this to decide whether the column
+    // gap is one space or two, so a slightly conservative estimate costs a little polish, never rows.
+    private static int EstimateCharBudget(RichTextLabel label, float panelWidth)
+    {
+        var font = label.GetThemeFont("normal_font") ?? label.GetThemeDefaultFont();
+        int fontSize = label.GetThemeFontSize("normal_font_size");
+        float charWidth = font.GetStringSize("0", HorizontalAlignment.Left, -1, fontSize).X;
+        return Mathf.Max(6, Mathf.FloorToInt((panelWidth - RecordsPanelContentMargins) / charWidth));
     }
 }

@@ -252,13 +252,14 @@ catalog should filter by `RewardSource.LevelUp` explicitly, not `Both`.
 
 ## Ultimates
 
-Three practical, distinct abilities — no tiers, each a single fixed pickup in the Epic bucket, marked `RewardSource.Shop` so they never show up for free at level-up (see [Level-up picks vs. shop items](#level-up-picks-vs-shop-items)).
+Four practical, distinct abilities — no tiers, each a single fixed pickup in the Epic bucket, marked `RewardSource.Shop` so they never show up for free at level-up (see [Level-up picks vs. shop items](#level-up-picks-vs-shop-items)).
 
 | Ultimate | Effect | Duration |
 |---|---|---|
-| Pulso Nova | 500 finite damage (not instant-kill) to every enemy within a fixed 500px radius | instant |
+| Pulso Nova | Finite damage (not instant-kill) to every enemy within a fixed 500px radius. Scales with round via `UltimateNovaDamageCurve` (500 at round 1, up to 4000 by round ~40) — mirrors `EnemySpawner.HpMultCurve` so it keeps denting the same fraction of a target's HP as enemies get tankier, instead of a flat number that stopped mattering late-game | instant |
 | Zona Lenta | Multiplies every enemy's move speed by 0.3 (see [enemies.md](enemies.md#enemy-speed-multiplier)) | 6s |
 | Sobrecarga | Doubles the player's current `FireRate` and `BulletDamage` | 6s |
+| Escudo Absoluto | Total damage immunity — extends `Player`'s own post-hit i-frame timer (`_invulnTimer`), so nothing can land at all, not a reduced chance to. Shorter than the other two timed Ultimates since total immunity is worth more per second | 3s |
 
 **First-boss unlock**: killing the **first** boss of a run (round 5, tracked by `GameManager._bossUltimateGranted`) hands out a free Ultimate — the `UpgradePicker` reopens with a choice of 3, drawn by `UpgradeData.PickUltimateChoices(3)`, under the heading "¡JEFE DERROTADO! Elige tu Ultimate". It prefers kinds the player doesn't already have equipped. Subsequent bosses don't repeat it; after the choice resolves, the normal round-end shop opens as usual.
 

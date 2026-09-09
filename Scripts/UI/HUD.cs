@@ -55,7 +55,13 @@ public partial class HUD : Control
     private StyleBoxFlat _streakPanelStyle;
     private StyleBoxFlat _streakBarFillStyle;
     private int _lastStreak;
+    private int _lastStreakMilestone;
     private Tween _streakPulseTween;
+    // Fraction of Player.KillStreakMax past which the badge starts glowing continuously, rather than
+    // only punching on each milestone — the last stretch before the cap is rare enough (only reachable
+    // deep into a run) that it earns a persistent "this is getting big" tell, not just another pop.
+    private const float StreakGlowThreshold = 0.75f;
+    private const float StreakGlowBoost = 1.7f;
     private Control _bossHealthBar;
     private ProgressBar _bossHpBar;
     private Label _bossNameLabel;
@@ -179,6 +185,7 @@ public partial class HUD : Control
         GameManager.Instance.XpChanged += OnXpChanged;
         GameManager.Instance.LevelUp += OnLevelUp;
         GameManager.Instance.LevelsGained += OnLevelsGained;
+        GameManager.Instance.LevelUpCelebration += SpawnLevelUpFireworks;
         GameManager.Instance.RoundChanged += OnRoundChanged;
         GameManager.Instance.CoinsChanged += OnCoinsChanged;
         GameManager.Instance.ScoreChanged += OnScoreChanged;
@@ -235,6 +242,7 @@ public partial class HUD : Control
         GameManager.Instance.XpChanged -= OnXpChanged;
         GameManager.Instance.LevelUp -= OnLevelUp;
         GameManager.Instance.LevelsGained -= OnLevelsGained;
+        GameManager.Instance.LevelUpCelebration -= SpawnLevelUpFireworks;
         GameManager.Instance.RoundChanged -= OnRoundChanged;
         GameManager.Instance.CoinsChanged -= OnCoinsChanged;
         GameManager.Instance.ScoreChanged -= OnScoreChanged;
@@ -363,6 +371,9 @@ public partial class HUD : Control
         {
             _streakPanel.Visible = false;
             _lastStreak = 0;
+            _lastStreakMilestone = 0;
+            _streakPulseTween?.Kill();
+            _streakPulseTween = null;
             return;
         }
 
@@ -370,7 +381,7 @@ public partial class HUD : Control
 
         _streakMultLabel.Text = $"×{_player.KillStreakMultiplier:0.0}";
         _streakCountLabel.Text = $"RACHA {streak}";
-        _streakBar.Value = Mathf.Min(streak, Player.KillStreakMax);
+        Juice.BarFill(_streakBar, Mathf.Min(streak, Player.KillStreakMax));
         _streakPanel.Visible = true;
 
         // Heats up toward the cap rather than toward an arbitrary 40 (the old divisor), so the colour
@@ -378,11 +389,37 @@ public partial class HUD : Control
         float t = Mathf.Min(streak / (float)Player.KillStreakMax, 1f);
         Color heat = Palette.CoinPickup.Lerp(Palette.Warning, t);
         _streakMultLabel.AddThemeColorOverride("font_color", heat);
-        _streakPanelStyle.BorderColor = new Color(heat, 0.9f);
         _streakBarFillStyle.BgColor = heat;
 
-        if (streak > _lastStreak)
+        bool glowing = t >= StreakGlowThreshold;
+        if (glowing && _streakPulseTween == null)
+        {
+            // Only (re)started when crossing into the final stretch — the shimmer owns border_color
+            // continuously from here on, so the direct assignment below is skipped while it runs.
+            var boosted = new Color(heat.R * StreakGlowBoost, heat.G * StreakGlowBoost, heat.B * StreakGlowBoost, 0.9f);
+            _streakPulseTween = Juice.Shimmer(this, _streakPanelStyle, "border_color", new Color(heat, 0.9f), boosted, 0.9f);
+        }
+        else if (!glowing)
+        {
+            _streakPulseTween?.Kill();
+            _streakPulseTween = null;
+            _streakPanelStyle.BorderColor = new Color(heat, 0.9f);
+        }
+
+        // Every 10th kill is a milestone: a bigger, escalating punch than the routine per-kill pop, so
+        // the streak keeps feeling like it's building toward something all the way to the (now much
+        // farther away) cap instead of the celebration flattening out early.
+        int milestone = streak / 10;
+        if (milestone > _lastStreakMilestone)
+        {
+            Juice.Shake(_streakPanel, 6f + milestone * 2f, 0.35f, Colors.White);
+            Juice.ValuePop(_streakPanel, 1.3f + milestone * 0.03f, 0.3f);
+            _lastStreakMilestone = milestone;
+        }
+        else if (streak > _lastStreak)
+        {
             Juice.ValuePop(_streakPanel, 1.18f, 0.25f);
+        }
 
         _lastStreak = streak;
     }
@@ -754,6 +791,29 @@ public partial class HUD : Control
         Juice.FloatingLabel(this, $"+{count}", _levelLabel.GlobalPosition + new Vector2(_levelLabel.Size.X + 6f, 0f),
             Palette.LevelPopup, Palette.FontSize.Body);
         Juice.ValuePop(_levelLabel, 1.4f, 0.25f);
+    }
+
+    // A brief taste of the main menu's fireworks backdrop as an in-game celebration. Same script as
+    // the menu's ambient decoration (MenuFireworks) — just given a couple of seconds to live instead
+    // of running forever, since here it's a one-off flourish for a level-up rather than a permanent
+    // backdrop. Reused rather than duplicated so the two only ever need tuning in one place.
+    //
+    // Wired to GameManager.LevelUpCelebration rather than LevelsGained/OnLevelsGained above:
+    // LevelsGained fires the instant XP crosses a threshold, which is also the instant the upgrade
+    // picker opens and the game pauses — fireworks competing with that modal for attention was worse
+    // than just waiting the beat until the player has actually picked their reward and play resumes.
+    private const float LevelUpFireworksDuration = 2.2f;
+
+    private void SpawnLevelUpFireworks()
+    {
+        if (DangerLevel.Reduced) return;
+
+        var fireworks = new MenuFireworks();
+        AddChild(fireworks);
+        GetTree().CreateTimer(LevelUpFireworksDuration).Timeout += () =>
+        {
+            if (IsInstanceValid(fireworks)) fireworks.QueueFree();
+        };
     }
 
     private void OnRoundChanged(int round)

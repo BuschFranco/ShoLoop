@@ -17,6 +17,9 @@ public partial class LoadoutMenu : PanelContainer
 
     public override void _Ready()
     {
+        var title = GetNode<Label>("ScrollContainer/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
+
         _itemsLabel = GetNode<RichTextLabel>("ScrollContainer/Box/ItemsLabel");
         _buildsLabel = GetNode<RichTextLabel>("ScrollContainer/Box/BuildsLabel");
     }

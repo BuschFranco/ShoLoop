@@ -15,6 +15,20 @@ public partial class Enemy : CharacterBody2D
     [Export] public int ContactDamage = 10;
     [Export] public EnemyCategory Category = EnemyCategory.Common;
 
+    // Off by default — most of these silhouettes (the hexagons, stars, kites) read the same at any
+    // rotation, so spinning one to face travel would just be motion with no visible meaning, the same
+    // reasoning Player.IsCircular already uses to skip its own portrait characters. Grunt is the one
+    // enemy this was actually requested for: a literal triangle, where "which way is it pointing"
+    // is exactly the kind of thing a player's eye tracks.
+    [Export] public bool FacesMovementDirection = false;
+
+    // The world-space angle the Visual's silhouette points at when Rotation = 0 -- most of these
+    // shapes are authored with their apex at the smallest Y in the vertex table (tools/gen_sprites.py),
+    // i.e. pointing "up" on an unrotated sprite, which is -Pi/2 from Godot's own zero (+X/east).
+    // Override per-scene for a shape authored pointing some other way (Speedy's dart already points
+    // +X, for instance, so it would need 0 here instead).
+    [Export] public float VisualForwardAngle = -Mathf.Pi / 2f;
+
     // Elite system: certain enemies spawn with bonus stats and a modifier.
     public bool IsElite;
     public EliteModifier EliteModifier = EliteModifier.None;
@@ -68,6 +82,21 @@ public partial class Enemy : CharacterBody2D
     // 0 = not avoiding). Held across frames because re-deciding every frame makes enemies jitter
     // in place at a wall instead of actually committing to a way around it.
     private int _avoidanceSide = 0;
+
+    // Corner-escape commitment: held for a short while after a genuine "wedged in a corner" event
+    // (see ComputeAvoidanceDirection) so the enemy actually walks clear of it instead of re-running
+    // the exact same raycasts next frame, getting the exact same "every angle blocked" answer, and
+    // flipping _avoidanceSide right back -- which is what used to read as an enemy vibrating in
+    // place at an obstacle's tip forever.
+    private float _cornerEscapeTimer;
+    private Vector2 _cornerEscapeDirection;
+    private const float CornerEscapeCommitTime = 0.5f;
+
+    // Full 360° sweep used only once per corner-escape event (not every frame) to find a direction
+    // that's actually clear, rather than assuming "the other side" is any better -- a tight corner or
+    // being wedged between two obstacles can leave both sides equally blocked.
+    private static readonly float[] FullSweepAngles =
+        { 30f, -30f, 60f, -60f, 90f, -90f, 120f, -120f, 150f, -150f, 180f };
 
     // Transient shove applied on top of normal movement (currently from orbit blade hits), decaying
     // back to zero. Same shape as the player's own knockback in Player.cs.
@@ -133,6 +162,7 @@ public partial class Enemy : CharacterBody2D
         glow.Modulate = GetEliteColor(EliteModifier);
         glow.ZIndex = -1;
         AddChild(glow);
+        _auraSprite = glow;
 
         CreateEliteMarker();
     }
@@ -204,6 +234,7 @@ public partial class Enemy : CharacterBody2D
             ZIndex = -1,
         };
         AddChild(rim);
+        _auraSprite = rim;
     }
 
     private static Color GetEliteColor(EliteModifier modifier) => modifier switch
@@ -302,21 +333,27 @@ public partial class Enemy : CharacterBody2D
     private const float CoinPickupDropChance = 0.02f;
 
     // Rounds 1-2 get a boosted rate instead: per-kill payout is at its lowest there (RewardMultCurve
-    // is still ~1x), so at the flat rate the player reaches the first shop with almost nothing to
-    // spend. Mirrors the late-round taper below, in the opposite direction.
+    // is still ~1x, and a Grunt's own CoinsReward of 1 floors most kills at 1 coin regardless), so at
+    // the flat rate the player reaches the first shop with almost nothing to spend. Mirrors the
+    // late-round taper below, in the opposite direction.
+    //
+    // Raised from 0.09 after playtesting still found rounds 1-2 too gold-starved -- round 1 also runs
+    // EarlyRoundConcurrentMult/IntervalMult well below normal (see EnemySpawner's onboarding cushion),
+    // so fewer kills happen in the first place, which made the original rate land even softer than it
+    // looked on paper.
     private const int EarlyDropRound = 3;   // exclusive — rounds 1 and 2 get the boost
-    private const float EarlyXpCoinDropChance = 0.09f;
+    private const float EarlyXpCoinDropChance = 0.16f;
 
-    // Round 1 gets a higher per-gem value (7 instead of 3) so the player starts with more buying
+    // Round 1 gets a higher per-gem value (12 instead of 6) so the player starts with more buying
     // power — but not so much that every shop item is instantly affordable. Rounds 2-4 keep the
-    // original flat value of 3 via EarlyCoinPickupValue below.
+    // flat value of 6 via EarlyCoinPickupValue below.
     private const int Round1CoinValueRound = 2;   // exclusive — only round 1
-    private const int Round1CoinPickupValue = 7;
+    private const int Round1CoinPickupValue = 12;
 
     // Rounds 1-4 get a flat coin value instead of the enemy's CoinsReward (which is still ~1 that
     // early since RewardMultCurve barely moves). Purely a per-gem value bump.
     private const int EarlyCoinValueRound = 5;   // exclusive — rounds 1-4 get the flat value
-    private const int EarlyCoinPickupValue = 3;
+    private const int EarlyCoinPickupValue = 6;
 
     // Shields stop dropping entirely this late. By then a run either has a Barrier stack that makes
     // them redundant or has no Barrier at all (in which case the drop was already suppressed), and the
@@ -345,6 +382,12 @@ public partial class Enemy : CharacterBody2D
     // Hit-reaction state. The flash restores this exact colour rather than assuming one, since
     // every enemy scene picks its own.
     private Sprite2D _visual;
+    private Sprite2D _shadow;
+
+    // Whichever of the two exists for this enemy (never both, see CreateEliteGlow/CreateRimFlare's
+    // shared call site) — a same-size-or-bigger copy of Visual's own texture sitting behind it, same
+    // "sibling, not child" reasoning as the shadow, so it needs the same manual rotation sync.
+    private Sprite2D _auraSprite;
 
     // Read-only access for a subclass's own telegraph tweens (e.g. Boss's charge windup), plus the
     // two resting values every such tween has to return to.
@@ -417,7 +460,7 @@ public partial class Enemy : CharacterBody2D
         // other without depending on child order. z_as_relative defaults to true, so both resolve
         // relative to this enemy and stay glued to it instead of sinking behind unrelated hazards that
         // also live at -1.
-        Juice.AttachShadow(this, _visual, _visualBaseScale);
+        _shadow = Juice.AttachShadow(this, _visual, _visualBaseScale);
 
         // Never both: the elite aura is the louder version of exactly the same effect, so stacking
         // them would cost a draw call per elite and muddy the modifier colour that has to stay
@@ -438,14 +481,21 @@ public partial class Enemy : CharacterBody2D
         if (_visual == null) return;
 
         _visual.Scale = Vector2.Zero;
-        _visual.Rotation = -Mathf.Pi / 4f;
 
         var tween = CreateTween();
         tween.SetParallel(true);
         tween.TweenProperty(_visual, "scale", _visualBaseScale, 0.28f)
             .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
-        tween.TweenProperty(_visual, "rotation", 0f, 0.28f)
-            .SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+
+        // Skipped for anything that faces its movement direction: UpdateFacing already drives this
+        // node's Rotation every physics frame, so a competing tween here would fight it for the
+        // property and jitter between the two for as long as both are running.
+        if (!FacesMovementDirection)
+        {
+            _visual.Rotation = -Mathf.Pi / 4f;
+            tween.TweenProperty(_visual, "rotation", 0f, 0.28f)
+                .SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        }
     }
 
     private void CreateHealthBar()
@@ -724,12 +774,55 @@ public partial class Enemy : CharacterBody2D
         // shove — it's an impulse from the player's weapon, not part of the enemy's own movement.
         Velocity = moveDir * chaseSpeed + _cachedSeparation * speedMult + _knockbackVelocity;
         MoveAndSlide();
+
+        UpdateFacing(moveDir, delta);
+    }
+
+    private const float FacingTurnRate = 12f;
+
+    // Same idea as Player.UpdateFacing, without the banking lean -- that was a stylized flourish for
+    // the one ship the player stares at all game; an enemy just needs to visibly point where it's
+    // headed. Uses moveDir (the steering intent this frame, before separation/knockback get folded
+    // in) rather than the final Velocity, so a shove from a nearby neighbour doesn't make the
+    // triangle flicker to face sideways for a frame.
+    private void UpdateFacing(Vector2 moveDir, double delta)
+    {
+        if (!FacesMovementDirection || _visual == null || moveDir == Vector2.Zero) return;
+
+        float targetRotation = moveDir.Angle() - VisualForwardAngle;
+        float weight = 1f - Mathf.Exp(-FacingTurnRate * (float)delta);
+        _visual.Rotation = Mathf.LerpAngle(_visual.Rotation, targetRotation, weight);
+
+        // Same reasoning, same fix, for every sibling copy of Visual's texture: rotation isn't
+        // inherited just because they share a parent. The rim flare/elite glow was the one of these
+        // that actually shipped a visible bug — permanent for as long as the enemy is alive (unlike
+        // the shadow, at least it's the same colour family as the enemy, but it blooms, see
+        // CreateRimFlare), so a static one next to a now-rotating Visual reads as a second, ghostly
+        // enemy facing the wrong way rather than a rim around the real one.
+        if (_shadow != null) _shadow.Rotation = _visual.Rotation;
+        if (_auraSprite != null) _auraSprite.Rotation = _visual.Rotation;
     }
 
     // Straight at the player when the way is clear; otherwise the smallest detour that isn't
     // blocked, committed to one side so the path around reads as deliberate.
     protected Vector2 ComputeAvoidanceDirection(Vector2 desired)
     {
+        if (_cornerEscapeTimer > 0f)
+        {
+            _cornerEscapeTimer -= (float)GetPhysicsProcessDeltaTime();
+
+            // Bail out the moment the direct path opens back up rather than riding out the full
+            // commitment when it's no longer needed.
+            if (!IsPathBlocked(desired))
+            {
+                _cornerEscapeTimer = 0f;
+                _avoidanceSide = 0;
+                return desired;
+            }
+
+            return _cornerEscapeDirection;
+        }
+
         if (!IsPathBlocked(desired))
         {
             _avoidanceSide = 0;
@@ -745,11 +838,31 @@ public partial class Enemy : CharacterBody2D
             if (!IsPathBlocked(candidate)) return candidate;
         }
 
-        // Every detour on this side is blocked (inside a corner, or wedged between obstacles).
-        // Flip the commitment so the next frame explores the other way out, and meanwhile slide
-        // straight along the wall instead of pushing into it.
-        _avoidanceSide = -_avoidanceSide;
-        return desired.Rotated(Mathf.Pi / 2f * _avoidanceSide);
+        // Every detour on the committed side is blocked -- genuinely wedged into a corner, not just
+        // "the obstacle happens to be on this side". Flipping the side and re-deriving next frame
+        // used to just rediscover the identical dead end and flip back, which is what made an enemy
+        // visibly vibrate in place at a tip instead of getting past it. Sweep every direction for a
+        // real gap instead, and commit to it for a short while so it actually clears the corner
+        // before the steering re-evaluates from scratch.
+        Vector2? escape = null;
+        foreach (float degrees in FullSweepAngles)
+        {
+            Vector2 candidate = desired.Rotated(Mathf.DegToRad(degrees));
+            if (!IsPathBlocked(candidate)) { escape = candidate; break; }
+        }
+
+        if (escape == null)
+        {
+            // Nothing at all is clear nearby (fully enclosed) -- fall back to the old wall-slide so
+            // it at least doesn't push straight into the obstacle, and keep exploring the other side
+            // once this commitment expires.
+            _avoidanceSide = -_avoidanceSide;
+            escape = desired.Rotated(Mathf.Pi / 2f * _avoidanceSide);
+        }
+
+        _cornerEscapeDirection = escape.Value;
+        _cornerEscapeTimer = CornerEscapeCommitTime;
+        return escape.Value;
     }
 
     private int PickAvoidanceSide(Vector2 desired)

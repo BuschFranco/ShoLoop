@@ -19,6 +19,44 @@ public static class UIUtil
         return style;
     }
 
+    // --- Logo tie-in ----------------------------------------------------------------------------
+    //
+    // The logo has its own signature under the wordmark: two stacked streaks, magenta above cyan,
+    // the lower one shorter and offset right. This reproduces that as a small standalone accent —
+    // two flat ColorRects, still perfectly axis-aligned (no diagonal, matching the rest of the
+    // game's right-angle rule) — so any screen's header can echo the logo without touching its
+    // title text or panel shape.
+    private static readonly Color SpeedLineMagenta = new(1f, 0.31f, 0.847f, 0.85f);
+    private static readonly Color SpeedLineCyan = new(0.4902f, 0.9922f, 0.9961f, 0.85f);
+
+    /// <summary>
+    /// Builds the centered accent and inserts it into <paramref name="parent"/> right after
+    /// <paramref name="afterIndex"/> (typically the title label's own index) — the caller doesn't
+    /// need to know this is two ColorRects under a CenterContainer, just where it should sit.
+    /// </summary>
+    public static void AddSpeedLines(Control parent, int afterIndex, float width = 140f)
+    {
+        var center = new CenterContainer { CustomMinimumSize = new Vector2(0f, 10f) };
+
+        var box = new Control { CustomMinimumSize = new Vector2(width, 10f) };
+        box.AddChild(new ColorRect
+        {
+            Color = SpeedLineMagenta,
+            Position = Vector2.Zero,
+            Size = new Vector2(width, 3f),
+        });
+        box.AddChild(new ColorRect
+        {
+            Color = SpeedLineCyan,
+            Position = new Vector2(width * 0.18f, 6f),
+            Size = new Vector2(width * 0.7f, 3f),
+        });
+        center.AddChild(box);
+
+        parent.AddChild(center);
+        parent.MoveChild(center, afterIndex + 1);
+    }
+
     // --- Keeping modal panels on screen -------------------------------------------------------
     //
     // A ScrollContainer inside a CenterContainer has no height of its own to speak of: it reports a

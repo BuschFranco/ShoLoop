@@ -35,6 +35,10 @@ public partial class GameOverStatsMenu : Control
         _loadoutMenu = GetNode<LoadoutMenu>("CenterContainer/HBox/LoadoutMenu");
         _hbox = GetNode<Control>("CenterContainer/HBox");
 
+        _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.Player));
+        var title = GetNode<Label>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
+
         _closeButton.Pressed += Close;
         Juice.WireButtonFeedback(_closeButton);
 
@@ -56,7 +60,7 @@ public partial class GameOverStatsMenu : Control
         // the same lookup succeeding (it reads live stats into its own run summary), and nothing
         // frees the player until the user actually leaves this screen (Jugar de nuevo/Menú/Salir).
         var player = GetTree().GetFirstNodeInGroup("player") as Player;
-        _statsLabel.Text = player != null ? string.Join("\n", player.BuildCombatStatsLines()) : "";
+        _statsLabel.Text = player != null ? string.Join("\n", player.BuildCombatStatsLines(runEnded: true)) : "";
         _loadoutMenu.Refresh(player);
 
         Visible = true;

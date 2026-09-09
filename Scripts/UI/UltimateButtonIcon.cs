@@ -81,6 +81,9 @@ public partial class UltimateButtonIcon : Control
             case UltimateKind.Frenzy:
                 DrawBolt(center, r, color);
                 break;
+            case UltimateKind.Invulnerability:
+                DrawShield(center, r, color);
+                break;
         }
     }
 
@@ -129,6 +132,23 @@ public partial class UltimateButtonIcon : Control
             new Vector2(-0.417f, -0.833f),
             new Vector2(0.583f, 0.167f),
             new Vector2(0.083f, 0.167f),
+        };
+        var points = new Vector2[raw.Length];
+        for (int i = 0; i < raw.Length; i++)
+            points[i] = center + raw[i] * r;
+        DrawPolygon(points, new[] { color });
+    }
+
+    // Escudo Absoluto: a shield outline — nothing gets through.
+    private void DrawShield(Vector2 center, float r, Color color)
+    {
+        var raw = new[]
+        {
+            new Vector2(-0.7f, -0.6f),
+            new Vector2(0.7f, -0.6f),
+            new Vector2(0.7f, 0.05f),
+            new Vector2(0f, 0.9f),
+            new Vector2(-0.7f, 0.05f),
         };
         var points = new Vector2[raw.Length];
         for (int i = 0; i < raw.Length; i++)

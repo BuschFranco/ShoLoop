@@ -118,9 +118,9 @@ public partial class CharacterSelectMenu : Control
 
     private void RebuildOrder(string slugToFrame, bool animate)
     {
-        var all = CharacterCatalog.All;
-        _order = new string[all.Length];
-        for (int i = 0; i < all.Length; i++) _order[i] = all[i].Slug;
+        var visible = System.Array.FindAll(CharacterCatalog.All, CharacterCatalog.IsVisible);
+        _order = new string[visible.Length];
+        for (int i = 0; i < visible.Length; i++) _order[i] = visible[i].Slug;
 
         _index = System.Array.IndexOf(_order, slugToFrame);
         if (_index < 0) _index = 0;
@@ -266,9 +266,13 @@ public partial class CharacterSelectMenu : Control
     // space; overestimating would let a row wrap, which is the thing worth avoiding.
     private const int CharBudget = 34;
 
+    // Scoped to whichever mode is currently active -- this menu always opens right after
+    // GameModeMenu.SelectMode has already set CurrentGameMode, so a Hardcore run's 1-life records
+    // don't get compared against Classic's 3-life ones in the same list.
     private void RefreshRecords(string slug)
     {
-        _recordsList.Text = RecordTable.Build(GameManager.LoadCharacterRecords(slug), MaxRecordsShown,
+        var mode = GameManager.Instance.CurrentGameMode;
+        _recordsList.Text = RecordTable.Build(GameManager.LoadCharacterRecords(slug, mode), MaxRecordsShown,
             CharBudget, "Sin récords todavía");
     }
 

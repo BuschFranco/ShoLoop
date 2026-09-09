@@ -16,7 +16,7 @@ const base = import.meta.env.BASE_URL;
 
 	<main>
 		<section class="hero">
-			<h1>INFINITIX</h1>
+			<img class="logo" src={`${base}/logo.png`} alt="Infinitix" />
 			<p class="tagline">The round that never stops</p>
 			<p class="premise">
 				There's no story that ends, because the round doesn't end. You step into the
@@ -56,12 +56,10 @@ const base = import.meta.env.BASE_URL;
 		text-align: center;
 	}
 
-	.hero h1 {
-		font-size: clamp(2.4rem, 8vw, 4rem);
-		margin: 0;
-		color: var(--cyan);
-		letter-spacing: 0.04em;
-		text-shadow: 0 0 24px rgba(125, 253, 254, 0.35);
+	.hero .logo {
+		width: min(90vw, 520px);
+		height: auto;
+		filter: drop-shadow(0 0 24px rgba(125, 253, 254, 0.35));
 	}
 
 	.tagline {

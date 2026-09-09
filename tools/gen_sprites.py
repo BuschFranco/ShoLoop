@@ -44,8 +44,10 @@ CHARACTER_DIR = "Assets/Sprites/Characters"
 SPRITES = {
     # --- The player ---------------------------------------------------------------------------
     # A dart, and the only one whose rotation is ever visible: UpdateFacing turns it to face travel,
-    # so it needs a clear "front".
-    "ship": (19, CHARACTER_DIR, [(18, 9), (3, 15), (3, 3)]),
+    # so it needs a clear "front". A slightly blunted tip (two close front vertices instead of one
+    # sharp point), wider wings, and a small tail spike poking backward past the wingtips -- closer
+    # to the box-art ship than the original plain triangle, at the request that prompted this.
+    "ship": (19, CHARACTER_DIR, [(17, 9), (3, 15), (1, 9), (3, 3)]),
 
     # --- Common / Rare ------------------------------------------------------------------------
     "grunt": (15, ENEMY_DIR, [(7, 0), (14, 12), (0, 12)]),

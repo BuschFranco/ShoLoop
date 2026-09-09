@@ -39,6 +39,12 @@ public partial class PauseMenu : Control
         _pausePanel = GetNode<PanelContainer>("CenterContainer/HBox/Panel");
         _scroll = GetNode<ScrollContainer>("CenterContainer/HBox/Panel/Scroll");
         _loadoutMenu = GetNode<LoadoutMenu>("CenterContainer/HBox/LoadoutMenu");
+
+        // Was the bare default theme panel, the only run-time modal with no accent colour at all --
+        // cyan to match PAUSA's own title colour and LoadoutMenu's border right next to it.
+        _pausePanel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.Player));
+        var title = GetNode<Label>("CenterContainer/HBox/Panel/Scroll/VBoxContainer/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
         _resumeCountdownLabel = GetNode<Label>("ResumeCountdownLabel");
         _hbox = GetNode<Control>("CenterContainer/HBox");
         _resumeButton.Pressed += OnResumePressed;

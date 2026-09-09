@@ -1,11 +1,15 @@
 namespace ShooterLoop;
 
-// Read-only lifetime stats. Two sections: an "Actividad" block filtered by GameManager.StatsPeriod
-// (Total/Mes/Semana — the numbers that are genuinely sums over time, backed by GameManager's daily
-// log), and a "Resumen general" block of state/collection stats that don't have a meaningful
-// per-period reading (current account level, best-ever round, how many of the 7 builds/27
-// Legendarias/achievements have been reached) — those stay the same regardless of which tab is
-// selected. No progress bar on any row: a stat has no "target" to fill toward, just a number.
+// Read-only lifetime stats. Three sections: a 7-day trend chart (ActivityBarChart, the one part of
+// this screen backed by real time-series data), an "Actividad" grid of colour-coded cards filtered by
+// GameManager.StatsPeriod (Total/Mes/Semana), and a "Progreso" section mixing ratio-based
+// StatProgressRings (achievements, builds, Legendarias, crit accuracy — stats that genuinely have a
+// target to fill toward) with the handful of "Resumen" cards that are just a number (account level,
+// best round, characters unlocked...).
+//
+// Was a single stacked list of identical grey rows before this pass — every stat looked the same
+// regardless of what it meant, and nothing here was a chart despite several of these numbers being
+// exactly the kind of thing a chart communicates faster than text (a ratio, a week of daily totals).
 public partial class StatsMenu : Control
 {
     private PanelContainer _panel;
@@ -27,10 +31,12 @@ public partial class StatsMenu : Control
         _content = GetNode<VBoxContainer>("CenterContainer/Panel/Scroll/Box/Content");
 
         _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.OndaBlast));
+        var title = GetNode<Label>("CenterContainer/Panel/Scroll/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
 
         BuildTabs();
         _rows = new VBoxContainer();
-        _rows.AddThemeConstantOverride("separation", 8);
+        _rows.AddThemeConstantOverride("separation", 14);
         _content.AddChild(_rows);
 
         _closeButton.Pressed += Close;
@@ -97,7 +103,7 @@ public partial class StatsMenu : Control
         }
     }
 
-    // --- Rows ----------------------------------------------------------------------------------
+    // --- Sections --------------------------------------------------------------------------------
 
     private void RebuildRows()
     {
@@ -106,29 +112,57 @@ public partial class StatsMenu : Control
         var gm = GameManager.Instance;
         var stats = gm.GetStats(_period);
 
+        _rows.AddChild(SectionHeading("ACTIVIDAD RECIENTE (7 DÍAS)"));
+        _rows.AddChild(BuildActivityChart(gm));
+
         _rows.AddChild(SectionHeading("ACTIVIDAD"));
-        AddRow("Enemigos eliminados", stats.EnemiesKilled.ToString());
-        AddRow("Jefes derrotados", stats.BossesKilled.ToString());
-        AddRow("Críticos", stats.CritsLanded.ToString());
-        AddRow("Rondas superadas", stats.RoundsCleared.ToString());
-        AddRow("Monedas ganadas", stats.CoinsEarned.ToString());
-        AddRow("Libras ganadas", stats.LibrasEarned.ToString());
-        AddRow("Partidas jugadas", stats.RunsPlayed.ToString());
-        AddRow("Tiempo jugado", FormatDuration(stats.PlayTimeSeconds));
+        var activityGrid = NewCardGrid();
+        _rows.AddChild(activityGrid);
+        AddCard(activityGrid, "Enemigos\neliminados", stats.EnemiesKilled.ToString(), Palette.Accent);
+        AddCard(activityGrid, "Jefes\nderrotados", stats.BossesKilled.ToString(), Palette.UltimatePanelBorder);
+        AddCard(activityGrid, "Críticos", stats.CritsLanded.ToString(), Palette.DamageNumber);
+        AddCard(activityGrid, "Rondas\nsuperadas", stats.RoundsCleared.ToString(), Palette.OndaBlast);
+        AddCard(activityGrid, "Monedas\nganadas", stats.CoinsEarned.ToString(), Palette.MineBlast);
+        AddCard(activityGrid, "Libras\nganadas", stats.LibrasEarned.ToString(), Palette.LevelPopup);
+        AddCard(activityGrid, "Partidas\njugadas", stats.RunsPlayed.ToString(), Palette.ShopPanelBorder);
+        AddCard(activityGrid, "Tiempo\njugado", FormatDuration(stats.PlayTimeSeconds), Palette.ShieldAura);
+
+        _rows.AddChild(SectionHeading("PROGRESO"));
+        var ringGrid = NewRingGrid();
+        _rows.AddChild(ringGrid);
+        AddRing(ringGrid, gm.TotalEnemiesKilled > 0 ? gm.TotalCritsLanded / (float)gm.TotalEnemiesKilled : 0f,
+            FormatPercent(gm.TotalCritsLanded, gm.TotalEnemiesKilled), Palette.DamageNumber, "Precisión\n(críticos)");
+        AddRing(ringGrid, gm.UnlockedAchievementsCount / (float)AchievementCatalog.All.Length,
+            $"{gm.UnlockedAchievementsCount}/{AchievementCatalog.All.Length}", Palette.UltimatePanelBorder, "Logros");
+        AddRing(ringGrid, gm.EverCompletedBuilds.Count / (float)BuildCatalog.ClassOrder.Length,
+            $"{gm.EverCompletedBuilds.Count}/{BuildCatalog.ClassOrder.Length}", Palette.ShopPanelBorder, "Builds");
+        int legendaryTotal = System.Enum.GetValues<UpgradeType>().Length;
+        AddRing(ringGrid, gm.EverGotLegendary.Count / (float)legendaryTotal,
+            $"{gm.EverGotLegendary.Count}/{legendaryTotal}", Palette.ShieldAura, "Legendarias\ndistintas");
 
         _rows.AddChild(SectionHeading("RESUMEN GENERAL"));
-        AddRow("Mejor puntaje", GameManager.LoadHighScore().ToString());
-        AddRow("Mejor ronda alcanzada", gm.BestRoundReached.ToString());
-        AddRow("Nivel de cuenta", gm.AccountLevel.ToString());
-        AddRow("Precisión (críticos)", FormatPercent(gm.TotalCritsLanded, gm.TotalEnemiesKilled));
-        AddRow("Logros desbloqueados", $"{gm.UnlockedAchievementsCount}/{AchievementCatalog.All.Length}");
-        AddRow("Misiones completadas", gm.TotalMissionsCompleted.ToString());
-        AddRow("Personajes desbloqueados", gm.UnlockedCharacters.Count.ToString());
-        AddRow("Cosméticos comprados", gm.OwnedCosmetics.Count.ToString());
-        AddRow("Builds completadas", $"{gm.EverCompletedBuilds.Count}/{BuildCatalog.ClassOrder.Length}");
-        AddRow("Legendarias distintas", $"{gm.EverGotLegendary.Count}/{System.Enum.GetValues<UpgradeType>().Length}");
+        var summaryGrid = NewCardGrid();
+        _rows.AddChild(summaryGrid);
+        AddCard(summaryGrid, "Mejor\npuntaje", GameManager.LoadHighScore().ToString(), Palette.Accent);
+        AddCard(summaryGrid, "Mejor ronda\nalcanzada", gm.BestRoundReached.ToString(), Palette.VendavalBlast);
+        AddCard(summaryGrid, "Nivel de\ncuenta", gm.AccountLevel.ToString(), Palette.ShieldAura);
+        AddCard(summaryGrid, "Misiones\ncompletadas", gm.TotalMissionsCompleted.ToString(), Palette.OndaBlast);
+        AddCard(summaryGrid, "Personajes\ndesbloqueados", gm.UnlockedCharacters.Count.ToString(), Palette.LevelPopup);
+        AddCard(summaryGrid, "Cosméticos\ncomprados", gm.OwnedCosmetics.Count.ToString(), Palette.MineBlast);
 
         FitToOrientation();
+    }
+
+    private static Control BuildActivityChart(GameManager gm)
+    {
+        var chart = new ActivityBarChart
+        {
+            CustomMinimumSize = new Vector2(0f, 100f),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            BarColor = Palette.OndaBlast,
+        };
+        chart.SetData(gm.GetRecentActivity(7));
+        return chart;
     }
 
     private static Label SectionHeading(string text)
@@ -139,32 +173,78 @@ public partial class StatsMenu : Control
         return label;
     }
 
-    private void AddRow(string label, string value)
+    // --- Cards (colour-coded "just a number" stats) -----------------------------------------------
+
+    private static GridContainer NewCardGrid()
     {
-        var panel = new PanelContainer();
+        var grid = new GridContainer { Columns = 2 };
+        grid.AddThemeConstantOverride("h_separation", 8);
+        grid.AddThemeConstantOverride("v_separation", 8);
+        return grid;
+    }
+
+    // A left accent stripe (the stat's own colour) plus a dimmed tint of that colour behind the
+    // value, instead of the identical grey panel every row used to share — the colour is what makes
+    // this screen readable at a glance instead of a wall of numbers that all look equally important.
+    private static void AddCard(GridContainer grid, string label, string value, Color color)
+    {
+        var panel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         var style = new StyleBoxFlat
         {
-            BgColor = new Color(0.102f, 0.0588f, 0.1686f, 0.75f),
-            BorderColor = new Color(Palette.OndaBlast, 0.4f),
+            BgColor = new Color(color, 0.14f),
+            BorderColor = new Color(color, 0.8f),
         };
-        style.SetBorderWidthAll(2);
+        style.SetBorderWidthAll(1);
+        style.BorderWidthLeft = 4;
         style.SetContentMarginAll(8f);
         panel.AddThemeStyleboxOverride("panel", style);
 
-        var row = new HBoxContainer();
-        panel.AddChild(row);
-
-        var nameLabel = new Label { Text = label, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        nameLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
-        nameLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.76f, 0.84f));
-        row.AddChild(nameLabel);
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 2);
+        panel.AddChild(box);
 
         var valueLabel = new Label { Text = value };
         valueLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Subtitle);
         valueLabel.AddThemeColorOverride("font_color", Colors.White);
-        row.AddChild(valueLabel);
+        box.AddChild(valueLabel);
 
-        _rows.AddChild(panel);
+        var nameLabel = new Label { Text = label };
+        nameLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        nameLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.76f, 0.84f));
+        box.AddChild(nameLabel);
+
+        grid.AddChild(panel);
+    }
+
+    // --- Rings (ratio-based "N of M" stats) --------------------------------------------------------
+
+    private static GridContainer NewRingGrid()
+    {
+        var grid = new GridContainer { Columns = 2 };
+        grid.AddThemeConstantOverride("h_separation", 8);
+        grid.AddThemeConstantOverride("v_separation", 10);
+        return grid;
+    }
+
+    private const float RingSize = 76f;
+
+    private static void AddRing(GridContainer grid, float fraction, string centerText, Color color, string caption)
+    {
+        var cell = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        cell.AddThemeConstantOverride("separation", 4);
+
+        var ringRow = new CenterContainer();
+        var ring = new StatProgressRing { CustomMinimumSize = new Vector2(RingSize, RingSize) };
+        ring.SetValue(fraction, centerText, color);
+        ringRow.AddChild(ring);
+        cell.AddChild(ringRow);
+
+        var captionLabel = new Label { Text = caption, HorizontalAlignment = HorizontalAlignment.Center };
+        captionLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Caption);
+        captionLabel.AddThemeColorOverride("font_color", new Color(0.72f, 0.76f, 0.84f));
+        cell.AddChild(captionLabel);
+
+        grid.AddChild(cell);
     }
 
     // "Xh Ym" above an hour, "Xm Ys" above a minute, "Xs" below — never more than 2 units, so it

@@ -381,11 +381,21 @@ public static class Juice
     // Deliberately not routed through StartTween: that keys one tween per target so a new call kills
     // the old, and a shimmer has to coexist with whatever else is animating the same node (the shield
     // aura's pulse, a bullet's own travel).
-    public static Tween Shimmer(CanvasItem target, string property, Color from, Color to, float period)
-    {
-        if (target == null || Reduced || period <= 0f) return null;
+    public static Tween Shimmer(CanvasItem target, string property, Color from, Color to, float period) =>
+        Shimmer(target, target, property, from, to, period);
 
-        var tween = target.CreateTween();
+    /// <summary>
+    /// Same endless there-and-back colour tween, for when the thing being animated isn't the thing
+    /// that can own a Tween — a StyleBoxFlat's border_color, say: the resource itself has no
+    /// CreateTween(), only Nodes do. <paramref name="owner"/> hosts the Tween (any live Node in the
+    /// tree works — it doesn't need to be the visual target itself), <paramref name="target"/> is the
+    /// object whose property actually changes.
+    /// </summary>
+    public static Tween Shimmer(Node owner, GodotObject target, string property, Color from, Color to, float period)
+    {
+        if (owner == null || target == null || Reduced || period <= 0f) return null;
+
+        var tween = owner.CreateTween();
         tween.SetLoops();
         tween.TweenProperty(target, property, to, period * 0.5f)
             .SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);

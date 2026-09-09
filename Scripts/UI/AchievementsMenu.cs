@@ -25,6 +25,8 @@ public partial class AchievementsMenu : Control
         _content = GetNode<VBoxContainer>("CenterContainer/Panel/Scroll/Box/Content");
 
         _panel.AddThemeStyleboxOverride("panel", UIUtil.CreatePanelStyle(Palette.UltimatePanelBorder));
+        var title = GetNode<Label>("CenterContainer/Panel/Scroll/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
 
         BuildCategoryTabs();
         _rows = new VBoxContainer();

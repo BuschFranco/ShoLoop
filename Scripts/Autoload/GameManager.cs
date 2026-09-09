@@ -89,6 +89,11 @@ public partial class GameManager : Node
     // LevelsGained fires once per AddXp call with the *total* crossed, so the HUD popup reads as
     // one "+3" rather than three overlapping "+1"s in the same frame.
     public event Action<int> LevelsGained;
+    // Fired once the player has actually picked every reward from a level-up (or streak of them) and
+    // play is about to resume -- the fireworks/"SUBE DE NIVEL" celebration listens to this rather
+    // than LevelsGained so it lands after the upgrade picker closes instead of competing with it for
+    // attention while it's still open.
+    public event Action LevelUpCelebration;
     public event Action<int> CoinsChanged;
     public event Action<int> ScoreChanged;
     public event Action<int> RoundChanged;
@@ -157,10 +162,10 @@ public partial class GameManager : Node
         player?.RegisterKillForStreak();
         float streakMult = player?.KillStreakMultiplier ?? 1f;
 
-        // Sabiduría scales XP; Botín scales coins. Streak only boosts XP, not coins.
+        // Sabiduría scales XP; Botín scales coins. Streak boosts both.
         int finalXp = Mathf.RoundToInt(xpReward * (player?.XpMultiplier ?? 1f) * streakMult);
         AddXp(finalXp);
-        AddCoins(Mathf.RoundToInt(coinsReward * (player?.CoinMultiplier ?? 1f)));
+        AddCoins(Mathf.RoundToInt(coinsReward * (player?.CoinMultiplier ?? 1f) * streakMult));
 
         // Deliberately the *unmultiplied* xpReward, which breaks the otherwise 1:1 Score/XP sync.
         // Score is persisted as a high score, so letting a reward choice inflate it would make runs
@@ -582,6 +587,17 @@ public partial class GameManager : Node
         else if (_pendingLevelUps > 0)
         {
             _pendingLevelUps--;
+
+            // Every level-up reward from this streak has now been picked -- celebrate now rather
+            // than back when the level-up actually happened (still true even if something else
+            // queued behind it, like the round-end shop, opens right after via
+            // ResolveNextInterstitial below).
+            if (_pendingLevelUps == 0)
+            {
+                var player = GetTree().GetFirstNodeInGroup("player") as Player;
+                player?.ShowLevelUpText();
+                LevelUpCelebration?.Invoke();
+            }
         }
 
         // Whatever's still queued (another level-up, the Ultimate choice, the round-end shop) opens
@@ -695,8 +711,8 @@ public partial class GameManager : Node
         if (Score > LoadHighScore())
             SaveHighScore(Score);
 
-        AppendRecord(Score, RoundNumber);
-        AppendCharacterRecord(SelectedCharacter, Score, RoundNumber);
+        AppendRecord(Score, RoundNumber, CurrentGameMode);
+        AppendCharacterRecord(SelectedCharacter, Score, RoundNumber, CurrentGameMode);
 
         // Read before ResetRun() zeroes RoundNumber. This is the single point both exit paths
         // (death via NotifyPlayerDied, manual quit via AbandonRun) already funnel through, so it
@@ -1032,6 +1048,24 @@ public partial class GameManager : Node
         return new LifetimeStats(enemies, bosses, crits, rounds, libras, runs, coins, playTime);
     }
 
+    // One entry per of the last `days` calendar days, oldest first, for the Stats screen's trend
+    // chart. A day with no run played comes back as 0 rather than being omitted, so the chart's
+    // x-axis stays evenly spaced instead of compressing around whichever days actually have data.
+    public readonly record struct DailyActivity(string DateKey, int EnemiesKilled);
+
+    public List<DailyActivity> GetRecentActivity(int days)
+    {
+        var result = new List<DailyActivity>(days);
+        var today = DateTime.Today;
+        for (int i = days - 1; i >= 0; i--)
+        {
+            string key = today.AddDays(-i).ToString("yyyy-MM-dd");
+            int kills = _dailyStats.TryGetValue(key, out var entry) ? entry.EnemiesKilled : 0;
+            result.Add(new DailyActivity(key, kills));
+        }
+        return result;
+    }
+
     private static string ThisMonthStartKey()
     {
         var today = DateTime.Today;
@@ -1157,6 +1191,22 @@ public partial class GameManager : Node
         var config = new ConfigFile();
         config.Load(SettingsFilePath);
         config.SetValue(SettingsSection, "reduced_motion", enabled);
+        config.Save(SettingsFilePath);
+    }
+
+    // Gates the joke roster's visibility (CharacterCatalog.IsVisible) -- redeemed once via the MDG
+    // secret code (SecretCodeCatalog), same set-and-save-immediately shape as SetReducedMotion above
+    // rather than routing through SaveMetaProgress, since this is one flag with nothing else to batch.
+    public bool CoworkerRosterUnlocked { get; private set; }
+
+    public void UnlockCoworkerRoster()
+    {
+        if (CoworkerRosterUnlocked) return;
+        CoworkerRosterUnlocked = true;
+
+        var config = new ConfigFile();
+        config.Load(SettingsFilePath);
+        config.SetValue(SettingsSection, "coworker_roster_unlocked", true);
         config.Save(SettingsFilePath);
     }
 
@@ -1482,6 +1532,7 @@ public partial class GameManager : Node
         // any UI exists to set it.
         ReducedMotion = (bool)config.GetValue(SettingsSection, "reduced_motion", false);
         DangerLevel.Reduced = ReducedMotion;
+        CoworkerRosterUnlocked = (bool)config.GetValue(SettingsSection, "coworker_roster_unlocked", false);
 
         // Not pushed to AudioManager here: that autoload is declared after this one and doesn't
         // exist yet on the first boot frame. It reads these values itself in its own _Ready.
@@ -1627,13 +1678,27 @@ public partial class GameManager : Node
     // rather than crashing or discarding decades-old — well, days-old — records.
     public readonly record struct ScoreRecord(int Score, int Round, string Date);
 
+    // Hardcore gets its own suffixed section rather than a shared one -- a 1-life Hardcore run and a
+    // 3-life Classic run aren't the same achievement, so mixing them into one leaderboard would make
+    // neither number mean anything. Classic keeps the original, unsuffixed section name on purpose:
+    // every record ever saved before Hardcore existed is Classic data, and this way it's still read
+    // as such with no migration step.
+    private static string ModeSuffix(GameMode mode) => mode == GameMode.Hardcore ? "_hardcore" : "";
+
     // Stored as "score|round|date" strings rather than nested dictionaries: ConfigFile round-trips a
     // PackedStringArray cleanly and there's nothing here worth the extra parsing surface.
-    public static List<ScoreRecord> LoadRecords()
+    public static List<ScoreRecord> LoadRecords(GameMode mode)
     {
-        var records = LoadRecordSection("records");
-        DropSupersededLegacyEntries(records);
-        BackfillLegacyHighScore(records);
+        var records = LoadRecordSection("records" + ModeSuffix(mode));
+
+        // Both of these repair pre-Hardcore save data (a stand-in entry from before rounds were
+        // tracked, a high score that predates the records list existing at all) -- Hardcore never had
+        // either problem, since it didn't exist yet when they happened.
+        if (mode == GameMode.Classic)
+        {
+            DropSupersededLegacyEntries(records);
+            BackfillLegacyHighScore(records);
+        }
         return records;
     }
 
@@ -1696,27 +1761,29 @@ public partial class GameManager : Node
         return $"{now["day"].AsInt32()}/{now["month"].AsInt32()}/{now["year"].AsInt32() % 100}";
     }
 
-    private static void AppendRecord(int score, int round)
+    private static void AppendRecord(int score, int round, GameMode mode)
     {
-        var records = LoadRecords();
+        var records = LoadRecords(mode);
         records.Add(new ScoreRecord(score, round, FormatNow()));
-        SaveRecordSection("records", records);
+        SaveRecordSection("records" + ModeSuffix(mode), records);
     }
 
-    // One section per character slug, in the same records.cfg file as the overall leaderboard above —
-    // works for custom characters too, since their slugs are just as valid a section name as a built-in's.
-    // Kept separate from the overall list (rather than replacing it) because a per-pilot table answers
-    // "how am I doing with THIS pilot", while the main menu's table answers "what's my best run ever" —
-    // two different questions that would erase each other's history if merged into one list.
-    private static string CharacterRecordsSection(string slug) => $"records_{slug}";
+    // One section per character slug (plus mode suffix), in the same records.cfg file as the overall
+    // leaderboard above — works for custom characters too, since their slugs are just as valid a
+    // section name as a built-in's. Kept separate from the overall list (rather than replacing it)
+    // because a per-pilot table answers "how am I doing with THIS pilot", while the main menu's table
+    // answers "what's my best run ever" — two different questions that would erase each other's
+    // history if merged into one list.
+    private static string CharacterRecordsSection(string slug, GameMode mode) => $"records_{slug}{ModeSuffix(mode)}";
 
-    public static List<ScoreRecord> LoadCharacterRecords(string slug) => LoadRecordSection(CharacterRecordsSection(slug));
+    public static List<ScoreRecord> LoadCharacterRecords(string slug, GameMode mode) =>
+        LoadRecordSection(CharacterRecordsSection(slug, mode));
 
-    private static void AppendCharacterRecord(string slug, int score, int round)
+    private static void AppendCharacterRecord(string slug, int score, int round, GameMode mode)
     {
-        var records = LoadCharacterRecords(slug);
+        var records = LoadCharacterRecords(slug, mode);
         records.Add(new ScoreRecord(score, round, FormatNow()));
-        SaveRecordSection(CharacterRecordsSection(slug), records);
+        SaveRecordSection(CharacterRecordsSection(slug, mode), records);
     }
 
     private static List<ScoreRecord> LoadRecordSection(string section)

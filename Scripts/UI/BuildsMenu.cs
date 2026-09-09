@@ -15,6 +15,8 @@ public partial class BuildsMenu : Control
     public override void _Ready()
     {
         _panel = GetNode<PanelContainer>("CenterContainer/Panel");
+        var title = GetNode<Label>("CenterContainer/Panel/Box/Title");
+        UIUtil.AddSpeedLines(title.GetParent<Control>(), title.GetIndex());
 
         var closeButton = GetNode<Button>("CenterContainer/Panel/Box/CloseButton");
         closeButton.Pressed += Close;

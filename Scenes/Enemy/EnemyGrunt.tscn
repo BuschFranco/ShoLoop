@@ -10,6 +10,7 @@ radius = 14.0
 collision_layer = 2
 collision_mask = 8
 script = ExtResource("1")
+FacesMovementDirection = true
 
 [node name="Visual" type="Sprite2D" parent="."]
 texture = ExtResource("2")
