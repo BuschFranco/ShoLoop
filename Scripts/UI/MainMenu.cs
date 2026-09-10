@@ -13,6 +13,23 @@ public partial class MainMenu : Control
         var optionsButton = GetNode<Button>("VBoxContainer/ButtonsRow/OptionsButton");
         var buildsButton = GetNode<Button>("VBoxContainer/ButtonsRow/BuildsButton");
         var tiendaButton = GetNode<Button>("VBoxContainer/ButtonsRow/TiendaButton");
+
+        // HBoxContainer/VBoxContainer are both just BoxContainer with its Vertical flag preset —
+        // still settable at runtime on either, so the same four buttons can stack in portrait
+        // instead of squeezing into a row barely wider than the 648px portrait viewport (170+150*3
+        // plus separation is ~650px, right at the edge). Landscape's 1152px keeps the row as-is.
+        var buttonsRow = GetNode<HBoxContainer>("VBoxContainer/ButtonsRow");
+        bool portrait = GameManager.Instance.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
+        buttonsRow.Vertical = portrait;
+        if (portrait)
+        {
+            // Otherwise each button's cross-axis (now horizontal) would Fill to the row's full
+            // width instead of keeping its own pill size — ShrinkCenter keeps them their normal
+            // width, just centered in the stack.
+            foreach (var b in new[] { startButton, tiendaButton, optionsButton, buildsButton })
+                b.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+        }
+
         var characterSelect = GetNode<CharacterSelectMenu>("CharacterSelectMenu");
         var gameModeMenu = GetNode<GameModeMenu>("GameModeMenu");
         startButton.Pressed += gameModeMenu.Open;
