@@ -119,7 +119,7 @@ public partial class PauseMenu : Control
             _resumeButton.Disabled = false;
             _menuButton.Disabled = false;
             Visible = false;
-            GameManager.Instance.Resume();
+            GameManager.Instance.ResumeAfterPause();
             return;
         }
 

@@ -17,6 +17,7 @@ obj/
 /build-linux/
 /build-android/
 /ShooterLoop.apk
+/Infinitix.apk
 /ShooterLoop.exe
 /ShooterLoop.console.exe
 /ShooterLoop.pck
@@ -36,3 +37,6 @@ __pycache__/
 
 # Claude Code session-local runtime state (PID/timestamp, not shared config)
 .claude/scheduled_tasks.lock
+
+# MCP server config with an API key in plain text — machine-local, never committed
+/.mcp.json

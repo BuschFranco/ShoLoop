@@ -1,9 +1,11 @@
 namespace ShooterLoop;
 
-// The circular Ultimate button's face: draws the button's own gold-ringed circle plus a
-// procedural icon per UltimateKind, with a CooldownIcon-style dark pie sweeping away the
-// cooldown and the seconds remaining as text while it cools. No art assets — _Draw() only,
-// like every other visual in the game.
+// The circular Ultimate button's face: draws the button's own gold-ringed circle, plus a small
+// chrome-neon icon per UltimateKind (Assets/Sprites/UI/, generated to match the logo's style and
+// pixelated the same way — the one deliberate exception to "everything else is _Draw()-only" this
+// game otherwise follows, since these are UI iconography rather than gameplay entities), with a
+// CooldownIcon-style dark pie sweeping away the cooldown and the seconds remaining as text while it
+// cools.
 public partial class UltimateButtonIcon : Control
 {
     public UltimateKind Kind = UltimateKind.Nova;
@@ -20,6 +22,15 @@ public partial class UltimateButtonIcon : Control
     private static readonly Color Gold = Palette.BossHealthBarFill;
     private static readonly Color BaseBg = new(0.102f, 0.0588f, 0.1686f, 0.85f);
     private static readonly Color CooldownShade = new(0f, 0f, 0f, 0.72f);
+
+    // Chrome/neon icon set matching the logo's own style (generated to spec, then pixelated the
+    // same way MainMenu's title logo is — see tools/pixelate_logo.py) — replaces the four hand-drawn
+    // polygon glyphs below. Already full-colour art, so unlike the procedural glyphs it isn't tinted
+    // by `accent`; dimming on cooldown instead multiplies the whole texture toward grey.
+    private static readonly Texture2D NovaTexture = GD.Load<Texture2D>("res://Assets/Sprites/UI/ability_nova.png");
+    private static readonly Texture2D HourglassTexture = GD.Load<Texture2D>("res://Assets/Sprites/UI/ability_hourglass.png");
+    private static readonly Texture2D BoltTexture = GD.Load<Texture2D>("res://Assets/Sprites/UI/ability_bolt.png");
+    private static readonly Texture2D ShieldTexture = GD.Load<Texture2D>("res://Assets/Sprites/UI/ability_shield.png");
 
     public override void _Ready()
     {
@@ -55,7 +66,7 @@ public partial class UltimateButtonIcon : Control
             DrawPolygon(points, new[] { CooldownShade });
         }
 
-        DrawIcon(center, radius * 0.55f, accent);
+        DrawIcon(center, radius * 0.55f, ready);
 
         if (CooldownFraction > 0f && CooldownSeconds > 0f)
         {
@@ -68,91 +79,19 @@ public partial class UltimateButtonIcon : Control
         }
     }
 
-    private void DrawIcon(Vector2 center, float r, Color color)
+    private void DrawIcon(Vector2 center, float r, bool ready)
     {
-        switch (Kind)
+        Texture2D texture = Kind switch
         {
-            case UltimateKind.Nova:
-                DrawNovaStar(center, r, color);
-                break;
-            case UltimateKind.TimeSlow:
-                DrawHourglass(center, r, color);
-                break;
-            case UltimateKind.Frenzy:
-                DrawBolt(center, r, color);
-                break;
-            case UltimateKind.Invulnerability:
-                DrawShield(center, r, color);
-                break;
-        }
-    }
-
-    // Pulso Nova: an 8-point starburst — the detonation itself.
-    private void DrawNovaStar(Vector2 center, float r, Color color)
-    {
-        const int spikes = 8;
-        var points = new Vector2[spikes * 2];
-        for (int i = 0; i < points.Length; i++)
-        {
-            float angle = i / (float)points.Length * Mathf.Tau - Mathf.Pi / 2f;
-            float radius = i % 2 == 0 ? r : r * 0.5f;
-            points[i] = center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
-        }
-        DrawPolygon(points, new[] { color });
-    }
-
-    // Zona Lenta: an hourglass — time itself running out.
-    private void DrawHourglass(Vector2 center, float r, Color color)
-    {
-        float pinch = 0.06f * r;
-        var top = new[]
-        {
-            center + new Vector2(0f, -r),
-            center + new Vector2(-r * 0.65f, pinch),
-            center + new Vector2(r * 0.65f, pinch),
+            UltimateKind.Nova => NovaTexture,
+            UltimateKind.TimeSlow => HourglassTexture,
+            UltimateKind.Frenzy => BoltTexture,
+            UltimateKind.Invulnerability => ShieldTexture,
+            _ => null,
         };
-        var bottom = new[]
-        {
-            center + new Vector2(0f, r),
-            center + new Vector2(-r * 0.65f, -pinch),
-            center + new Vector2(r * 0.65f, -pinch),
-        };
-        DrawPolygon(top, new[] { color });
-        DrawPolygon(bottom, new[] { color });
-    }
+        if (texture == null) return;
 
-    // Sobrecarga: a lightning bolt (FontAwesome's path, normalized to a unit box).
-    private void DrawBolt(Vector2 center, float r, Color color)
-    {
-        var raw = new[]
-        {
-            new Vector2(0.083f, 0.833f),
-            new Vector2(-0.75f, -0.167f),
-            new Vector2(-0.25f, -0.167f),
-            new Vector2(-0.417f, -0.833f),
-            new Vector2(0.583f, 0.167f),
-            new Vector2(0.083f, 0.167f),
-        };
-        var points = new Vector2[raw.Length];
-        for (int i = 0; i < raw.Length; i++)
-            points[i] = center + raw[i] * r;
-        DrawPolygon(points, new[] { color });
-    }
-
-    // Escudo Absoluto: a shield outline — nothing gets through.
-    private void DrawShield(Vector2 center, float r, Color color)
-    {
-        var raw = new[]
-        {
-            new Vector2(-0.7f, -0.6f),
-            new Vector2(0.7f, -0.6f),
-            new Vector2(0.7f, 0.05f),
-            new Vector2(0f, 0.9f),
-            new Vector2(-0.7f, 0.05f),
-        };
-        var points = new Vector2[raw.Length];
-        for (int i = 0; i < raw.Length; i++)
-            points[i] = center + raw[i] * r;
-        DrawPolygon(points, new[] { color });
+        var rect = new Rect2(center - new Vector2(r, r), new Vector2(r, r) * 2f);
+        DrawTextureRect(texture, rect, false, ready ? Colors.White : new Color(0.4f, 0.4f, 0.4f, 1f));
     }
 }

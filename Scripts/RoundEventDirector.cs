@@ -27,6 +27,12 @@ public partial class RoundEventDirector : Node
     private const float FrenzySpeedMultiplier = 1.5f;
     private const float FrenzyRewardMultiplier = 2f;
 
+    // Frenzy's mirror image on the tank axis rather than the speed one: enemies soak up more bullets
+    // instead of moving faster, and the payout goes up further to match the fact that every kill now
+    // costs more ammo/time.
+    private const float ArmorHpMultiplier = 1.4f;
+    private const float ArmorRewardMultiplier = 1.6f;
+
     public override void _Ready() => AddToGroup("round_event_director");
 
     // Called from GameManager.StartNextRound, i.e. as the countdown begins.
@@ -50,6 +56,7 @@ public partial class RoundEventDirector : Node
             case RoundEventKind.ShrinkingZone: AddHazard(new ShrinkingZone()); break;
             case RoundEventKind.Minefield: SeedMinefield(); break;
             case RoundEventKind.Frenzy: StartFrenzy(); break;
+            case RoundEventKind.Armor: StartArmor(); break;
         }
 
         string announcement = RoundEvents.Announcement(Active);
@@ -72,6 +79,7 @@ public partial class RoundEventDirector : Node
             GameManager.Instance.EnemySpeedMultiplier = 1f;
             GameManager.Instance.BaseEnemySpeedMultiplier = 1f;
             GameManager.Instance.EventRewardMultiplier = 1f;
+            GameManager.Instance.EventHpMultiplier = 1f;
         }
 
         Active = RoundEventKind.None;
@@ -92,6 +100,12 @@ public partial class RoundEventDirector : Node
         GameManager.Instance.BaseEnemySpeedMultiplier = FrenzySpeedMultiplier;
         GameManager.Instance.EnemySpeedMultiplier = FrenzySpeedMultiplier;
         GameManager.Instance.EventRewardMultiplier = FrenzyRewardMultiplier;
+    }
+
+    private void StartArmor()
+    {
+        GameManager.Instance.EventHpMultiplier = ArmorHpMultiplier;
+        GameManager.Instance.EventRewardMultiplier = ArmorRewardMultiplier;
     }
 
     private void StartMissileStrike()

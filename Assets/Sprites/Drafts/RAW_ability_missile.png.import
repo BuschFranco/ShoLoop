@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c1bra3yk5usud"
-path="res://.godot/imported/infinitix_logo2_cutout.png-740c625fa563471f05bb7409029a4231.ctex"
+uid="uid://dfxe27cgif87b"
+path="res://.godot/imported/RAW_ability_missile.png-9b202636840820411dd2d1f34e3c6138.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Branding/infinitix_logo2_cutout.png"
-dest_files=["res://.godot/imported/infinitix_logo2_cutout.png-740c625fa563471f05bb7409029a4231.ctex"]
+source_file="res://Assets/Sprites/Drafts/RAW_ability_missile.png"
+dest_files=["res://.godot/imported/RAW_ability_missile.png-9b202636840820411dd2d1f34e3c6138.ctex"]
 
 [params]
 

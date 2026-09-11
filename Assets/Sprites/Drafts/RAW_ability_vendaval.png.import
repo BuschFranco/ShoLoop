@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://yplewcs11t6l"
-path="res://.godot/imported/logo2.png-4c57c55d4fb631e87c6b48b1303b2d2b.ctex"
+uid="uid://dtvoij2rqxg0b"
+path="res://.godot/imported/RAW_ability_vendaval.png-fd314df846914f30f0decb475dac4eb7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/logo2.png"
-dest_files=["res://.godot/imported/logo2.png-4c57c55d4fb631e87c6b48b1303b2d2b.ctex"]
+source_file="res://Assets/Sprites/Drafts/RAW_ability_vendaval.png"
+dest_files=["res://.godot/imported/RAW_ability_vendaval.png-fd314df846914f30f0decb475dac4eb7.ctex"]
 
 [params]
 

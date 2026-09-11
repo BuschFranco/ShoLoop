@@ -402,7 +402,8 @@ public partial class EnemySpawner : Node2D
         // later would leave it spawning at more than full health. Mathf.Max keeps a rounding-down at
         // low base HP from producing a 0-HP enemy that dies to nothing.
         float characterHpMult = (_player as Player)?.EnemyHpMultiplier ?? 1f;
-        enemy.MaxHp = Mathf.Max(1, Mathf.RoundToInt(enemy.MaxHp * _hpMult * characterHpMult));
+        float eventHpMult = GameManager.Instance?.EventHpMultiplier ?? 1f;
+        enemy.MaxHp = Mathf.Max(1, Mathf.RoundToInt(enemy.MaxHp * _hpMult * characterHpMult * eventHpMult));
         enemy.ContactDamage = Mathf.RoundToInt(enemy.ContactDamage * _dmgMult);
         enemy.MoveSpeed *= _speedMult;
         enemy.XpReward = Mathf.RoundToInt(enemy.XpReward * _rewardMult);

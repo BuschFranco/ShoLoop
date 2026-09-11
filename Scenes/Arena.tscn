@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=30 format=3]
 
 [ext_resource type="PackedScene" path="res://Scenes/Player.tscn" id="1"]
 [ext_resource type="Script" path="res://Scripts/Enemy/EnemySpawner.cs" id="2"]
@@ -25,8 +25,10 @@
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonBrute.tscn" id="24"]
 [ext_resource type="PackedScene" path="res://Scenes/Enemy/EnemyDemonStalker.tscn" id="25"]
 [ext_resource type="Script" path="res://Scripts/RoundEventDirector.cs" id="26"]
+[ext_resource type="Script" path="res://Scripts/BossDirectionIndicator.cs" id="30"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/ConfirmDialog.tscn" id="27"]
 [ext_resource type="Script" path="res://Scripts/DustField.cs" id="28"]
+[ext_resource type="Script" path="res://Scripts/ArenaBackground.cs" id="31"]
 
 [sub_resource type="Environment" id="Environment_neon"]
 background_mode = 3
@@ -55,6 +57,17 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.043, 0.024, 0.078, 1)
+
+[node name="ArenaBackground" type="TextureRect" parent="BackdropLayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+modulate = Color(1, 1, 1, 0.45)
+expand_mode = 1
+stretch_mode = 6
+script = ExtResource("31")
 
 [node name="Player" parent="." instance=ExtResource("1")]
 
@@ -203,6 +216,9 @@ script = ExtResource("21")
 
 [node name="RoundEventDirector" type="Node" parent="."]
 script = ExtResource("26")
+
+[node name="BossDirectionIndicator" type="Node2D" parent="."]
+script = ExtResource("30")
 
 [node name="AlarmLayer" type="CanvasLayer" parent="."]
 layer = 2

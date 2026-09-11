@@ -980,6 +980,8 @@ public partial class Player : CharacterBody2D
         // that dodge/Tank/shield have made nearly unkillable, since raising enemy damage can't touch
         // that (every hit in this game costs a flat life/shield charge, never a variable amount).
         int cost = ComputeHitCost();
+        bool shieldAbsorbed = false;
+        bool lifeLost = false;
         for (int i = 0; i < cost; i++)
         {
             if (CurrentShieldCharges > 0)
@@ -992,6 +994,7 @@ public partial class Player : CharacterBody2D
                 CurrentShieldCharges--;
                 RaiseShieldChanged();
                 _blinkShieldInstead = true;
+                shieldAbsorbed = true;
             }
             else
             {
@@ -1006,8 +1009,19 @@ public partial class Player : CharacterBody2D
                 }
                 _blinkShieldInstead = false;
                 LoseLife();
+                lifeLost = true;
                 if (CurrentLives <= 0) break;
             }
+        }
+
+        // Full-screen-edge flash so a hit registers even if the player isn't looking at the HUD or
+        // listening for the sound cue — blue for a shield absorb, red for an actual life lost. A
+        // cost-2 hit that spends both in the same call flashes twice; the red one (called second)
+        // wins visually, which is fine since losing a life is the more important of the two facts.
+        if (GetTree().GetFirstNodeInGroup("danger_overlay") is DangerOverlay overlay)
+        {
+            if (shieldAbsorbed) overlay.FlashDamage(Palette.ShieldPickupColor);
+            if (lifeLost) overlay.FlashDamage(DangerLevel.AlarmBarColor);
         }
 
         // Invuln + knockback apply once per hit event, not per cost point — and now apply even if
@@ -1580,10 +1594,68 @@ public partial class Player : CharacterBody2D
     // immunity is worth more per second than a slow or a damage buff, so it gets a shorter window.
     private const float UltimateInvulnDuration = 3f;
 
+    // Purely additive on top of the blink above -- the ship still blinks exactly like a normal hit's
+    // i-frames, but this aura stays solidly visible and pulsing the whole 3s so the ultimate reads as
+    // its own distinct thing rather than "a really long version of getting hit". Same same-texture
+    // Sprite2D-copy technique Enemy.cs already uses for its rim flare/elite glow (CreateRimFlare/
+    // CreateEliteGlow): a scaled-up, tinted copy sitting behind the real sprite (ZIndex -1).
+    private Sprite2D _ultimateShieldAura;
+    private Tween _ultimateShieldTween;
+    private Timer _ultimateShieldSparkTimer;
+    private const float UltimateShieldAuraScale = 1.2f;
+    private const float UltimateShieldPulsePeriod = 0.5f;
+    private const float UltimateShieldSparkInterval = 0.15f;
+
     private void TriggerUltimateInvulnerability()
     {
         _invulnTimer = UltimateInvulnDuration;
         _blinkTimer = 0f;
+
+        if (_ultimateShieldAura == null)
+        {
+            _ultimateShieldAura = new Sprite2D { Texture = _visual.Texture, ZIndex = -1 };
+            AddChild(_ultimateShieldAura);
+        }
+        _ultimateShieldAura.Scale = _visualBaseScale * UltimateShieldAuraScale;
+        _ultimateShieldAura.Visible = true;
+
+        // Pushed past 1.0 so the pulse's bright end actually clears the arena's WorldEnvironment
+        // glow threshold and blooms -- same HDR-boost idiom used for the menu's title/streak badge.
+        _ultimateShieldTween?.Kill();
+        var boosted = new Color(Palette.ShieldAura.R * 1.8f, Palette.ShieldAura.G * 1.8f, Palette.ShieldAura.B * 1.8f, Palette.ShieldAura.A);
+        _ultimateShieldTween = Juice.Shimmer(this, _ultimateShieldAura, "modulate", Palette.ShieldAura, boosted, UltimateShieldPulsePeriod);
+
+        if (_ultimateShieldSparkTimer == null)
+        {
+            _ultimateShieldSparkTimer = new Timer { WaitTime = UltimateShieldSparkInterval };
+            AddChild(_ultimateShieldSparkTimer);
+            _ultimateShieldSparkTimer.Timeout += SpawnUltimateShieldSpark;
+        }
+        _ultimateShieldSparkTimer.Start();
+
+        GetTree().CreateTimer(UltimateInvulnDuration).Timeout += EndUltimateShieldAura;
+    }
+
+    // Small directional flashes bursting outward from the aura's rim -- reuses the same Spark helper
+    // bullet impacts already use, so the "electricity" reads as crackling rather than needing any new
+    // draw code.
+    private void SpawnUltimateShieldSpark()
+    {
+        if (!IsInstanceValid(this) || _ultimateShieldAura is not { Visible: true }) return;
+
+        float angle = (float)GD.RandRange(0f, Mathf.Tau);
+        var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        float radius = _ultimateShieldAura.Texture.GetSize().X * _ultimateShieldAura.Scale.X * 0.5f;
+        Juice.Spark(this, GlobalPosition + dir * radius, dir, Palette.ShieldAura, 8f);
+    }
+
+    private void EndUltimateShieldAura()
+    {
+        if (!IsInstanceValid(this) || _ultimateShieldAura == null) return;
+
+        _ultimateShieldAura.Visible = false;
+        _ultimateShieldTween?.Kill();
+        _ultimateShieldSparkTimer?.Stop();
     }
 
     // Onda de Choque: the periodic small AoE reward. Same enemies-in-radius loop as

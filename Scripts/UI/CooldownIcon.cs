@@ -22,6 +22,9 @@ public partial class CooldownIcon : Control
     // grid is too coarse to carry a readable symbol -- see the note in _Draw.
     private const float IconPixel = Juice.PixelSize * 0.5f;
 
+    // Applied to Accent only while the ability is off cooldown -- see _Draw.
+    private const float ReadyGlowBoost = 1.6f;
+
     // 1 = just used (fully covered), 0 = ready (fully clear).
     public float CooldownFraction = 0f;
 
@@ -61,15 +64,23 @@ public partial class CooldownIcon : Control
         bool ready = CooldownFraction <= 0f;
         Color accent = Accent;
 
+        // Pushed past 1.0 so the icon actually blooms under the arena's WorldEnvironment once
+        // ready, instead of just sitting at whatever raw brightness its tier colour happens to have.
+        // Without this, Común's mint (peaking at G=1.0, R/B well below) cleared the bloom threshold
+        // on one channel at most and read as noticeably dimmer/"darker" than Rare/Epic/Legendary next
+        // to it, even though nothing was actually wrong with its state -- every tier now gets the
+        // same glow treatment regardless of how saturated its own base colour is.
+        Color boostedAccent = new(accent.R * ReadyGlowBoost, accent.G * ReadyGlowBoost, accent.B * ReadyGlowBoost, accent.A);
+
         // Dark disc with a coloured rim, rather than the old solid-colour disc. A filled disc left
         // the glyph fighting the fill for contrast; an outlined one gives the symbol a dark field to
         // sit on and reads better at 36px over a bright arena.
         // IconPixel, not Juice.PixelSize: at 36px this icon's radius is ~16, and the project's 4px
         // grid would render it five blocks wide with no room left for the glyph inside.
         Juice.DrawPixelCircle(this, center, radius, new Color(0.102f, 0.0588f, 0.1686f, 0.88f), IconPixel);
-        Juice.DrawPixelRing(this, center, radius, 2f, ready ? accent : accent.Darkened(0.5f), IconPixel);
+        Juice.DrawPixelRing(this, center, radius, 2f, ready ? boostedAccent : accent.Darkened(0.5f), IconPixel);
 
-        DrawAbility(center, radius * 0.62f, ready ? accent : accent.Darkened(0.45f));
+        DrawAbility(center, radius * 0.62f, ready ? boostedAccent : accent.Darkened(0.45f));
 
         if (CooldownFraction > 0.002f)
         {
@@ -96,10 +107,14 @@ public partial class CooldownIcon : Control
     }
 
     // Láser: a horizontal beam with a tapered tip — long and thin, which is the one silhouette
-    // nothing else here shares.
+    // nothing else here shares. h used to be r * 0.28, a sliver so thin it had barely any filled
+    // area next to Missile's dart or Onda's rings — at 36px that reads as "dim" even at full
+    // brightness, just from having so little colour on screen, so this reads dark compared to its
+    // siblings even when the ability is fully off cooldown. Thickened so it carries similar visual
+    // weight, while staying clearly flatter/wider than Vendaval's tall cone.
     private void DrawBeam(Vector2 center, float r, Color color)
     {
-        float h = r * 0.28f;
+        float h = r * 0.42f;
         DrawPolygon(new[]
         {
             center + new Vector2(-r, -h),

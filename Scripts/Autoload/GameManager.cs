@@ -227,6 +227,11 @@ public partial class GameManager : Node
     // Extra XP/coin payout from a round event (Frenesí doubles it). Applied per spawn in
     // EnemySpawner.SpawnOne alongside RewardMultCurve, and reset by RoundEventDirector at round end.
     public float EventRewardMultiplier = 1f;
+
+    // Extra enemy HP from a round event (Blindaje's +40%). Applied per spawn in
+    // EnemySpawner.SpawnOne alongside the round/character HP multipliers, and reset by
+    // RoundEventDirector at round end -- same shape as EventRewardMultiplier above.
+    public float EventHpMultiplier = 1f;
     private Timer _slowTimer;
 
     // Set once per round by EnemySpawner.EvaluateStatCurves from DifficultyBalancer's survivability
@@ -496,8 +501,23 @@ public partial class GameManager : Node
     private RoundEventDirector RoundEventDirectorNode =>
         GetTree().GetFirstNodeInGroup("round_event_director") as RoundEventDirector;
 
+    // Set when the "get ready" countdown finishes while the player has the pause menu open — the
+    // countdown's own Timer runs with ProcessMode.Always specifically so it keeps ticking through
+    // the pause between rounds, but that meant it used to fire straight through a player-initiated
+    // pause too, resuming the tree and starting the round in the background behind the still-open
+    // menu. Cleared (and the round actually started) from ResumeAfterPause, once the pause menu's
+    // own "Reanudando en..." countdown genuinely closes it.
+    private bool _roundStartDeferred;
+
     private void BeginRoundAfterCountdown()
     {
+        if (GetTree().GetFirstNodeInGroup("pause_menu") is PauseMenu pauseMenu && pauseMenu.Visible)
+        {
+            _roundStartDeferred = true;
+            return;
+        }
+        _roundStartDeferred = false;
+
         // The "GO" at the end of the 3-2-1 the HUD is beeping out — same note family an octave up,
         // so it lands as the resolution of that sequence rather than as an unrelated noise.
         AudioManager.Instance?.Play(AudioManager.Sfx.RoundStart);
@@ -615,6 +635,16 @@ public partial class GameManager : Node
     {
         GetTree().Paused = false;
         IsPaused = false;
+    }
+
+    // The one path a player actually resumes gameplay through (PauseMenu's own "Reanudando en..."
+    // countdown finishing). Distinct from a plain Resume() so it can also release a round-start that
+    // got deferred because the "get ready" countdown finished while this same menu was still open —
+    // see BeginRoundAfterCountdown.
+    public void ResumeAfterPause()
+    {
+        Resume();
+        if (_roundStartDeferred) BeginRoundAfterCountdown();
     }
 
     public void NotifyPlayerDied()
@@ -1880,6 +1910,7 @@ public partial class GameManager : Node
         EnemySpeedMultiplier = 1f;
         BaseEnemySpeedMultiplier = 1f;
         EventRewardMultiplier = 1f;
+        EventHpMultiplier = 1f;
         SurvivabilityCatchUpMultiplier = 1f;
         _slowTimer?.Stop();
         _roundStartTimer?.Stop();

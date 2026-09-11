@@ -8,6 +8,7 @@ public enum RoundEventKind
     Frenzy,
     ShrinkingZone,
     Minefield,
+    Armor,
 }
 
 // Static data for the per-round modifiers: which ones exist, how likely one is, and what the player is
@@ -30,6 +31,7 @@ public static class RoundEvents
         RoundEventKind.Frenzy,
         RoundEventKind.ShrinkingZone,
         RoundEventKind.Minefield,
+        RoundEventKind.Armor,
     };
 
     public static RoundEventKind Roll(Random rng, int round)
@@ -48,6 +50,7 @@ public static class RoundEvents
         RoundEventKind.Frenzy => "¡FRENESÍ! BOTÍN DOBLE",
         RoundEventKind.ShrinkingZone => "¡ZONA QUE SE ENCOGE!",
         RoundEventKind.Minefield => "¡CAMPO MINADO!",
+        RoundEventKind.Armor => "¡BLINDAJE! BOTÍN +60%",
         _ => null,
     };
 }

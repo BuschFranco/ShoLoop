@@ -11,6 +11,9 @@ public partial class MissionsMenu : Control
     private VBoxContainer _content;
     private VBoxContainer _rows;
 
+    // Same chrome-neon coin icon AchievementsMenu uses for its own Libras reward labels.
+    private static readonly Texture2D LibrasCoinIcon = GD.Load<Texture2D>("res://Assets/Sprites/UI/coin_gem.png");
+
     public override void _Ready()
     {
         Visible = false;
@@ -69,6 +72,7 @@ public partial class MissionsMenu : Control
         panel.AddChild(box);
 
         var nameRow = new HBoxContainer();
+        nameRow.AddThemeConstantOverride("separation", 6);
         box.AddChild(nameRow);
 
         var nameLabel = new Label { Text = name, SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -76,7 +80,24 @@ public partial class MissionsMenu : Control
         nameLabel.AddThemeColorOverride("font_color", slot.Completed ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
         nameRow.AddChild(nameLabel);
 
-        var rewardLabel = new Label { Text = slot.Completed ? $"✓ +{slot.Reward}" : $"+{slot.Reward}" };
+        if (slot.Completed)
+        {
+            var checkLabel = new Label { Text = "✓" };
+            checkLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
+            checkLabel.AddThemeColorOverride("font_color", Palette.Player);
+            nameRow.AddChild(checkLabel);
+        }
+
+        var coinIcon = new TextureRect
+        {
+            Texture = LibrasCoinIcon,
+            CustomMinimumSize = new Vector2(16f, 16f),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        nameRow.AddChild(coinIcon);
+
+        var rewardLabel = new Label { Text = $"+{slot.Reward}" };
         rewardLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
         rewardLabel.AddThemeColorOverride("font_color", slot.Completed ? Palette.Player : new Color(0.75f, 0.55f, 1f));
         nameRow.AddChild(rewardLabel);

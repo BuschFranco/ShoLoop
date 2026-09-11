@@ -19,16 +19,20 @@ public partial class MainMenu : Control
         // instead of squeezing into a row barely wider than the 648px portrait viewport (170+150*3
         // plus separation is ~650px, right at the edge). Landscape's 1152px keeps the row as-is.
         var buttonsRow = GetNode<HBoxContainer>("VBoxContainer/ButtonsRow");
-        bool portrait = GameManager.Instance.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
-        buttonsRow.Vertical = portrait;
-        if (portrait)
+
+        void ApplyButtonsRowLayout()
         {
-            // Otherwise each button's cross-axis (now horizontal) would Fill to the row's full
-            // width instead of keeping its own pill size — ShrinkCenter keeps them their normal
-            // width, just centered in the stack.
+            bool portrait = GameManager.Instance.CurrentOrientation == GameManager.ScreenOrientation.Portrait;
+            buttonsRow.Vertical = portrait;
+            // Fill in landscape (the row's normal look), ShrinkCenter in portrait — otherwise each
+            // button's cross-axis (now horizontal) would stretch to the stack's full width instead
+            // of keeping its own pill size. Reapplied every time, not just once, since switching back
+            // to landscape from here needs to undo it just as much as portrait needs to set it.
             foreach (var b in new[] { startButton, tiendaButton, optionsButton, buildsButton })
-                b.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+                b.SizeFlagsHorizontal = portrait ? SizeFlags.ShrinkCenter : SizeFlags.Fill;
         }
+
+        ApplyButtonsRowLayout();
 
         var characterSelect = GetNode<CharacterSelectMenu>("CharacterSelectMenu");
         var gameModeMenu = GetNode<GameModeMenu>("GameModeMenu");
@@ -49,6 +53,7 @@ public partial class MainMenu : Control
         // open — the refresh has to hook the overlay's visibility instead, so spending Libras in
         // there and hitting Cancel updates the balance shown underneath.
         var librasLabel = GetNode<Label>("VBoxContainer/LibrasLabel");
+        WrapWithCoinIcon(librasLabel);
         var accountLevelLabel = GetNode<Label>("VBoxContainer/AccountLevelLabel");
         var accountLevelBar = GetNode<ProgressBar>("VBoxContainer/AccountLevelBarRow/AccountLevelBar");
         RefreshMetaLabels(librasLabel, accountLevelLabel, accountLevelBar);
@@ -59,6 +64,13 @@ public partial class MainMenu : Control
 
         var options = GetNode<OptionsMenu>("OptionsMenu");
         optionsButton.Pressed += options.Open;
+        // Options changes GameManager.CurrentOrientation live (see OptionsMenu's landscape/portrait
+        // toggles) without ever reloading MainMenu, so the row layout picked at _Ready above would
+        // otherwise go stale the moment the player switches orientation and comes back here.
+        options.VisibilityChanged += () =>
+        {
+            if (!options.Visible) ApplyButtonsRowLayout();
+        };
 
         var builds = GetNode<BuildsMenu>("BuildsMenu");
         buildsButton.Pressed += builds.Open;
@@ -115,6 +127,35 @@ public partial class MainMenu : Control
     // together -- that's the point, not an oversight: a row of same-coloured buttons breathing in
     // sync reads as one theme, not as three separate effects that happen to match.
     private const float BorderGlowBoost = 1.8f;
+
+    private static readonly Texture2D LibrasCoinIcon = GD.Load<Texture2D>("res://Assets/Sprites/UI/coin_gem.png");
+
+    // Reparents `label` into a new HBoxContainer with a coin icon in front of it, at the exact spot
+    // `label` used to occupy — done in code rather than in MainMenu.tscn so RefreshMetaLabels and
+    // every other reference to `librasLabel` (by node type Label) keeps working unchanged; only the
+    // parent it happens to sit inside is different now.
+    private static void WrapWithCoinIcon(Control label)
+    {
+        var parent = label.GetParent();
+        int index = label.GetIndex();
+        var icon = new TextureRect
+        {
+            Texture = LibrasCoinIcon,
+            CustomMinimumSize = new Vector2(18f, 18f),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 5);
+        row.Alignment = BoxContainer.AlignmentMode.Center;
+
+        parent.RemoveChild(label);
+        row.AddChild(icon);
+        row.AddChild(label);
+        parent.AddChild(row);
+        parent.MoveChild(row, index);
+    }
 
     private void AnimateAccents()
     {

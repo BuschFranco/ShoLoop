@@ -22,6 +22,15 @@ public partial class DangerOverlay : Control
     private bool _bossAlert;
     private bool _barsWasVisible;
 
+    // A second, independent set of edge bars for FlashDamage below -- kept separate from _bars
+    // rather than reusing it, since the alarm pulse above can be actively animating _bars.Modulate
+    // (and toggling _bars.Visible) on its own schedule; a damage flash needs to be able to fire at
+    // any moment, including mid-alarm, without fighting or getting clobbered by that tween. Added
+    // after _bars in the tree so it draws on top when both happen to be visible at once.
+    private Control _damageFlash;
+    private Tween _damageFlashTween;
+    private const float DamageFlashFadeDuration = 0.3f;
+
     public override void _Ready()
     {
         AddToGroup("danger_overlay");
@@ -35,23 +44,37 @@ public partial class DangerOverlay : Control
         _bars.SetAnchorsPreset(LayoutPreset.FullRect);
         _bars.Visible = false;
         AddChild(_bars);
+        BuildEdgeBars(_bars, DangerLevel.AlarmBarColor);
 
-        float side = DangerLevel.AlarmBarThicknessSide;
-        float cap = DangerLevel.AlarmBarThicknessTopBottom;
-
-        AddBar(0f, 0f, 1f, 0f, 0f, 0f, 0f, cap);        // top
-        AddBar(0f, 1f, 1f, 1f, 0f, -cap, 0f, 0f);       // bottom
-        AddBar(0f, 0f, 0f, 1f, 0f, 0f, side, 0f);       // left
-        AddBar(1f, 0f, 1f, 1f, -side, 0f, 0f, 0f);      // right
+        // White rather than pre-tinted like _bars above: FlashDamage sets colour per call (blue for a
+        // shield absorb, red for a lost life) via this wrapper's own Modulate, so the bars themselves
+        // stay a neutral base that Modulate can tint to anything.
+        _damageFlash = new Control();
+        _damageFlash.MouseFilter = MouseFilterEnum.Ignore;
+        _damageFlash.SetAnchorsPreset(LayoutPreset.FullRect);
+        _damageFlash.Modulate = new Color(1f, 1f, 1f, 0f);
+        AddChild(_damageFlash);
+        BuildEdgeBars(_damageFlash, Colors.White);
     }
 
     // MouseFilter.Ignore on every bar is not optional: ColorRect defaults to Stop, and these are
     // full-width/full-height rects sitting exactly where the virtual joystick's touch area is on a
     // portrait screen — leaving the default would silently eat movement input.
-    private void AddBar(float aL, float aT, float aR, float aB, float oL, float oT, float oR, float oB)
+    private static void BuildEdgeBars(Control parent, Color color)
+    {
+        float side = DangerLevel.AlarmBarThicknessSide;
+        float cap = DangerLevel.AlarmBarThicknessTopBottom;
+
+        AddBar(parent, color, 0f, 0f, 1f, 0f, 0f, 0f, 0f, cap);   // top
+        AddBar(parent, color, 0f, 1f, 1f, 1f, 0f, -cap, 0f, 0f);  // bottom
+        AddBar(parent, color, 0f, 0f, 0f, 1f, 0f, 0f, side, 0f);  // left
+        AddBar(parent, color, 1f, 0f, 1f, 1f, -side, 0f, 0f, 0f); // right
+    }
+
+    private static void AddBar(Control parent, Color color, float aL, float aT, float aR, float aB, float oL, float oT, float oR, float oB)
     {
         var bar = new ColorRect();
-        bar.Color = DangerLevel.AlarmBarColor;
+        bar.Color = color;
         bar.MouseFilter = MouseFilterEnum.Ignore;
         bar.AnchorLeft = aL;
         bar.AnchorTop = aT;
@@ -61,7 +84,19 @@ public partial class DangerOverlay : Control
         bar.OffsetTop = oT;
         bar.OffsetRight = oR;
         bar.OffsetBottom = oB;
-        _bars.AddChild(bar);
+        parent.AddChild(bar);
+    }
+
+    // Quick full-screen-edge flash so taking a hit doesn't rely on the player noticing the sound
+    // effect -- blue when a shield charge absorbed it, red when it actually cost a life (see
+    // Player.TakeHit). Deliberately ignores DangerLevel.Reduced: this is itself an accessibility
+    // signal standing in for the audio cue, not extra juice to cut back on.
+    public void FlashDamage(Color color)
+    {
+        _damageFlashTween?.Kill();
+        _damageFlash.Modulate = new Color(color, 1f);
+        _damageFlashTween = _damageFlash.CreateTween();
+        _damageFlashTween.TweenProperty(_damageFlash, "modulate:a", 0f, DamageFlashFadeDuration);
     }
 
     public void SetDanger(float danger)

@@ -11,7 +11,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/UI/StatsMenu.tscn" id="9"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/MissionsMenu.tscn" id="10"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/GameModeMenu.tscn" id="11"]
-[ext_resource type="Texture2D" path="res://Assets/Branding/infinitix_logo2_pixel.png" id="12"]
+[ext_resource type="Texture2D" path="res://Assets/Branding/infinitix_logo_pixel.png" id="12"]
 [ext_resource type="Script" path="res://Scripts/UI/MenuShipShowcase.cs" id="13"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_panel"]

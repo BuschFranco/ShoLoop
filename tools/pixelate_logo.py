@@ -1,7 +1,7 @@
 """Turn the raw INFINITIX logo export into game- and web-ready assets.
 
-    python tools/pixelate_logo.py Assets/logo.jpg Assets/Branding/infinitix_logo_cutout.png Assets/Branding/infinitix_logo_pixel.png
-    python tools/pixelate_logo.py Assets/logo.jpg Assets/Branding/infinitix_logo_cutout.png Assets/Branding/infinitix_logo_pixel.png --block 6
+    python tools/pixelate_logo.py Assets/logo.png Assets/Branding/infinitix_logo_cutout.png Assets/Branding/infinitix_logo_pixel.png
+    python tools/pixelate_logo.py Assets/logo.png Assets/Branding/infinitix_logo_cutout.png Assets/Branding/infinitix_logo_pixel.png --block 6
 
 Two jobs, because the source isn't what it looks like:
 

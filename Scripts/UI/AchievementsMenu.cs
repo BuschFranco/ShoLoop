@@ -15,6 +15,18 @@ public partial class AchievementsMenu : Control
     private readonly Dictionary<AchievementCategory, Button> _categoryTabs = new();
     private VBoxContainer _rows;
 
+    // Chrome-neon badges matching the logo's style (see UltimateButtonIcon for the same treatment
+    // on the Ultimate buttons) — one per AchievementTier, cached so RebuildRows (called every time
+    // the category tab changes) doesn't reload the same four textures over and over.
+    private static readonly Dictionary<AchievementTier, Texture2D> TierBadges = new()
+    {
+        [AchievementTier.Bronze] = GD.Load<Texture2D>("res://Assets/Sprites/UI/badge_bronze.png"),
+        [AchievementTier.Silver] = GD.Load<Texture2D>("res://Assets/Sprites/UI/badge_silver.png"),
+        [AchievementTier.Gold] = GD.Load<Texture2D>("res://Assets/Sprites/UI/badge_gold.png"),
+        [AchievementTier.Platinum] = GD.Load<Texture2D>("res://Assets/Sprites/UI/badge_platinum.png"),
+    };
+    private static readonly Texture2D LibrasCoinIcon = GD.Load<Texture2D>("res://Assets/Sprites/UI/coin_gem.png");
+
     public override void _Ready()
     {
         Visible = false;
@@ -113,7 +125,13 @@ public partial class AchievementsMenu : Control
     {
         var gm = GameManager.Instance;
         bool unlocked = gm.IsAchievementUnlocked(def.Id);
-        float current = Mathf.Min(def.Current(gm), def.Needed);
+
+        // Once unlocked, the bar reads full regardless of what def.Current(gm) says right now --
+        // several achievements track a value that resets or fluctuates within a single run (e.g.
+        // "survivor" reads gm.RoundNumber, which is back at 1 the moment a new run starts), while
+        // IsUnlocked persists forever once earned. Trusting the live stat for an already-unlocked
+        // achievement was showing a checkmark next to a near-empty bar.
+        float current = unlocked ? def.Needed : Mathf.Min(def.Current(gm), def.Needed);
 
         var panel = new PanelContainer();
         var style = new StyleBoxFlat
@@ -130,14 +148,44 @@ public partial class AchievementsMenu : Control
         panel.AddChild(box);
 
         var nameRow = new HBoxContainer();
+        nameRow.AddThemeConstantOverride("separation", 6);
         box.AddChild(nameRow);
+
+        // Dimmed rather than hidden while locked — same "you can see what you're working toward"
+        // reasoning the name/description text already follows, just applied to the badge too.
+        var badgeIcon = new TextureRect
+        {
+            Texture = TierBadges[def.Tier],
+            CustomMinimumSize = new Vector2(28f, 28f),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            Modulate = unlocked ? Colors.White : new Color(1f, 1f, 1f, 0.35f),
+        };
+        nameRow.AddChild(badgeIcon);
 
         var nameLabel = new Label { Text = def.Name, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         nameLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
         nameLabel.AddThemeColorOverride("font_color", unlocked ? Colors.White : new Color(0.72f, 0.76f, 0.84f));
         nameRow.AddChild(nameLabel);
 
-        var rewardLabel = new Label { Text = unlocked ? $"✓ +{def.RewardLibras}" : $"+{def.RewardLibras}" };
+        if (unlocked)
+        {
+            var checkLabel = new Label { Text = "✓" };
+            checkLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
+            checkLabel.AddThemeColorOverride("font_color", Palette.UltimatePanelBorder);
+            nameRow.AddChild(checkLabel);
+        }
+
+        var coinIcon = new TextureRect
+        {
+            Texture = LibrasCoinIcon,
+            CustomMinimumSize = new Vector2(16f, 16f),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        nameRow.AddChild(coinIcon);
+
+        var rewardLabel = new Label { Text = $"+{def.RewardLibras}" };
         rewardLabel.AddThemeFontSizeOverride("font_size", Palette.FontSize.Body);
         rewardLabel.AddThemeColorOverride("font_color", unlocked ? Palette.UltimatePanelBorder : new Color(0.75f, 0.55f, 1f));
         nameRow.AddChild(rewardLabel);

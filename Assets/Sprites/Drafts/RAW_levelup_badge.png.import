@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcnu4nhdlgqto"
-path="res://.godot/imported/infinitix_logo2_pixel.png-a0372c4be707cc27db0c1372bba68059.ctex"
+uid="uid://birx050t6mxyi"
+path="res://.godot/imported/RAW_levelup_badge.png-e3b85d6b37079d9a8b70506c25672a2a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Branding/infinitix_logo2_pixel.png"
-dest_files=["res://.godot/imported/infinitix_logo2_pixel.png-a0372c4be707cc27db0c1372bba68059.ctex"]
+source_file="res://Assets/Sprites/Drafts/RAW_levelup_badge.png"
+dest_files=["res://.godot/imported/RAW_levelup_badge.png-e3b85d6b37079d9a8b70506c25672a2a.ctex"]
 
 [params]
 

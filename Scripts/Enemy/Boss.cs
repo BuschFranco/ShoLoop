@@ -54,8 +54,28 @@ public partial class Boss : ShooterEnemy
     private Tween _telegraphTween;
     private static readonly Color TelegraphTint = Palette.Warning;
 
+    // The scene's own default is the generic boss.png hexagon (a placeholder-but-real silhouette,
+    // same "armoured" shape language as Tank -- see tools/gen_sprites.py). The coworker photo only
+    // replaces it once the "MDG" secret code has actually been redeemed, same gate CharacterCatalog
+    // already uses to hide that whole joke roster (GameManager.CoworkerRosterUnlocked).
+    private static readonly Texture2D CoworkerPortrait = GD.Load<Texture2D>("res://Assets/Sprites/Characters/conrado.png");
+    private static readonly Vector2 CoworkerPortraitScale = new(0.7f, 0.7f);
+
     public override void _Ready()
     {
+        // Has to happen BEFORE base._Ready(): that's where Enemy caches _visualBaseScale from
+        // Visual's current Scale (used to reset the sprite's size after every telegraph/spawn
+        // animation). Swapping the texture/scale afterward left that cache pointing at the scene's
+        // default (boss.png at 2,2) while Visual itself sat at the photo's 0.7,0.7 -- so the very
+        // next telegraph or spawn animation snapped it back to roughly triple size instead of
+        // restoring it, which is why the boss looked gigantic once "MDG" was redeemed.
+        if (GameManager.Instance.CoworkerRosterUnlocked)
+        {
+            var visual = GetNode<Sprite2D>("Visual");
+            visual.Texture = CoworkerPortrait;
+            visual.Scale = CoworkerPortraitScale;
+        }
+
         base._Ready();
 
         // Chase (the plain baseline behavior, unchanged) is a real possible outcome of the roll —
